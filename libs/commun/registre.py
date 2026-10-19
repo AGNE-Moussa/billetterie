@@ -1,0 +1,104 @@
+"""Inscription des instances de service dans le registre Consul.
+
+Au démarrage, une instance s'enregistre avec un check HTTP sur `/health` ; Consul la retire
+d'elle-même si elle reste critique plus d'une minute (arrêt brutal, plantage). À l'arrêt
+normal, elle se désenregistre. L'adresse de Consul vient uniquement de `CONSUL_URL`.
+
+Utilisation dans un service :
+
+    app = FastAPI(lifespan=lifespan_registre("billets", adresse="billets-1", port=8000))
+"""
+
+import logging
+import os
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+
+import httpx
+from fastapi import FastAPI
+
+journal = logging.getLogger(__name__)
+
+INTERVALLE_CHECK = "10s"
+DELAI_CHECK = "5s"
+RETRAIT_APRES_CRITIQUE = "1m"
+DELAI_APPEL_CONSUL = 5.0
+
+
+def _client_consul() -> httpx.AsyncClient:
+    url = os.environ.get("CONSUL_URL")
+    if not url:
+        raise RuntimeError("La variable d'environnement CONSUL_URL n'est pas définie.")
+    return httpx.AsyncClient(base_url=url, timeout=DELAI_APPEL_CONSUL)
+
+
+def identifiant_instance(nom: str, adresse: str, port: int) -> str:
+    """Identifiant unique d'une instance : distingue les instances d'un même service."""
+    return f"{nom}-{adresse}-{port}"
+
+
+async def enregistrer(nom: str, adresse: str, port: int, chemin_sante: str = "/health") -> str:
+    """Enregistre l'instance dans Consul et renvoie son identifiant.
+
+    Lève une erreur si Consul refuse ou ne répond pas : une instance absente du registre ne
+    recevrait aucun trafic, elle ne doit donc pas démarrer.
+    """
+    identifiant = identifiant_instance(nom, adresse, port)
+    definition = {
+        "ID": identifiant,
+        "Name": nom,
+        "Address": adresse,
+        "Port": port,
+        "Check": {
+            "HTTP": f"http://{adresse}:{port}{chemin_sante}",
+            "Interval": INTERVALLE_CHECK,
+            "Timeout": DELAI_CHECK,
+            "DeregisterCriticalServiceAfter": RETRAIT_APRES_CRITIQUE,
+        },
+    }
+    async with _client_consul() as client:
+        reponse = await client.put("/v1/agent/service/register", json=definition)
+        reponse.raise_for_status()
+    journal.info("Instance %s enregistrée dans Consul", identifiant)
+    return identifiant
+
+
+async def desenregistrer(identifiant: str) -> None:
+    """Retire l'instance du registre.
+
+    Un échec est seulement journalisé : l'arrêt du service ne doit pas être bloqué, et
+    Consul retirera de toute façon l'instance une fois son check critique.
+    """
+    try:
+        async with _client_consul() as client:
+            reponse = await client.put(f"/v1/agent/service/deregister/{identifiant}")
+            reponse.raise_for_status()
+    except httpx.HTTPError:
+        journal.warning("Désenregistrement de %s impossible", identifiant, exc_info=True)
+        return
+    journal.info("Instance %s désenregistrée de Consul", identifiant)
+
+
+@asynccontextmanager
+async def inscription(
+    nom: str, adresse: str, port: int, chemin_sante: str = "/health"
+) -> AsyncIterator[str]:
+    """Enregistre l'instance à l'entrée du bloc et la désenregistre à la sortie."""
+    identifiant = await enregistrer(nom, adresse, port, chemin_sante)
+    try:
+        yield identifiant
+    finally:
+        await desenregistrer(identifiant)
+
+
+def lifespan_registre(
+    nom: str, adresse: str, port: int, chemin_sante: str = "/health"
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    """Lifespan FastAPI qui inscrit l'instance au démarrage et la retire à l'arrêt."""
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        async with inscription(nom, adresse, port, chemin_sante):
+            yield
+
+    return lifespan

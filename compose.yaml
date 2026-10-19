@@ -66,6 +66,19 @@ services:
       start_period: 30s
     networks: [billetterie]
 
+  consul:
+    image: hashicorp/consul:1.21.5
+    # Un seul nœud serveur, en mode dev (état en mémoire) : suffisant en local.
+    command: ["agent", "-dev", "-client=0.0.0.0", "-ui"]
+    ports:
+      - "127.0.0.1:8500:8500"   # API HTTP et interface web
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
   mailpit:
     image: axllent/mailpit:v1.27.10
     ports:
