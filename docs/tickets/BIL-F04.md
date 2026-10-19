@@ -14,7 +14,7 @@ de commit hors convention.
 - [x] 2. Cache uv entre les exécutions
 - [x] 3. Job `frontend` (lint, Vitest, build) déclenché seulement si `frontend/**` change
 - [x] 4. Hook `commit-msg` versionné dans `.githooks/`, activé par `make init`
-- [ ] 5. Rendre les jobs obligatoires dans la protection de `main`
+- [x] 5. Rendre les jobs obligatoires dans la protection de `main`
 
 ## Critères d'acceptance
 
