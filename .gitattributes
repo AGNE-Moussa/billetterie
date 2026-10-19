@@ -1,0 +1,7 @@
+# Fins de ligne LF partout : le code tourne sous Linux (Docker, CI).
+* text=auto eol=lf
+
+# Scripts Windows : CRLF obligatoire.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
