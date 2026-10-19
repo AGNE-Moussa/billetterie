@@ -141,7 +141,8 @@ celerybeat.pid
 
 # RabbitMQ
 mnesia/
-rabbitmq/
+# Ancré à la racine : sans le « / » initial, ce motif ignorait aussi infra/rabbitmq/
+/rabbitmq/
 rabbitmq-data/
 
 # ActiveMQ
