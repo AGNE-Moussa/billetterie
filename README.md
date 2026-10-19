@@ -3,6 +3,14 @@
 Plateforme de vente de billets pour concerts et spectacles : microservices Python 3.12 / FastAPI,
 PostgreSQL, Redis, RabbitMQ, Consul, Traefik et Keycloak, front React dans `frontend/`.
 
+## Documentation
+
+- [Conception](docs/conception.md) : vision, microservices, règles métier, flux critique, pannes,
+  API partenaires
+- [Conventions](docs/conventions.md) : contrats, routes, erreurs, données, événements
+- [ADR-001 : pile technique](docs/adr/001-pile-technique.md) : pourquoi FastAPI, Consul,
+  Traefik, Keycloak et RabbitMQ
+
 ## Démarrer
 
 Prérequis : [uv](https://docs.astral.sh/uv/), Docker, GNU Make.
