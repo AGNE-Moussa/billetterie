@@ -30,6 +30,9 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "services", "libs"]
+markers = [
+    "contract: compare le schéma OpenAPI généré par FastAPI au contrat validé",
+]
 
 [dependency-groups]
 dev = [

@@ -18,6 +18,7 @@ Prérequis : [uv](https://docs.astral.sh/uv/), Docker, GNU Make.
 ```sh
 uv sync          # installe Python 3.12 si besoin et l'environnement de développement
 cp .env.example .env
+make init        # active les hooks Git (refus des messages hors Conventional Commits)
 make help        # liste les commandes disponibles
 ```
 

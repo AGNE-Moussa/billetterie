@@ -1,0 +1,29 @@
+#!/bin/sh
+# Refuse un message de commit hors Conventional Commits 1.0.
+# Activé par `make init` (git config core.hooksPath .githooks).
+
+first_line=$(head -n 1 "$1")
+
+# Messages générés par Git lui-même : merge, revert, fixup et squash.
+case "$first_line" in
+  "Merge "* | "Revert "* | "fixup! "* | "squash! "*) exit 0 ;;
+esac
+
+pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: .+'
+
+if printf '%s\n' "$first_line" | grep -Eq "$pattern"; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+Message de commit refusé : « $first_line »
+
+Format attendu (Conventional Commits) :
+  <type>(<portée optionnelle>): <description>
+
+Types : build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
+Exemples :
+  feat(billets): verrouiller une place pendant 10 minutes
+  fix: corriger le calcul du total en centimes
+EOF
+exit 1

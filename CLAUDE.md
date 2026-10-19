@@ -16,6 +16,7 @@ sous une charge extrême. Conception : `docs/conception.md`, choix de pile :
 
 ```sh
 uv sync                    # installer l'environnement
+make init                  # activer le hook commit-msg (.githooks/)
 make up / make down        # démarrer / arrêter la plateforme locale
 make test                  # tous les tests (uv run pytest)
 uv run pytest tests/unit   # tests unitaires seuls, rapides, sans Docker
