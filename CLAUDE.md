@@ -17,7 +17,8 @@ sous une charge extrême. Conception : `docs/conception.md`, choix de pile :
 ```sh
 uv sync                    # installer l'environnement
 make init                  # activer le hook commit-msg (.githooks/)
-make up / make down        # démarrer / arrêter la plateforme locale
+make up / make down        # démarrer (attend healthy) / arrêter la plateforme locale
+make reset                 # tout arrêter et effacer les volumes (rejoue l'init des bases)
 make test                  # tous les tests (uv run pytest)
 uv run pytest tests/unit   # tests unitaires seuls, rapides, sans Docker
 make lint                  # ruff check + ruff format --check
@@ -28,7 +29,7 @@ make typecheck             # mypy strict
 
 ```text
 services/      microservices FastAPI      libs/commun/   code partagé (HTTP, auth, outbox)
-infra/         traefik, consul, keycloak, rabbitmq, grafana, verificateur
+infra/         postgres, traefik, consul, keycloak, rabbitmq, grafana, verificateur
 frontend/      application React          tests/smoke/   smoke tests de la plateforme
 docs/          conception, conventions, adr/, contrats/, test-plans/, reviews/, tickets/
 postman/       collections et scénarios de panne
