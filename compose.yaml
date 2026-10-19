@@ -1,0 +1,88 @@
+# Plateforme locale de développement : briques de données et e-mails.
+# Démarrage : make up (attend que tous les conteneurs soient healthy).
+# Variables lues depuis .env, copié de .env.example.
+
+name: billetterie
+
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?à définir dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à définir dans .env}
+      # Lus par infra/postgres/init/01-bases.sh : un utilisateur par service.
+      CATALOGUE_DB_PASSWORD: ${CATALOGUE_DB_PASSWORD:?à définir dans .env}
+      BILLETS_DB_PASSWORD: ${BILLETS_DB_PASSWORD:?à définir dans .env}
+      COMMANDES_DB_PASSWORD: ${COMMANDES_DB_PASSWORD:?à définir dans .env}
+      PAIEMENTS_DB_PASSWORD: ${PAIEMENTS_DB_PASSWORD:?à définir dans .env}
+      NOTIFICATIONS_DB_PASSWORD: ${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Exécuté une seule fois, au premier démarrage sur un volume vide.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      # Par TCP et non par socket : pendant l'initialisation, PostgreSQL n'écoute
+      # que sur son socket, le conteneur ne passe donc healthy qu'une fois les bases créées.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [billetterie]
+
+  redis:
+    image: redis:7.4.6-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    # Nom d'hôte fixe : RabbitMQ range ses données sous le nom du nœud.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?à définir dans .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?à définir dans .env}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"     # AMQP
+      - "127.0.0.1:15672:15672"   # interface de gestion
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [billetterie]
+
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # boîte de réception web
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
+networks:
+  billetterie:
+    name: billetterie
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
