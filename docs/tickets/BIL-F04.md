@@ -18,9 +18,9 @@ de commit hors convention.
 
 ## Critères d'acceptance
 
-- [ ] CA1 : une PR avec une erreur ruff ou mypy est rouge
+- [x] CA1 : une PR avec une erreur ruff ou mypy est rouge (PR de test #6 : `lint` et `types` en échec)
 - [x] CA2 : un commit `update stuff` est refusé localement
-- [ ] CA3 : la CI complète dure moins de 10 minutes
+- [x] CA3 : la CI complète dure moins de 10 minutes (13 secondes sur la PR #5)
 
 ## Contraintes
 
