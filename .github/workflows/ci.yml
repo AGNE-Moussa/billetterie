@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Une nouvelle poussée sur la même branche annule l'exécution précédente.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Détecte les dossiers modifiés pour ne lancer le job frontend que si besoin.
+  # Un job ignoré compte comme réussi, ce qui permet de le rendre obligatoire.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: mypy strict
+        run: |
+          if find services libs -name '*.py' | grep -q .; then
+            uv run mypy services libs
+          else
+            echo "Aucun fichier Python dans services/ ni libs/ : rien à vérifier."
+          fi
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      # Le code 5 de pytest signifie « aucun test collecté » : pas une erreur à ce stade.
+      - name: pytest tests/unit
+        run: |
+          if [ -d tests/unit ]; then
+            uv run pytest tests/unit || test $? -eq 5
+          else
+            echo "Aucun test unitaire pour l'instant."
+          fi
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      # Docker est disponible sur ubuntu-latest : Testcontainers lance ses conteneurs.
+      - name: pytest tests/integration
+        run: |
+          if [ -d tests/integration ]; then
+            uv run pytest tests/integration || test $? -eq 5
+          else
+            echo "Aucun test d'intégration pour l'instant."
+          fi
+
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      # Actif dès qu'un service a son contrat : un service sans test de contrat fait échouer le job.
+      - name: Schéma généré contre contrat
+        run: |
+          if ls services/*/openapi.yaml >/dev/null 2>&1; then
+            uv run pytest -m contract
+          else
+            echo "Aucun contrat OpenAPI dans services/ : rien à comparer."
+          fi
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Présence du projet front
+        id: projet
+        run: |
+          if [ -f package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pas encore de package.json dans frontend/ (squelette prévu en BIL-F26)."
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.projet.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: steps.projet.outputs.present == 'true'
+        run: npm ci
+      - if: steps.projet.outputs.present == 'true'
+        run: npm run lint
+      - if: steps.projet.outputs.present == 'true'
+        run: npm run test -- --run
+      - if: steps.projet.outputs.present == 'true'
+        run: npm run build
