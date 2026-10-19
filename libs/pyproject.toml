@@ -1,0 +1,19 @@
+[project]
+name = "billetterie-commun"
+version = "0.1.0"
+description = "Code partagé entre les services de la billetterie."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.149.0",
+    "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Le module « commun » est le dossier libs/commun/ : on l'importe avec
+# `from commun.registre import ...`.
+module-name = "commun"
+module-root = ""

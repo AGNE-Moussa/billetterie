@@ -34,4 +34,4 @@ lint:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy services libs
+	uv run mypy

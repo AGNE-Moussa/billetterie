@@ -5,17 +5,21 @@ description = "Plateforme de billetterie en ligne : monorepo des microservices F
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "billetterie-commun",
+]
 
 [tool.uv]
 # La racine ne se publie pas : elle sert uniquement de chapeau au workspace.
 package = false
 
 [tool.uv.workspace]
-# Chaque service et chaque lib deviendra membre dès qu'il aura son propre
-# pyproject.toml (service echo, puis libs/commun à partir de BIL-F11).
-# uv refuse un membre sans pyproject.toml : la liste reste vide d'ici là.
-members = []
+# Chaque service devient membre dès qu'il a son propre pyproject.toml.
+# libs/ porte la bibliothèque billetterie-commun (module « commun »).
+members = ["libs"]
+
+[tool.uv.sources]
+billetterie-commun = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -24,9 +28,14 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["commun"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
+# Dossiers vérifiés par `uv run mypy` : ajouter services/<nom> à la création de chaque service.
+files = ["libs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "services", "libs"]
@@ -39,4 +48,5 @@ dev = [
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
+    "testcontainers>=4.15.0",
 ]

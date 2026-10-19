@@ -51,13 +51,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: mypy strict
-        run: |
-          if find services libs -name '*.py' | grep -q .; then
-            uv run mypy services libs
-          else
-            echo "Aucun fichier Python dans services/ ni libs/ : rien à vérifier."
-          fi
+      # Les dossiers vérifiés sont listés dans [tool.mypy] files du pyproject.toml.
+      - run: uv run mypy
 
   unit:
     runs-on: ubuntu-latest
