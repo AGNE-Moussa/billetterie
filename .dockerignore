@@ -1,0 +1,16 @@
+# Contexte de construction des images (racine du dépôt) : uniquement le code utile.
+.git
+.github
+.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.env
+.env.*
+!.env.example
+frontend
+docs
+postman
+infra
+**/tests

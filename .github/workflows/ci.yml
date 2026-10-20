@@ -63,14 +63,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      # Le code 5 de pytest signifie « aucun test collecté » : pas une erreur à ce stade.
-      - name: pytest tests/unit
-        run: |
-          if [ -d tests/unit ]; then
-            uv run pytest tests/unit || test $? -eq 5
-          else
-            echo "Aucun test unitaire pour l'instant."
-          fi
+      # tests/unit et services/*/tests/unit (voir le Makefile).
+      - run: make test-unit
 
   integration:
     runs-on: ubuntu-latest
@@ -82,13 +76,8 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       # Docker est disponible sur ubuntu-latest : Testcontainers lance ses conteneurs.
-      - name: pytest tests/integration
-        run: |
-          if [ -d tests/integration ]; then
-            uv run pytest tests/integration || test $? -eq 5
-          else
-            echo "Aucun test d'intégration pour l'instant."
-          fi
+      # tests/integration et services/*/tests/integration (voir le Makefile).
+      - run: make test-integration
 
   contract:
     runs-on: ubuntu-latest
@@ -107,6 +96,26 @@ jobs:
           else
             echo "Aucun contrat OpenAPI dans services/ : rien à comparer."
           fi
+
+  # Images des services en amd64 et arm64 (démo sur VPS ARM), sans publication.
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        service: [echo]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   frontend:
     needs: changes

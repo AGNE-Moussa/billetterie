@@ -20,7 +20,8 @@ make init                  # activer le hook commit-msg (.githooks/)
 make up / make down        # démarrer (attend healthy) / arrêter la plateforme locale
 make reset                 # tout arrêter et effacer les volumes (rejoue l'init des bases)
 make test                  # tous les tests (uv run pytest)
-uv run pytest tests/unit   # tests unitaires seuls, rapides, sans Docker
+make test-unit             # tests unitaires (tests/unit et services/*/tests/unit), sans Docker
+make test-integration      # tests d'intégration (Testcontainers, Docker requis)
 make lint                  # ruff check + ruff format --check
 make typecheck             # mypy strict
 ```
@@ -37,6 +38,7 @@ postman/       collections et scénarios de panne
 ```
 
 Conventions (contrats, routes, erreurs, événements, données) : `docs/conventions.md`.
+Modèle de tout nouveau service : `services/echo/` (voir son README).
 Les règles détaillées par sujet vivent dans `.claude/rules/`, pas ici.
 
 ## Tickets dans Notion

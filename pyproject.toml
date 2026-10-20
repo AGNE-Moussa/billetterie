@@ -7,6 +7,7 @@ license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "billetterie-commun",
+    "billetterie-echo",
 ]
 
 [tool.uv]
@@ -14,12 +15,13 @@ dependencies = [
 package = false
 
 [tool.uv.workspace]
-# Chaque service devient membre dès qu'il a son propre pyproject.toml.
-# libs/ porte la bibliothèque billetterie-commun (module « commun »).
-members = ["libs"]
+# libs/ porte la bibliothèque billetterie-commun (module « commun ») ;
+# chaque dossier de services/ est un service avec son propre pyproject.toml.
+members = ["libs", "services/*"]
 
 [tool.uv.sources]
 billetterie-commun = { workspace = true }
+billetterie-echo = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -29,16 +31,20 @@ line-length = 100
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["commun"]
+known-first-party = ["commun", "echo"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-# Dossiers vérifiés par `uv run mypy` : ajouter services/<nom> à la création de chaque service.
-files = ["libs"]
+plugins = ["pydantic.mypy"]
+# Dossiers vérifiés par `uv run mypy` : ajouter services/<nom>/src à la création de chaque service.
+files = ["libs", "services/echo/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "services", "libs"]
+# Chaque service a ses propres tests/unit, tests/integration : le mode importlib évite les
+# conflits entre fichiers de test de même nom.
+addopts = "--import-mode=importlib"
 markers = [
     "contract: compare le schéma OpenAPI généré par FastAPI au contrat validé",
 ]
@@ -47,6 +53,8 @@ markers = [
 dev = [
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
     "ruff>=0.17.1",
     "testcontainers>=4.15.0",
+    "types-pyyaml>=6.0.12.20260906",
 ]

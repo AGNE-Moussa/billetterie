@@ -1,0 +1,36 @@
+"""Environnement Alembic asynchrone : l'URL vient de la configuration du service."""
+
+import asyncio
+from logging.config import fileConfig
+
+from alembic import context
+from sqlalchemy.engine import Connection
+
+from echo.config import Parametres
+from echo.infra.base import Base, creer_moteur
+
+if context.config.config_file_name is not None:
+    fileConfig(context.config.config_file_name)
+
+metadonnees = Base.metadata
+
+
+def _appliquer(connexion: Connection) -> None:
+    context.configure(connection=connexion, target_metadata=metadonnees)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def _appliquer_en_ligne() -> None:
+    moteur = creer_moteur(Parametres().database_url)
+    async with moteur.connect() as connexion:
+        await connexion.run_sync(_appliquer)
+    await moteur.dispose()
+
+
+if context.is_offline_mode():
+    context.configure(url=Parametres().database_url, target_metadata=metadonnees)
+    with context.begin_transaction():
+        context.run_migrations()
+else:
+    asyncio.run(_appliquer_en_ligne())
