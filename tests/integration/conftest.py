@@ -1,5 +1,6 @@
 """Conteneurs partagés par les tests d'intégration."""
 
+import secrets
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -63,7 +64,34 @@ def origine_front() -> str:
 
 
 @pytest.fixture(scope="module")
-def gateway_url(reseau: Network, consul_url: str) -> Iterator[str]:
+def secrets_realm() -> dict[str, str]:
+    """Valeurs des variables ${...} du realm, tirées au hasard pour chaque module de tests."""
+    return {
+        "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
+    }
+
+
+@pytest.fixture(scope="module")
+def verificateur(reseau: Network) -> Iterator[None]:
+    """Faux vérificateur qui accepte tout (whoami répond 200 à toute requête).
+
+    Les tests de la gateway portent sur le routage, pas sur les jetons ; ceux du vrai
+    vérificateur (test_verification_jeton.py) redéfinissent cette fixture.
+    """
+    with (
+        DockerContainer(IMAGE_WHOAMI)
+        .with_command("--port 8000 --name verificateur")
+        .with_network(reseau)
+        .with_network_aliases("verificateur")
+    ):
+        yield
+
+
+@pytest.fixture(scope="module")
+def gateway_url(reseau: Network, consul_url: str, verificateur: None) -> Iterator[str]:
     """Démarre Traefik avec la configuration réelle de infra/traefik/."""
     traefik = (
         DockerContainer(IMAGE_TRAEFIK)

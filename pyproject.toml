@@ -8,6 +8,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "billetterie-commun",
     "billetterie-echo",
+    "billetterie-verificateur",
 ]
 
 [tool.uv]
@@ -16,12 +17,14 @@ package = false
 
 [tool.uv.workspace]
 # libs/ porte la bibliothèque billetterie-commun (module « commun ») ;
-# chaque dossier de services/ est un service avec son propre pyproject.toml.
-members = ["libs", "services/*"]
+# chaque dossier de services/ est un service avec son propre pyproject.toml ;
+# infra/verificateur est le vérificateur de jetons appelé par Traefik.
+members = ["libs", "services/*", "infra/verificateur"]
 
 [tool.uv.sources]
 billetterie-commun = { workspace = true }
 billetterie-echo = { workspace = true }
+billetterie-verificateur = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -31,17 +34,17 @@ line-length = 100
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["commun", "echo"]
+known-first-party = ["commun", "echo", "verificateur"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 # Dossiers vérifiés par `uv run mypy` : ajouter services/<nom>/src à la création de chaque service.
-files = ["libs", "services/echo/src"]
+files = ["libs", "services/echo/src", "infra/verificateur/src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "services", "libs"]
+testpaths = ["tests", "services", "libs", "infra/verificateur"]
 # Chaque service a ses propres tests/unit, tests/integration : le mode importlib évite les
 # conflits entre fichiers de test de même nom.
 addopts = "--import-mode=importlib"

@@ -1,7 +1,10 @@
 # Middlewares partagés, référencés par les tags Consul des services :
 #   traefik.http.routers.<nom>.middlewares=standard@file     (front et clients)
 #   traefik.http.routers.<nom>.middlewares=partenaires@file  (API des revendeurs)
+#   traefik.http.routers.<nom>.middlewares=public@file       (Keycloak seulement)
 # Aucune route ici : chaque service déclare la sienne dans ses tags.
+# standard et partenaires vérifient le jeton : un service est protégé par défaut, ses routes
+# publiques se déclarent dans ROUTES_PUBLIQUES du vérificateur.
 
 http:
   middlewares:
@@ -37,10 +40,25 @@ http:
         sourceCriterion:
           requestHeaderName: Authorization
 
+    # Vérification du JWT par infra/verificateur avant le routage (401 sans jeton valide).
+    # Traefik retire de la requête les en-têtes listés avant d'y recopier ceux du vérificateur :
+    # un client ne peut pas fournir lui-même un X-User-Id.
+    verification-jeton:
+      forwardAuth:
+        address: http://verificateur:8000/verifier
+        authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
+
+    # Le CORS passe avant la vérification : un preflight OPTIONS n'a jamais de jeton.
     standard:
       chain:
-        middlewares: [correlation, cors, limite-generale]
+        middlewares: [correlation, cors, limite-generale, verification-jeton]
 
+    # Le quota par jeton ne compte que les jetons valides.
     partenaires:
       chain:
-        middlewares: [correlation, cors, limite-partenaires]
+        middlewares: [correlation, cors, verification-jeton, limite-partenaires]
+
+    # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un.
+    public:
+      chain:
+        middlewares: [correlation, cors, limite-generale]

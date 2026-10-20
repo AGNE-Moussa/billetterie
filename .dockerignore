@@ -13,4 +13,5 @@ frontend
 docs
 postman
 infra
+!infra/verificateur
 **/tests

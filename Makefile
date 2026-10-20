@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help init up down reset test test-unit test-integration lint typecheck
 
-# Dossiers de tests de chaque service, trouvés par make (portable sous Windows).
-TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit)
+# Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
+TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
 TESTS_INTEGRATION := tests/integration $(wildcard services/*/tests/integration)
 
 help:

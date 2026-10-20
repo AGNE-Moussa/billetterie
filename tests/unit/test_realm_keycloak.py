@@ -37,3 +37,14 @@ def test_roles_et_clients_attendus() -> None:
     assert clients["services"]["publicClient"] is False
     assert clients["services"]["serviceAccountsEnabled"] is True
     assert realm["accessTokenLifespan"] == 300
+
+
+def test_les_jetons_des_deux_clients_visent_l_api() -> None:
+    # Le vérificateur de la gateway exige l'audience billetterie-api (claim aud).
+    for client in _realm()["clients"]:
+        audiences = [
+            mapper["config"]["included.custom.audience"]
+            for mapper in client.get("protocolMappers", [])
+            if mapper["protocolMapper"] == "oidc-audience-mapper"
+        ]
+        assert audiences == ["billetterie-api"], client["clientId"]

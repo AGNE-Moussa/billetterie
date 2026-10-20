@@ -148,6 +148,20 @@ services:
       start_period: 30s
     networks: [billetterie]
 
+  # Vérificateur de jetons appelé par Traefik (middleware verification-jeton de dynamique.yml).
+  verificateur:
+    image: billetterie/verificateur:dev
+    build:
+      context: .
+      dockerfile: infra/verificateur/Dockerfile
+    environment:
+      # Émetteur public des jetons (KC_HOSTNAME) ; clés lues par le réseau interne.
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWT_AUDIENCE: billetterie-api
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-}
+    networks: [billetterie]
+
   # --- Service echo : modèle des services métier ------------------------------------------
   # Les migrations tournent une seule fois, avant les instances (pas de course entre elles).
   echo-migrations:

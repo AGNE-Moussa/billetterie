@@ -42,6 +42,10 @@ domaine, `http://localhost`, pour l'API, l'authentification et (plus tard) le fr
 Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`),
 `partenaire.test` (`partner`), `admin.test` (`admin`).
 
+L'API exige un jeton Keycloak (`Authorization: Bearer ...`) : sans jeton valide, la gateway
+répond 401 sans appeler le service. Les routes ouvertes sans jeton se déclarent dans
+`ROUTES_PUBLIQUES` (voir `infra/verificateur/README.md`).
+
 ## Structure
 
 ```text
