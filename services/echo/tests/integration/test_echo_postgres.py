@@ -1,4 +1,5 @@
-"""Service echo sur une vraie base PostgreSQL : migrations Alembic, écriture, lecture, santé."""
+"""Service echo sur une vraie base PostgreSQL : migrations Alembic, écriture, lecture, santé,
+evénements dans l'outbox."""
 
 import os
 from collections.abc import AsyncIterator, Iterator
@@ -6,12 +7,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from testcontainers.community.postgres import PostgresContainer
 
 from commun.faux_jetons import EmetteurDeTest
+from commun.outbox import OUTBOX
 from echo.config import Parametres
+from echo.infra.base import creer_moteur
 from echo.principal import creer_app
 
 pytestmark = pytest.mark.anyio
@@ -84,3 +88,38 @@ async def test_echo_absent_de_la_base_renvoie_404(client: httpx.AsyncClient) -> 
     reponse = await client.get("/api/v1/echos/jamais-enregistre")
 
     assert reponse.status_code == 404
+
+
+async def _outbox(database_url: str, message: str) -> list[sa.RowMapping]:
+    """Lignes de l'outbox pour un message, lues directement en base."""
+    moteur = creer_moteur(database_url)
+    async with moteur.connect() as connexion:
+        requete = sa.select(OUTBOX).where(OUTBOX.c.data["message"].astext == message)
+        lignes = list((await connexion.execute(requete)).mappings())
+    await moteur.dispose()
+    return lignes
+
+
+async def test_un_echo_enregistre_publie_son_evenement_par_l_outbox(
+    client: httpx.AsyncClient, database_url: str
+) -> None:
+    await client.post(
+        "/api/v1/echos", json={"message": "evenement"}, headers={"X-Correlation-Id": "requete-echo"}
+    )
+
+    lignes = await _outbox(database_url, "evenement")
+    assert len(lignes) == 1
+    assert lignes[0]["type"] == "ticketing.echo.created"
+    assert lignes[0]["correlation_id"] == "requete-echo"
+    # Pas de RabbitMQ dans ce test : l'événement attend le relais.
+    assert lignes[0]["envoye_le"] is None
+
+
+async def test_un_echo_refuse_ne_publie_aucun_evenement(
+    client: httpx.AsyncClient, database_url: str
+) -> None:
+    await client.post("/api/v1/echos", json={"message": "double"})
+    reponse = await client.post("/api/v1/echos", json={"message": "double"})
+
+    assert reponse.status_code == 409
+    assert len(await _outbox(database_url, "double")) == 1  # seul le premier

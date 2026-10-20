@@ -6,13 +6,17 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.engine import Connection
 
+from commun.outbox import METADONNEES_MESSAGERIE
 from echo.config import Parametres
 from echo.infra.base import Base, creer_moteur
 
 if context.config.config_file_name is not None:
-    fileConfig(context.config.config_file_name)
+    # Sans disable_existing_loggers=False, fileConfig coupe les journaux déjà créés (commun,
+    # application) quand les migrations tournent dans le même processus (tests).
+    fileConfig(context.config.config_file_name, disable_existing_loggers=False)
 
-metadonnees = Base.metadata
+# Tables du service et tables communes de messagerie (outbox, messages_traites).
+metadonnees = [Base.metadata, METADONNEES_MESSAGERIE]
 
 
 def _appliquer(connexion: Connection) -> None:

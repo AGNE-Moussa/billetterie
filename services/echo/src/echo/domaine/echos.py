@@ -6,6 +6,9 @@ from typing import Protocol
 
 from commun.erreurs import ErreurMetier
 
+# Publié à chaque echo enregistré (voir infra/depot.py).
+EVENEMENT_ECHO_CREE = "ticketing.echo.created"
+
 
 @dataclass(frozen=True)
 class Echo:
@@ -39,7 +42,8 @@ class DepotEchos(Protocol):
     """Accès aux echos enregistrés ; l'implémentation vit dans infra/."""
 
     async def ajouter(self, message: str) -> Echo:
-        """Enregistre le message ; lève EchoDejaExistant s'il l'est déjà."""
+        """Enregistre le message et publie EVENEMENT_ECHO_CREE dans la même transaction ;
+        lève EchoDejaExistant s'il l'est déjà."""
         ...
 
     async def trouver(self, message: str) -> Echo | None: ...
