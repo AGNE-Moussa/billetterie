@@ -28,16 +28,6 @@ ROLES_METIER = {"customer", "partner", "admin"}
 
 
 @pytest.fixture(scope="module")
-def secrets_realm() -> dict[str, str]:
-    return {
-        "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
-        "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
-        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
-        "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
-    }
-
-
-@pytest.fixture(scope="module")
 def keycloak_url(
     secrets_realm: dict[str, str], url_hote: Callable[[DockerContainer, int], str]
 ) -> Iterator[str]:
@@ -168,6 +158,21 @@ def test_les_jetons_d_acces_durent_5_minutes(
     jeton = _charge_utile(reponse.json()["access_token"])
 
     assert jeton["exp"] - jeton["iat"] == 300
+
+
+def test_les_jetons_portent_l_audience_de_l_api(
+    keycloak_url: str, secrets_realm: dict[str, str]
+) -> None:
+    services = _charge_utile(
+        _jeton_services(keycloak_url, secrets_realm["KEYCLOAK_SERVICES_SECRET"]).json()[
+            "access_token"
+        ]
+    )
+    frontend = _connexion_pkce(keycloak_url, "client.test", secrets_realm["KEYCLOAK_MDP_CLIENT"])
+
+    for jeton in (services, frontend):
+        audiences = jeton["aud"] if isinstance(jeton["aud"], list) else [jeton["aud"]]
+        assert "billetterie-api" in audiences
 
 
 def test_le_frontend_exige_pkce(keycloak_url: str) -> None:

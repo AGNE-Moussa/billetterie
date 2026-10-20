@@ -8,7 +8,7 @@
       "traefik.enable=true",
       "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`)",
       "traefik.http.routers.keycloak.entrypoints=web",
-      "traefik.http.routers.keycloak.middlewares=standard@file"
+      "traefik.http.routers.keycloak.middlewares=public@file"
     ],
     "check": {
       "name": "Keycloak prêt",

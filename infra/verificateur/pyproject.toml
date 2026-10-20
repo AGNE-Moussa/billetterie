@@ -1,0 +1,19 @@
+[project]
+name = "billetterie-verificateur"
+version = "0.1.0"
+description = "Vérificateur de jetons appelé par Traefik (ForwardAuth) avant le routage."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.149.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.16.0",
+    "pyjwt[crypto]>=2.10.1",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "verificateur"

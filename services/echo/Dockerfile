@@ -18,6 +18,7 @@ WORKDIR /depot
 COPY pyproject.toml uv.lock ./
 COPY libs/pyproject.toml libs/
 COPY services/echo/pyproject.toml services/echo/
+COPY infra/verificateur/pyproject.toml infra/verificateur/
 RUN uv sync --locked --no-dev --package billetterie-echo --no-install-workspace
 
 # Puis le code du workspace, installé dans l'environnement (non éditable).
