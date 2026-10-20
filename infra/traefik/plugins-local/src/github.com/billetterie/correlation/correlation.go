@@ -36,8 +36,44 @@ func (c *correlation) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		req.Header.Set(c.header, identifiant)
 	}
 	// Renvoyé aussi au client, pour qu'il puisse citer l'identifiant en cas de problème.
-	rw.Header().Set(c.header, identifiant)
-	c.next.ServeHTTP(rw, req)
+	c.next.ServeHTTP(&reponse{ResponseWriter: rw, header: c.header, identifiant: identifiant}, req)
+}
+
+// reponse pose l'identifiant au moment d'écrire les en-têtes, et seulement si le service n'en
+// a pas renvoyé : posé avant l'appel, il serait doublé par celui du service (le proxy ajoute
+// les en-têtes reçus au lieu de les remplacer).
+type reponse struct {
+	http.ResponseWriter
+	header      string
+	identifiant string
+	ecrit       bool
+}
+
+func (r *reponse) WriteHeader(code int) {
+	if !r.ecrit {
+		r.ecrit = true
+		if r.Header().Get(r.header) == "" {
+			r.Header().Set(r.header, r.identifiant)
+		}
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *reponse) Write(b []byte) (int, error) {
+	if !r.ecrit {
+		r.WriteHeader(http.StatusOK)
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+// Flush garde les réponses en flux (SSE) utilisables derrière le middleware.
+func (r *reponse) Flush() {
+	if !r.ecrit {
+		r.WriteHeader(http.StatusOK)
+	}
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // nouvelUUID génère un UUID version 4.

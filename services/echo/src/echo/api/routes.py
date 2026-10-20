@@ -3,12 +3,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Path
-from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from commun.erreurs import ErreurMetier, reponse_probleme
 from echo.api.dependances import DepotDep, ParametresDep, SessionDep
-from echo.api.erreurs import TYPE_MEDIA, Probleme, reponse_probleme
 from echo.api.schemas import EchoCreation, EchoReponse, Message, Sante
 from echo.domaine.echos import Echo, enregistrer_echo, lire_echo
 
@@ -24,17 +23,16 @@ routeur_echos = APIRouter(prefix="/api/v1/echos", tags=["echos"])
     responses={503: reponse_probleme("La base de données ne répond pas.")},
     summary="État de l'instance, appelé par Consul toutes les 10 s",
 )
-async def sante(session: SessionDep) -> Sante | JSONResponse:
+async def sante(session: SessionDep) -> Sante:
     try:
         await session.execute(text("SELECT 1"))
-    except (SQLAlchemyError, OSError):
-        probleme = Probleme(
-            title="Service indisponible",
-            status=503,
-            detail="La base de données ne répond pas.",
-            code="BASE_INDISPONIBLE",
-        )
-        return JSONResponse(probleme.model_dump(exclude_none=True), 503, media_type=TYPE_MEDIA)
+    except (SQLAlchemyError, OSError) as erreur:
+        raise ErreurMetier(
+            "BASE_INDISPONIBLE",
+            503,
+            "La base de données ne répond pas.",
+            titre="Service indisponible",
+        ) from erreur
     return Sante(statut="ok")
 
 

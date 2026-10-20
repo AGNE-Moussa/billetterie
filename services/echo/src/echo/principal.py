@@ -1,4 +1,4 @@
-"""Assemblage de l'application : configuration, base, registre Consul, routes.
+"""Assemblage de l'application : configuration, journaux, erreurs, base, registre Consul, routes.
 
 Lancement : uvicorn --factory echo.principal:creer_app
 """
@@ -9,8 +9,9 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from commun.correlation import MiddlewareCorrelation, configurer_journaux
+from commun.erreurs import installer_erreurs
 from commun.registre import inscription, tags_traefik
-from echo.api.erreurs import installer_gestionnaires
 from echo.api.routes import routeur_echos, routeur_sante
 from echo.config import Parametres, parametres
 from echo.infra.base import creer_moteur
@@ -21,6 +22,7 @@ RESSOURCES = ("echos",)
 
 def creer_app(config: Parametres | None = None) -> FastAPI:
     config = config or parametres()
+    configurer_journaux()
 
     @asynccontextmanager
     async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
@@ -44,7 +46,8 @@ def creer_app(config: Parametres | None = None) -> FastAPI:
 
     app = FastAPI(title="Service echo", version="0.1.0", lifespan=cycle_de_vie)
     app.state.parametres = config
-    installer_gestionnaires(app)
+    installer_erreurs(app)
+    app.add_middleware(MiddlewareCorrelation)
     app.include_router(routeur_sante)
     app.include_router(routeur_echos)
     return app
