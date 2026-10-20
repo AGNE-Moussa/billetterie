@@ -10,6 +10,7 @@ from alembic import command
 from alembic.config import Config
 from testcontainers.community.postgres import PostgresContainer
 
+from commun.faux_jetons import EmetteurDeTest
 from echo.config import Parametres
 from echo.principal import creer_app
 
@@ -41,10 +42,17 @@ def database_url() -> Iterator[str]:
 
 @pytest.fixture
 async def client(database_url: str) -> AsyncIterator[httpx.AsyncClient]:
-    app = creer_app(Parametres(database_url=database_url, instance="echo-test", consul_actif=False))
+    emetteur = EmetteurDeTest()
+    app = creer_app(
+        Parametres(database_url=database_url, instance="echo-test", consul_actif=False),
+        verificateur_jetons=emetteur.verificateur(),
+    )
+    jeton = emetteur.entetes(client="services", scopes=["echos:write"])
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", headers=jeton
+        ) as client:
             yield client
 
 

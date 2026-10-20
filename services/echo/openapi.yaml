@@ -28,7 +28,7 @@ paths:
     post:
       tags:
       - echos
-      summary: Enregistrer un message
+      summary: Enregistrer un message (scope echos:write)
       operationId: creerEcho
       requestBody:
         content:
@@ -43,6 +43,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EchoReponse'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
         '409':
           description: Le message est déjà enregistré (ECHO_EXISTANT).
           content:
@@ -55,12 +67,16 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+      security:
+      - HTTPBearer: []
   /api/v1/echos/{message}:
     get:
       tags:
       - echos
-      summary: Relire un message enregistré
+      summary: Relire un message enregistré (appelant authentifié)
       operationId: lireEcho
+      security:
+      - HTTPBearer: []
       parameters:
       - name: message
         in: path
@@ -77,6 +93,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EchoReponse'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
         '404':
           description: Aucun echo pour ce message (ECHO_INTROUVABLE).
           content:
@@ -175,3 +197,8 @@ components:
       required:
       - statut
       title: Sante
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie.
+      scheme: bearer

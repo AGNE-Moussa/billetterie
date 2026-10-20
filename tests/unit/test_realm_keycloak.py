@@ -48,3 +48,24 @@ def test_les_jetons_des_deux_clients_visent_l_api() -> None:
             if mapper["protocolMapper"] == "oidc-audience-mapper"
         ]
         assert audiences == ["billetterie-api"], client["clientId"]
+
+
+def test_les_scopes_integres_de_keycloak_sont_declares() -> None:
+    # Déclarer clientScopes remplace les scopes intégrés de Keycloak : sans roles ni basic, les
+    # jetons perdraient realm_access et sub. Ils sont donc listés dans le realm.
+    realm = _realm()
+    noms = {scope["name"] for scope in realm["clientScopes"]}
+
+    assert {"roles", "basic", "profile", "email", "web-origins", "acr"} <= noms
+    assert set(realm["defaultDefaultClientScopes"]) <= noms
+    assert set(realm["defaultOptionalClientScopes"]) <= noms
+
+
+def test_le_scope_echos_write_est_donne_au_seul_client_services() -> None:
+    realm = _realm()
+    clients = {client["clientId"]: client for client in realm["clients"]}
+
+    assert "echos:write" in {scope["name"] for scope in realm["clientScopes"]}
+    assert "echos:write" in clients["services"]["defaultClientScopes"]
+    assert "echos:write" not in realm["defaultDefaultClientScopes"]
+    assert "echos:write" not in clients["frontend"].get("defaultClientScopes", [])

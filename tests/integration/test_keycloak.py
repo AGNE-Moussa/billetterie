@@ -126,8 +126,9 @@ def test_le_client_services_obtient_un_jeton_par_client_credentials(
     assert reponse.status_code == 200
     jeton = _charge_utile(reponse.json()["access_token"])
     assert jeton["azp"] == "services"
-    # Un compte de service n'a aucun rôle métier.
+    # Un compte de service n'a aucun rôle métier, mais il a le scope d'écriture d'echo.
     assert not ROLES_METIER & set(jeton["realm_access"]["roles"])
+    assert "echos:write" in jeton["scope"].split()
 
 
 def test_un_mauvais_secret_est_refuse(keycloak_url: str) -> None:
@@ -149,6 +150,7 @@ def test_chaque_utilisateur_de_test_a_seulement_son_role(
 
     assert jeton["preferred_username"] == utilisateur
     assert ROLES_METIER & set(jeton["realm_access"]["roles"]) == {role}
+    assert "echos:write" not in jeton["scope"].split()
 
 
 def test_les_jetons_d_acces_durent_5_minutes(

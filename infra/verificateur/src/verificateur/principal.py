@@ -15,13 +15,17 @@ import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from commun.jetons import (
+    ClesIndisponibles,
+    JetonExpire,
+    JetonInvalide,
+    VerificateurJetons,
+    jeton_bearer,
+)
 from verificateur import routes_publiques
-from verificateur.cles import CacheCles, ClesIndisponibles
 from verificateur.config import Parametres, parametres
-from verificateur.jetons import JetonExpire, JetonInvalide, Verificateur
 
 TYPE_MEDIA = "application/problem+json"
-DELAI_APPEL_KEYCLOAK = 5.0
 
 
 def _probleme(statut: int, titre: str, detail: str, code: str) -> JSONResponse:
@@ -36,35 +40,26 @@ def _probleme(statut: int, titre: str, detail: str, code: str) -> JSONResponse:
     return reponse
 
 
-def _jeton_bearer(autorisation: str | None) -> str | None:
-    if not autorisation:
-        return None
-    schema, _, jeton = autorisation.partition(" ")
-    if schema.lower() != "bearer":
-        return None
-    return jeton.strip() or None
-
-
 def creer_app(
     config: Parametres | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastAPI:
     config = config or parametres()
     publiques = routes_publiques.analyser(config.routes_publiques)
-    client = httpx.AsyncClient(timeout=DELAI_APPEL_KEYCLOAK, transport=transport)
-    cles = CacheCles(
+    verificateur = VerificateurJetons.depuis_jwks(
         config.jwks_url,
-        client,
-        duree=config.jwks_duree_cache,
+        config.jwt_emetteur,
+        config.jwt_audience,
+        duree_cache=config.jwks_duree_cache,
         intervalle_min=config.jwks_intervalle_min,
+        transport=transport,
     )
-    verificateur = Verificateur(cles, config.jwt_emetteur, config.jwt_audience)
 
     @asynccontextmanager
     async def cycle_de_vie(_app: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
-            await client.aclose()
+            await verificateur.aclose()
 
     app = FastAPI(
         title="Vérificateur de jetons", version="0.1.0", lifespan=cycle_de_vie, openapi_url=None
@@ -77,7 +72,7 @@ def creer_app(
     # Traefik appelle toujours en GET ; les autres méthodes sont acceptées par prudence.
     @app.api_route("/verifier", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
     async def verifier(requete: Request) -> Response:
-        jeton = _jeton_bearer(requete.headers.get("Authorization"))
+        jeton = jeton_bearer(requete.headers.get("Authorization"))
         if jeton is None:
             methode = requete.headers.get("X-Forwarded-Method", "")
             uri = requete.headers.get("X-Forwarded-Uri", "/")
@@ -88,7 +83,7 @@ def creer_app(
             )
 
         try:
-            identite = await verificateur.verifier(jeton)
+            claims = await verificateur.verifier(jeton)
         except JetonExpire:
             return _probleme(401, "Jeton expiré", "Le jeton d'accès a expiré.", "JETON_EXPIRE")
         except JetonInvalide:
@@ -106,9 +101,9 @@ def creer_app(
         return Response(
             status_code=200,
             headers={
-                "X-User-Id": identite.utilisateur,
-                "X-User-Roles": ",".join(identite.roles),
-                "X-Client-Id": identite.client,
+                "X-User-Id": str(claims["sub"]),
+                "X-User-Roles": ",".join(claims.get("realm_access", {}).get("roles", [])),
+                "X-Client-Id": str(claims.get("azp", "")),
             },
         )
 
