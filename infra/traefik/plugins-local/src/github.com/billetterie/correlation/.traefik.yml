@@ -1,0 +1,6 @@
+displayName: Identifiant de corrélation
+type: middleware
+import: github.com/billetterie/correlation
+summary: Ajoute un en-tête X-Correlation-Id à la requête s'il est absent.
+testData:
+  header: X-Correlation-Id

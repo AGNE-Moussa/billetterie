@@ -20,7 +20,21 @@ uv sync          # installe Python 3.12 si besoin et l'environnement de dévelop
 cp .env.example .env
 make init        # active les hooks Git (refus des messages hors Conventional Commits)
 make help        # liste les commandes disponibles
+make up          # démarre la plateforme locale
 ```
+
+## Accès locaux
+
+Après `make up`, tout est publié sur `127.0.0.1` uniquement :
+
+| Composant | Adresse |
+|---|---|
+| API Gateway (point d'entrée de l'API) | http://127.0.0.1:8000 |
+| Tableau de bord Traefik | http://127.0.0.1:8080/dashboard/ |
+| Consul (registre de services) | http://127.0.0.1:8500 |
+| RabbitMQ (interface de gestion) | http://127.0.0.1:15672 |
+| Mailpit (boîte de réception de test) | http://127.0.0.1:8025 |
+| PostgreSQL / Redis | `127.0.0.1:5432` / `127.0.0.1:6379` |
 
 ## Structure
 
@@ -28,7 +42,7 @@ make help        # liste les commandes disponibles
 .claude/             outillage Claude (rules, agents, skills, hooks)
 .github/workflows/   CI, déploiement, GitHub Pages
 docs/                conception, ADR, contrats, plans de test, reviews, tickets
-infra/               traefik, consul, keycloak, rabbitmq, grafana, verificateur
+infra/               postgres, traefik, consul, keycloak, rabbitmq, grafana, verificateur
 libs/commun/         code partagé entre les services
 services/            microservices FastAPI
 frontend/            application React
