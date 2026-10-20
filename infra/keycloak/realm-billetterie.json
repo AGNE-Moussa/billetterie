@@ -1,0 +1,87 @@
+{
+  "realm": "billetterie",
+  "displayName": "Billetterie",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      { "name": "customer", "description": "Client qui achète des billets" },
+      { "name": "partner", "description": "Revendeur partenaire (API partenaires)" },
+      { "name": "admin", "description": "Organisateur : événements, séances, ventes, annulations" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "frontend",
+      "name": "Application React",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost/*"],
+      "webOrigins": ["http://localhost"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost/*"
+      }
+    },
+    {
+      "clientId": "services",
+      "name": "Appels entre services",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_SERVICES_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "client.test",
+      "email": "client.test@exemple.test",
+      "firstName": "Client",
+      "lastName": "Test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_MDP_CLIENT}", "temporary": false }],
+      "realmRoles": ["customer"]
+    },
+    {
+      "username": "partenaire.test",
+      "email": "partenaire.test@exemple.test",
+      "firstName": "Partenaire",
+      "lastName": "Test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_MDP_PARTENAIRE}", "temporary": false }],
+      "realmRoles": ["partner"]
+    },
+    {
+      "username": "admin.test",
+      "email": "admin.test@exemple.test",
+      "firstName": "Admin",
+      "lastName": "Test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_MDP_ADMIN}", "temporary": false }],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "service-account-services",
+      "enabled": true,
+      "serviceAccountClientId": "services",
+      "realmRoles": ["default-roles-billetterie"]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 """Conteneurs partagés par les tests d'intégration."""
 
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import httpx
@@ -48,6 +48,12 @@ def consul_url(reseau: Network) -> Iterator[str]:
         url = url_depuis_hote(consul, 8500)
         _attendre_leader(url)
         yield url
+
+
+@pytest.fixture(scope="session")
+def url_hote() -> Callable[[DockerContainer, int], str]:
+    """Donne accès à url_depuis_hote aux tests qui démarrent leurs propres conteneurs."""
+    return url_depuis_hote
 
 
 @pytest.fixture
