@@ -1,0 +1,42 @@
+# Prometheus : les instances des services sont découvertes dans Consul, sans liste à tenir.
+# Une instance est mesurée si elle annonce la métadonnée « metriques » (commun.registre), qui
+# donne aussi le chemin à lire.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: services
+    consul_sd_configs:
+      - server: consul:8500
+        refresh_interval: 10s
+    relabel_configs:
+      - source_labels: [__meta_consul_service_metadata_metriques]
+        regex: .+
+        action: keep
+      - source_labels: [__meta_consul_service_metadata_metriques]
+        target_label: __metrics_path__
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_service_id]
+        target_label: instance
+
+  # Composants qui ne s'inscrivent pas dans Consul.
+  - job_name: verificateur
+    static_configs:
+      - targets: [verificateur:8000]
+        labels:
+          service: verificateur
+
+  - job_name: traefik
+    static_configs:
+      - targets: [traefik:8080]
+
+  # Profondeur des files (plugin rabbitmq_prometheus, port interne au réseau Docker).
+  - job_name: rabbitmq
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics]
+    static_configs:
+      - targets: [rabbitmq:15692]

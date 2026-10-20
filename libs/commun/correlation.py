@@ -22,6 +22,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
+from opentelemetry import trace
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -87,6 +88,8 @@ class FormatJson(logging.Formatter):
             "message": record.getMessage(),
             "correlation_id": getattr(record, "correlation_id", None),
         }
+        if trace_id := getattr(record, "trace_id", None):
+            ligne["trace_id"] = trace_id
         if record.exc_info:
             ligne["exception"] = self.formatException(record.exc_info)
         return json.dumps(ligne, ensure_ascii=False)
@@ -105,6 +108,9 @@ def _fabrique_avec_correlation(
     def creer(*args: Any, **kwargs: Any) -> logging.LogRecord:
         record = fabrique(*args, **kwargs)
         record.correlation_id = correlation_id()
+        # Trace OpenTelemetry en cours : relie la ligne de journal à sa trace dans Tempo.
+        contexte = trace.get_current_span().get_span_context()
+        record.trace_id = format(contexte.trace_id, "032x") if contexte.is_valid else None
         return record
 
     creer.avec_correlation = True  # type: ignore[attr-defined]

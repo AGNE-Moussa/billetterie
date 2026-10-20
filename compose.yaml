@@ -84,6 +84,74 @@ services:
       retries: 10
     networks: [billetterie]
 
+  # --- Observabilité ----------------------------------------------------------------------
+  # Tempo démarre toujours (léger) : les traces sont collectées sans erreur d'export. Prometheus
+  # et Grafana sont dans le profil « observabilite » (make observabilite).
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    # Traces éphémères : effacées à l'arrêt du conteneur.
+    tmpfs:
+      - /var/tempo:mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3200/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    networks: [billetterie]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observabilite]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      consul:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: [observabilite]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?à définir dans .env}
+      # Consultation sans compte (lecture seule) : le tableau de bord s'ouvre directement.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/tableaux/billetterie.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/tableaux:/var/lib/grafana/tableaux:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
   traefik:
     image: traefik:v3.5.3
     # Routes découvertes dans Consul (tags), middlewares dans dynamique.yml.
@@ -99,6 +167,8 @@ services:
       - "127.0.0.1:8080:8080"   # tableau de bord, en local seulement
     depends_on:
       consul:
+        condition: service_healthy
+      tempo:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
@@ -160,6 +230,7 @@ services:
       JWT_AUDIENCE: billetterie-api
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
       ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
     networks: [billetterie]
 
   # --- Service echo : modèle des services métier ------------------------------------------
@@ -175,6 +246,8 @@ services:
       CONSUL_URL: http://consul:8500
       # Relais de l'outbox : publie les événements sur l'exchange ticketing.
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # Traces exportées vers Tempo (commun.observabilite).
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       # Revérification des jetons par le service (commun.auth), comme le vérificateur.
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs

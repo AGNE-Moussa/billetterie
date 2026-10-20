@@ -1,0 +1,27 @@
+# Tempo en un seul processus : reçoit les traces en OTLP (services, Traefik) et les sert à
+# Grafana. Stockage local et éphémère (tmpfs) : suffisant pour le développement et la démo.
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: 24h

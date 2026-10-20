@@ -34,5 +34,20 @@ experimental:
     correlation:
       moduleName: github.com/billetterie/correlation
 
+# Métriques Prometheus (lues par infra/prometheus) sur le point d'entrée « traefik ».
+metrics:
+  prometheus:
+    entryPoint: traefik
+    addRoutersLabels: true
+    addServicesLabels: true
+
+# Traces OpenTelemetry vers Tempo : Traefik ouvre la trace et transmet le contexte W3C
+# (traceparent) aux services, qui la prolongent jusqu'à la base.
+tracing:
+  serviceName: traefik
+  otlp:
+    http:
+      endpoint: http://tempo:4318/v1/traces
+
 log:
   level: INFO
