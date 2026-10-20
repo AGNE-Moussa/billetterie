@@ -12,7 +12,9 @@ Service sans métier qui valide toute la chaîne : Consul, Traefik, PostgreSQL, 
 | `GET` | `/api/v1/echos/{message}` | Relit un message et indique l'instance qui répond (404 `ECHO_INTROUVABLE`) |
 
 Le contrat fait foi : `openapi.yaml`. Les erreurs sont au format Problem Details
-(`application/problem+json`).
+(`application/problem+json`), produites par `commun.erreurs` : une erreur métier est une
+sous-classe d'`ErreurMetier(code, statut, détail)`. `commun.correlation` lit ou crée
+`X-Correlation-Id` et écrit les journaux en JSON avec cet identifiant.
 
 ## Structure
 
@@ -23,9 +25,9 @@ services/echo/
   alembic.ini, alembic/  migrations (lancées par le conteneur echo-migrations)
   src/echo/
     config.py            Pydantic Settings : DATABASE_URL, INSTANCE, PORT, CONSUL_ACTIF
-    principal.py         creer_app() : base, inscription Consul, routes
-    api/                 routes, schémas, dépendances, erreurs Problem Details
-    domaine/             règles et interface du dépôt, sans FastAPI ni SQLAlchemy
+    principal.py         creer_app() : journaux, erreurs, corrélation, base, Consul, routes
+    api/                 routes, schémas, dépendances
+    domaine/             règles, erreurs métier (ErreurMetier) et interface du dépôt, sans SQLAlchemy
     infra/               SQLAlchemy 2 async, implémentation du dépôt
   tests/
     unit/                routes avec un dépôt en mémoire, sans Docker
@@ -38,5 +40,5 @@ services/echo/
 1. Copier la structure et renommer le paquet (`pyproject.toml`, `module-name`).
 2. Ajouter sa base dans `infra/postgres/init/01-bases.sh` et son mot de passe dans `.env.example`.
 3. Ajouter `services/<nom>/src` à `[tool.mypy] files` et le module à `known-first-party`.
-4. Ajouter le service à la matrice du job `images` de la CI.
+4. Ajouter le service (nom et Dockerfile) à la matrice du job `images` de la CI.
 5. Déclarer dans le compose `<nom>-migrations` puis ses instances.

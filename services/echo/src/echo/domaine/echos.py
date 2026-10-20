@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from commun.erreurs import ErreurMetier
+
 
 @dataclass(frozen=True)
 class Echo:
@@ -11,15 +13,25 @@ class Echo:
     cree_le: datetime
 
 
-class EchoIntrouvable(Exception):
+class EchoIntrouvable(ErreurMetier):
     def __init__(self, message: str) -> None:
-        super().__init__(f"Aucun echo enregistré pour « {message} ».")
+        super().__init__(
+            "ECHO_INTROUVABLE",
+            404,
+            f"Aucun echo enregistré pour « {message} ».",
+            titre="Echo introuvable",
+        )
         self.message = message
 
 
-class EchoDejaExistant(Exception):
+class EchoDejaExistant(ErreurMetier):
     def __init__(self, message: str) -> None:
-        super().__init__(f"Un echo existe déjà pour « {message} ».")
+        super().__init__(
+            "ECHO_EXISTANT",
+            409,
+            f"Un echo existe déjà pour « {message} ».",
+            titre="Echo déjà existant",
+        )
         self.message = message
 
 

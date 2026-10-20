@@ -142,6 +142,12 @@ components:
           type: string
           title: Code
           description: Code métier stable, par exemple ECHO_INTROUVABLE.
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+          description: Identifiant de corrélation de la requête (X-Correlation-Id).
         erreurs:
           anyOf:
           - items:
