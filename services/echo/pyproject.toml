@@ -1,0 +1,24 @@
+[project]
+name = "billetterie-echo"
+version = "0.1.0"
+description = "Service echo : modèle de référence des services de la billetterie."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "asyncpg>=0.32.0",
+    "billetterie-commun",
+    "fastapi>=0.149.0",
+    "pydantic-settings>=2.16.0",
+    "sqlalchemy[asyncio]>=2.1.5",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "echo"
+
+[tool.uv.sources]
+billetterie-commun = { workspace = true }

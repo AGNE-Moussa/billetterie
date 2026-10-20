@@ -2,17 +2,23 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down reset test lint typecheck
+.PHONY: help init up down reset test test-unit test-integration lint typecheck
+
+# Dossiers de tests de chaque service, trouvés par make (portable sous Windows).
+TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit)
+TESTS_INTEGRATION := tests/integration $(wildcard services/*/tests/integration)
 
 help:
 	@echo Cibles disponibles :
-	@echo   init       active les hooks Git du projet (.githooks)
-	@echo   up         demarre la plateforme locale (Docker Compose)
-	@echo   down       arrete la plateforme locale
-	@echo   reset      arrete la plateforme et efface ses donnees (volumes)
-	@echo   test       lance les tests (pytest)
-	@echo   lint       verifie le style et le formatage (ruff)
-	@echo   typecheck  verifie le typage strict (mypy)
+	@echo   init              active les hooks Git du projet (.githooks)
+	@echo   up                demarre la plateforme locale (Docker Compose)
+	@echo   down              arrete la plateforme locale
+	@echo   reset             arrete la plateforme et efface ses donnees (volumes)
+	@echo   test              lance tous les tests (pytest)
+	@echo   test-unit         tests unitaires, rapides, sans Docker
+	@echo   test-integration  tests d'integration (Testcontainers, Docker requis)
+	@echo   lint              verifie le style et le formatage (ruff)
+	@echo   typecheck         verifie le typage strict (mypy)
 
 init:
 	git config core.hooksPath .githooks
@@ -28,6 +34,12 @@ reset:
 
 test:
 	uv run pytest
+
+test-unit:
+	uv run pytest $(TESTS_UNITAIRES)
+
+test-integration:
+	uv run pytest $(TESTS_INTEGRATION)
 
 lint:
 	uv run ruff check .

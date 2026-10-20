@@ -27,11 +27,6 @@ def url_depuis_hote(conteneur: DockerContainer, port: int) -> str:
     return f"http://{hote}:{conteneur.get_exposed_port(port)}"
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
 @pytest.fixture(scope="module")
 def reseau() -> Iterator[Network]:
     """Réseau Docker commun : Consul doit pouvoir appeler le faux service par son nom."""

@@ -11,6 +11,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?à définir dans .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à définir dans .env}
       # Lus par infra/postgres/init/01-bases.sh : un utilisateur par service.
+      ECHO_DB_PASSWORD: ${ECHO_DB_PASSWORD:?à définir dans .env}
       CATALOGUE_DB_PASSWORD: ${CATALOGUE_DB_PASSWORD:?à définir dans .env}
       BILLETS_DB_PASSWORD: ${BILLETS_DB_PASSWORD:?à définir dans .env}
       COMMANDES_DB_PASSWORD: ${COMMANDES_DB_PASSWORD:?à définir dans .env}
@@ -100,6 +101,40 @@ services:
       timeout: 3s
       retries: 10
     networks: [billetterie]
+
+  # --- Service echo : modèle des services métier ------------------------------------------
+  # Les migrations tournent une seule fois, avant les instances (pas de course entre elles).
+  echo-migrations:
+    image: billetterie/echo:dev
+    build:
+      context: .
+      dockerfile: services/echo/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &echo-env
+      DATABASE_URL: postgresql+asyncpg://echo:${ECHO_DB_PASSWORD:?à définir dans .env}@postgres:5432/echo
+      CONSUL_URL: http://consul:8500
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  echo-1: &echo-instance
+    image: billetterie/echo:dev
+    environment:
+      <<: *echo-env
+      INSTANCE: echo-1
+    depends_on:
+      echo-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
+  echo-2:
+    <<: *echo-instance
+    environment:
+      <<: *echo-env
+      INSTANCE: echo-2
 
   mailpit:
     image: axllent/mailpit:v1.27.10

@@ -4,7 +4,7 @@
 # pour le rejouer, supprimer le volume (make reset).
 set -eu
 
-for service in catalogue billets commandes paiements notifications; do
+for service in echo catalogue billets commandes paiements notifications; do
   variable="$(echo "$service" | tr '[:lower:]' '[:upper:]')_DB_PASSWORD"
   eval "mot_de_passe=\${$variable:?$variable manquant}"
 
