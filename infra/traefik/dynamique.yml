@@ -1,0 +1,46 @@
+# Middlewares partagés, référencés par les tags Consul des services :
+#   traefik.http.routers.<nom>.middlewares=standard@file     (front et clients)
+#   traefik.http.routers.<nom>.middlewares=partenaires@file  (API des revendeurs)
+# Aucune route ici : chaque service déclare la sienne dans ses tags.
+
+http:
+  middlewares:
+    correlation:
+      plugin:
+        correlation:
+          header: X-Correlation-Id
+
+    cors:
+      headers:
+        accessControlAllowOriginList:
+{{- range $origine := splitList "," (env "CORS_ORIGINS") }}
+          - "{{ trim $origine }}"
+{{- end }}
+        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        accessControlAllowHeaders: [Authorization, Content-Type, X-Correlation-Id]
+        accessControlExposeHeaders: [X-Correlation-Id]
+        accessControlMaxAge: 600
+
+    # Par adresse IP du client.
+    limite-generale:
+      rateLimit:
+        average: 50
+        burst: 100
+        period: 1s
+
+    # Par jeton : chaque revendeur a son propre quota, plus strict.
+    limite-partenaires:
+      rateLimit:
+        average: 5
+        burst: 10
+        period: 1s
+        sourceCriterion:
+          requestHeaderName: Authorization
+
+    standard:
+      chain:
+        middlewares: [correlation, cors, limite-generale]
+
+    partenaires:
+      chain:
+        middlewares: [correlation, cors, limite-partenaires]

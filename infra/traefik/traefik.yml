@@ -1,0 +1,38 @@
+# Configuration statique de Traefik : points d'entrée et fournisseurs.
+# Les routes viennent uniquement des tags Consul ; les middlewares de dynamique.yml.
+
+entryPoints:
+  web:
+    address: ":80"
+  traefik:
+    address: ":8080"
+
+# Tableau de bord sur le point d'entrée « traefik », publié en local seulement (compose).
+api:
+  dashboard: true
+  insecure: true
+
+ping:
+  entryPoint: traefik
+
+providers:
+  consulCatalog:
+    endpoint:
+      address: "consul:8500"
+    # Un service n'est routé que s'il le demande (tag traefik.enable=true).
+    exposedByDefault: false
+    refreshInterval: 5s
+    # Seules les instances au check passing reçoivent des appels.
+    strictChecks:
+      - passing
+  file:
+    filename: /etc/traefik/dynamique.yml
+    watch: true
+
+experimental:
+  localPlugins:
+    correlation:
+      moduleName: github.com/billetterie/correlation
+
+log:
+  level: INFO

@@ -2,6 +2,7 @@
 
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,6 +11,20 @@ from testcontainers.core.network import Network
 
 IMAGE_CONSUL = "hashicorp/consul:1.21.5"
 IMAGE_FAUX_SERVICE = "hashicorp/http-echo:1.0"
+IMAGE_TRAEFIK = "traefik:v3.5.3"
+IMAGE_WHOAMI = "traefik/whoami:v1.11.0"
+DOSSIER_TRAEFIK = Path(__file__).resolve().parents[2] / "infra" / "traefik"
+ORIGINE_FRONT = "http://localhost:5173"
+
+
+def url_depuis_hote(conteneur: DockerContainer, port: int) -> str:
+    """URL d'un port publié, vue depuis la machine qui lance les tests."""
+    hote = conteneur.get_container_host_ip()
+    # Sous Windows, « localhost » passe d'abord par IPv6 (::1) et Docker Desktop coupe
+    # alors les connexions après la première requête : on force IPv4.
+    if hote == "localhost":
+        hote = "127.0.0.1"
+    return f"http://{hote}:{conteneur.get_exposed_port(port)}"
 
 
 @pytest.fixture
@@ -35,14 +50,52 @@ def consul_url(reseau: Network) -> Iterator[str]:
         .with_exposed_ports(8500)
     )
     with consul:
-        hote = consul.get_container_host_ip()
-        # Sous Windows, « localhost » passe d'abord par IPv6 (::1) et Docker Desktop coupe
-        # alors les connexions après la première requête : on force IPv4.
-        if hote == "localhost":
-            hote = "127.0.0.1"
-        url = f"http://{hote}:{consul.get_exposed_port(8500)}"
+        url = url_depuis_hote(consul, 8500)
         _attendre_leader(url)
         yield url
+
+
+@pytest.fixture
+def origine_front() -> str:
+    """Origine autorisée par CORS dans la gateway de test."""
+    return ORIGINE_FRONT
+
+
+@pytest.fixture(scope="module")
+def gateway_url(reseau: Network, consul_url: str) -> Iterator[str]:
+    """Démarre Traefik avec la configuration réelle de infra/traefik/."""
+    traefik = (
+        DockerContainer(IMAGE_TRAEFIK)
+        .with_env("CORS_ORIGINS", ORIGINE_FRONT)
+        .with_volume_mapping(str(DOSSIER_TRAEFIK / "traefik.yml"), "/etc/traefik/traefik.yml")
+        .with_volume_mapping(str(DOSSIER_TRAEFIK / "dynamique.yml"), "/etc/traefik/dynamique.yml")
+        .with_volume_mapping(str(DOSSIER_TRAEFIK / "plugins-local"), "/plugins-local")
+        .with_network(reseau)
+        .with_exposed_ports(80, 8080)
+    )
+    with traefik:
+        _attendre_ping(url_depuis_hote(traefik, 8080))
+        yield url_depuis_hote(traefik, 80)
+
+
+@pytest.fixture
+def instances_whoami(reseau: Network) -> Iterator[list[str]]:
+    """Deux instances d'un même service, qui renvoient leur nom et les en-têtes reçus."""
+    noms = ["instance-a", "instance-b"]
+    conteneurs = [
+        DockerContainer(IMAGE_WHOAMI)
+        .with_command(f"--name {nom}")
+        .with_network(reseau)
+        .with_network_aliases(nom)
+        for nom in noms
+    ]
+    for conteneur in conteneurs:
+        conteneur.start()
+    try:
+        yield noms
+    finally:
+        for conteneur in conteneurs:
+            conteneur.stop()
 
 
 @pytest.fixture
@@ -68,3 +121,15 @@ def _attendre_leader(url: str, delai: float = 30.0) -> None:
             pass
         time.sleep(0.5)
     raise TimeoutError("Consul n'a pas élu de leader à temps")
+
+
+def _attendre_ping(url: str, delai: float = 30.0) -> None:
+    limite = time.monotonic() + delai
+    while time.monotonic() < limite:
+        try:
+            if httpx.get(f"{url}/ping", timeout=2.0).status_code == 200:
+                return
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.5)
+    raise TimeoutError("Traefik n'a pas démarré à temps")

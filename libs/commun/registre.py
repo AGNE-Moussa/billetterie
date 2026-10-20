@@ -4,14 +4,21 @@ Au démarrage, une instance s'enregistre avec un check HTTP sur `/health` ; Cons
 d'elle-même si elle reste critique plus d'une minute (arrêt brutal, plantage). À l'arrêt
 normal, elle se désenregistre. L'adresse de Consul vient uniquement de `CONSUL_URL`.
 
+Les tags portent la route Traefik du service (voir `tags_traefik`) : aucune route n'est écrite
+dans la configuration de la gateway.
+
 Utilisation dans un service :
 
-    app = FastAPI(lifespan=lifespan_registre("billets", adresse="billets-1", port=8000))
+    app = FastAPI(
+        lifespan=lifespan_registre(
+            "billets", adresse="billets-1", port=8000, tags=tags_traefik("billets", "places")
+        )
+    )
 """
 
 import logging
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 import httpx
@@ -37,7 +44,32 @@ def identifiant_instance(nom: str, adresse: str, port: int) -> str:
     return f"{nom}-{adresse}-{port}"
 
 
-async def enregistrer(nom: str, adresse: str, port: int, chemin_sante: str = "/health") -> str:
+def tags_traefik(nom: str, *ressources: str, middlewares: str = "standard@file") -> list[str]:
+    """Tags Consul qui exposent le service derrière Traefik.
+
+    Chaque ressource devient une règle `PathPrefix(/api/v1/<ressource>)`. Les middlewares sont
+    une chaîne définie dans infra/traefik/dynamique.yml : `standard@file` pour le front et les
+    clients, `partenaires@file` pour l'API des revendeurs.
+    """
+    if not ressources:
+        raise ValueError("Au moins une ressource est nécessaire pour router le service.")
+    regle = " || ".join(f"PathPrefix(`/api/v1/{ressource}`)" for ressource in ressources)
+    routeur = f"traefik.http.routers.{nom}"
+    return [
+        "traefik.enable=true",
+        f"{routeur}.rule={regle}",
+        f"{routeur}.entrypoints=web",
+        f"{routeur}.middlewares={middlewares}",
+    ]
+
+
+async def enregistrer(
+    nom: str,
+    adresse: str,
+    port: int,
+    tags: Sequence[str] = (),
+    chemin_sante: str = "/health",
+) -> str:
     """Enregistre l'instance dans Consul et renvoie son identifiant.
 
     Lève une erreur si Consul refuse ou ne répond pas : une instance absente du registre ne
@@ -49,6 +81,7 @@ async def enregistrer(nom: str, adresse: str, port: int, chemin_sante: str = "/h
         "Name": nom,
         "Address": adresse,
         "Port": port,
+        "Tags": list(tags),
         "Check": {
             "HTTP": f"http://{adresse}:{port}{chemin_sante}",
             "Interval": INTERVALLE_CHECK,
@@ -81,10 +114,14 @@ async def desenregistrer(identifiant: str) -> None:
 
 @asynccontextmanager
 async def inscription(
-    nom: str, adresse: str, port: int, chemin_sante: str = "/health"
+    nom: str,
+    adresse: str,
+    port: int,
+    tags: Sequence[str] = (),
+    chemin_sante: str = "/health",
 ) -> AsyncIterator[str]:
     """Enregistre l'instance à l'entrée du bloc et la désenregistre à la sortie."""
-    identifiant = await enregistrer(nom, adresse, port, chemin_sante)
+    identifiant = await enregistrer(nom, adresse, port, tags, chemin_sante)
     try:
         yield identifiant
     finally:
@@ -92,13 +129,17 @@ async def inscription(
 
 
 def lifespan_registre(
-    nom: str, adresse: str, port: int, chemin_sante: str = "/health"
+    nom: str,
+    adresse: str,
+    port: int,
+    tags: Sequence[str] = (),
+    chemin_sante: str = "/health",
 ) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     """Lifespan FastAPI qui inscrit l'instance au démarrage et la retire à l'arrêt."""
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        async with inscription(nom, adresse, port, chemin_sante):
+        async with inscription(nom, adresse, port, tags, chemin_sante):
             yield
 
     return lifespan

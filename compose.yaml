@@ -79,6 +79,28 @@ services:
       retries: 10
     networks: [billetterie]
 
+  traefik:
+    image: traefik:v3.5.3
+    # Routes découvertes dans Consul (tags), middlewares dans dynamique.yml.
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:?à définir dans .env}
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamique.yml:/etc/traefik/dynamique.yml:ro
+      - ./infra/traefik/plugins-local:/plugins-local:ro
+    ports:
+      - "127.0.0.1:8000:80"     # gateway : point d'entrée unique de l'API
+      - "127.0.0.1:8080:8080"   # tableau de bord, en local seulement
+    depends_on:
+      consul:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
   mailpit:
     image: axllent/mailpit:v1.27.10
     ports:
