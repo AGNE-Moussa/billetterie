@@ -12,6 +12,9 @@ client ──► Traefik ──(en-têtes de la requête)──► verificateur 
 
 ## Ce qui est vérifié
 
+La validation est celle de `libs/commun/jetons.py`, partagée avec les services (qui revérifient
+le jeton avec `commun.auth`).
+
 - Signature RS256 avec les clés publiques du realm (JWKS), gardées en cache : aucun appel à
   Keycloak par requête. Rechargement après `JWKS_DUREE_CACHE` secondes ou sur un `kid` inconnu
   (rotation de clé), au plus une fois toutes les `JWKS_INTERVALLE_MIN` secondes.

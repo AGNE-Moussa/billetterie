@@ -1,4 +1,4 @@
-"""Routes du service echo, sans base : le dépôt est remplacé par un dépôt en mémoire."""
+"""Routes du service echo, sans base ni Keycloak : dépôt en mémoire, jetons de test."""
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
+from commun.faux_jetons import EmetteurDeTest
 from echo.api.dependances import obtenir_depot
 from echo.config import Parametres
 from echo.domaine.echos import DepotEchos, Echo, EchoDejaExistant
@@ -31,9 +32,15 @@ class DepotEnMemoire:
 
 
 @pytest.fixture
-async def client() -> AsyncIterator[httpx.AsyncClient]:
+def emetteur() -> EmetteurDeTest:
+    return EmetteurDeTest()
+
+
+@pytest.fixture
+async def anonyme(emetteur: EmetteurDeTest) -> AsyncIterator[httpx.AsyncClient]:
+    """Client sans jeton ; chaque test choisit l'appelant qu'il simule."""
     config = Parametres(database_url="postgresql+asyncpg://test@localhost/echo", instance=INSTANCE)
-    app = creer_app(config)
+    app = creer_app(config, verificateur_jetons=emetteur.verificateur())
     depot = DepotEnMemoire()
 
     def depot_de_test() -> DepotEchos:
@@ -44,6 +51,13 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def client(anonyme: httpx.AsyncClient, emetteur: EmetteurDeTest) -> httpx.AsyncClient:
+    """Compte de service autorisé à écrire (scope echos:write)."""
+    anonyme.headers.update(emetteur.entetes(client="services", scopes=["echos:write"]))
+    return anonyme
 
 
 async def test_enregistrer_puis_relire_un_echo(client: httpx.AsyncClient) -> None:
@@ -86,3 +100,65 @@ async def test_corps_invalide_renvoie_422_problem_details(
     probleme = reponse.json()
     assert probleme["code"] == "REQUETE_INVALIDE"
     assert probleme["erreurs"][0]["champ"].startswith("body")
+
+
+async def test_sans_jeton_la_lecture_repond_401(anonyme: httpx.AsyncClient) -> None:
+    reponse = await anonyme.get("/api/v1/echos/bonjour")
+
+    assert reponse.status_code == 401
+    assert reponse.headers["content-type"] == "application/problem+json"
+    assert reponse.headers["WWW-Authenticate"].startswith("Bearer")
+    assert reponse.json()["code"] == "JETON_ABSENT"
+
+
+async def test_un_jeton_sans_le_scope_echos_write_recoit_403(
+    anonyme: httpx.AsyncClient, emetteur: EmetteurDeTest
+) -> None:
+    client_sans_scope = emetteur.entetes(roles=["customer"], scopes=["openid", "profile"])
+
+    reponse = await anonyme.post(
+        "/api/v1/echos", json={"message": "bonjour"}, headers=client_sans_scope
+    )
+
+    assert reponse.status_code == 403
+    assert reponse.headers["content-type"] == "application/problem+json"
+    probleme = reponse.json()
+    assert probleme["code"] == "SCOPE_MANQUANT"
+    assert probleme["detail"] == "Scope requis : echos:write."
+    # La lecture n'exige qu'un appelant authentifié.
+    lecture = await anonyme.get("/api/v1/echos/bonjour", headers=client_sans_scope)
+    assert lecture.status_code == 404
+
+
+async def test_un_jeton_expire_recoit_401(
+    anonyme: httpx.AsyncClient, emetteur: EmetteurDeTest
+) -> None:
+    reponse = await anonyme.get(
+        "/api/v1/echos/bonjour", headers=emetteur.entetes(expire_dans=-3600)
+    )
+
+    assert reponse.status_code == 401
+    assert reponse.json()["code"] == "JETON_EXPIRE"
+
+
+async def test_un_jeton_d_une_autre_cle_recoit_401(anonyme: httpx.AsyncClient) -> None:
+    pirate = EmetteurDeTest()  # même kid, autre clé privée
+
+    reponse = await anonyme.get("/api/v1/echos/bonjour", headers=pirate.entetes())
+
+    assert reponse.status_code == 401
+    assert reponse.json()["code"] == "JETON_INVALIDE"
+
+
+async def test_des_en_tetes_seuls_ne_suffisent_pas(
+    anonyme: httpx.AsyncClient, emetteur: EmetteurDeTest
+) -> None:
+    usurpe = {"X-User-Id": "admin", "X-User-Roles": "admin"}
+    sans_jeton = await anonyme.get("/api/v1/echos/bonjour", headers=usurpe)
+    jeton_d_un_autre = await anonyme.get(
+        "/api/v1/echos/bonjour", headers={**usurpe, **emetteur.entetes(sujet="client-42")}
+    )
+
+    assert sans_jeton.status_code == 401
+    assert jeton_d_un_autre.status_code == 401
+    assert jeton_d_un_autre.json()["code"] == "JETON_INVALIDE"

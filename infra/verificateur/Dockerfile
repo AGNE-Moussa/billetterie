@@ -22,6 +22,7 @@ COPY services/echo/pyproject.toml services/echo/
 COPY infra/verificateur/pyproject.toml infra/verificateur/
 RUN uv sync --locked --no-dev --package billetterie-verificateur --no-install-workspace
 
+COPY libs libs
 COPY infra/verificateur infra/verificateur
 RUN uv sync --locked --no-dev --package billetterie-verificateur --no-editable
 

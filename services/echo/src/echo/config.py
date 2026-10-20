@@ -15,6 +15,10 @@ class Parametres(BaseSettings):
     port: int = 8000
     # Désactivé dans les tests qui n'ont pas de Consul.
     consul_actif: bool = True
+    # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
+    jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
+    jwt_audience: str = "billetterie-api"
+    jwks_url: str = "http://keycloak:8080/auth/realms/billetterie/protocol/openid-connect/certs"
 
 
 @lru_cache

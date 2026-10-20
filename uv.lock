@@ -161,6 +161,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "prometheus-client" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "tenacity" },
 ]
 
@@ -169,6 +170,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.149.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "tenacity", specifier = ">=9.2.1" },
 ]
 
@@ -202,19 +204,17 @@ name = "billetterie-verificateur"
 version = "0.1.0"
 source = { editable = "infra/verificateur" }
 dependencies = [
+    { name = "billetterie-commun" },
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "pydantic-settings" },
-    { name = "pyjwt", extra = ["crypto"] },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "billetterie-commun", editable = "libs" },
     { name = "fastapi", specifier = ">=0.149.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic-settings", specifier = ">=2.16.0" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 

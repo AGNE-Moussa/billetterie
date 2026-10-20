@@ -49,10 +49,19 @@ class Probleme(BaseModel):
 class ErreurMetier(Exception):
     """Erreur prévue par le métier, renvoyée au client avec son code et son statut."""
 
-    def __init__(self, code: str, statut: int, detail: str, titre: str | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        statut: int,
+        detail: str,
+        titre: str | None = None,
+        entetes: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(detail)
         self.code = code
         self.statut = statut
+        # En-têtes ajoutés à la réponse, par exemple WWW-Authenticate sur un 401.
+        self.entetes = entetes or {}
         self.detail = detail
         self.titre = titre or HTTPStatus(statut).phrase
 
@@ -78,7 +87,9 @@ def _reponse(statut: int, titre: str, detail: str, code: str, **extra: Any) -> J
 
 async def _erreur_metier(_requete: Request, erreur: Exception) -> JSONResponse:
     assert isinstance(erreur, ErreurMetier)
-    return _reponse(erreur.statut, erreur.titre, erreur.detail, erreur.code)
+    reponse = _reponse(erreur.statut, erreur.titre, erreur.detail, erreur.code)
+    reponse.headers.update(erreur.entetes)
+    return reponse
 
 
 async def _requete_invalide(_requete: Request, erreur: Exception) -> JSONResponse:

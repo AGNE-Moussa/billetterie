@@ -1,4 +1,4 @@
-"""Assemblage de l'application : configuration, journaux, erreurs, base, registre Consul, routes.
+"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, routes.
 
 Lancement : uvicorn --factory echo.principal:creer_app
 """
@@ -9,8 +9,10 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from commun.auth import installer_auth
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
+from commun.jetons import VerificateurJetons
 from commun.registre import inscription, tags_traefik
 from echo.api.routes import routeur_echos, routeur_sante
 from echo.config import Parametres, parametres
@@ -20,9 +22,15 @@ NOM_SERVICE = "echo"
 RESSOURCES = ("echos",)
 
 
-def creer_app(config: Parametres | None = None) -> FastAPI:
+def creer_app(
+    config: Parametres | None = None, verificateur_jetons: VerificateurJetons | None = None
+) -> FastAPI:
+    """`verificateur_jetons` remplace celui du realm dans les tests (commun.faux_jetons)."""
     config = config or parametres()
     configurer_journaux()
+    verificateur = verificateur_jetons or VerificateurJetons.depuis_jwks(
+        config.jwks_url, config.jwt_emetteur, config.jwt_audience
+    )
 
     @asynccontextmanager
     async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
@@ -43,10 +51,12 @@ def creer_app(config: Parametres | None = None) -> FastAPI:
                 yield
         finally:
             await moteur.dispose()
+            await verificateur.aclose()
 
     app = FastAPI(title="Service echo", version="0.1.0", lifespan=cycle_de_vie)
     app.state.parametres = config
     installer_erreurs(app)
+    installer_auth(app, verificateur)
     app.add_middleware(MiddlewareCorrelation)
     app.include_router(routeur_sante)
     app.include_router(routeur_echos)
