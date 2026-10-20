@@ -1,0 +1,39 @@
+"""Le realm versionné ne contient aucun secret : seulement des variables ${...} lues dans .env."""
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+REALM = Path(__file__).resolve().parents[2] / "infra" / "keycloak" / "realm-billetterie.json"
+VARIABLE = re.compile(r"\$\{[A-Z_]+\}")
+
+
+def _realm() -> dict[str, Any]:
+    contenu: dict[str, Any] = json.loads(REALM.read_text(encoding="utf-8"))
+    return contenu
+
+
+def test_les_secrets_de_clients_sont_des_variables() -> None:
+    for client in _realm()["clients"]:
+        if "secret" in client:
+            assert VARIABLE.fullmatch(client["secret"]), client["clientId"]
+
+
+def test_les_mots_de_passe_des_utilisateurs_sont_des_variables() -> None:
+    for utilisateur in _realm()["users"]:
+        for identifiant in utilisateur.get("credentials", []):
+            assert VARIABLE.fullmatch(identifiant["value"]), utilisateur["username"]
+
+
+def test_roles_et_clients_attendus() -> None:
+    realm = _realm()
+
+    assert {role["name"] for role in realm["roles"]["realm"]} == {"customer", "partner", "admin"}
+    clients = {client["clientId"]: client for client in realm["clients"]}
+    assert clients["frontend"]["publicClient"] is True
+    assert clients["frontend"]["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert clients["frontend"]["redirectUris"] == ["http://localhost/*"]
+    assert clients["services"]["publicClient"] is False
+    assert clients["services"]["serviceAccountsEnabled"] is True
+    assert realm["accessTokenLifespan"] == 300

@@ -1,0 +1,20 @@
+{
+  "service": {
+    "id": "keycloak",
+    "name": "keycloak",
+    "address": "keycloak",
+    "port": 8080,
+    "tags": [
+      "traefik.enable=true",
+      "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`)",
+      "traefik.http.routers.keycloak.entrypoints=web",
+      "traefik.http.routers.keycloak.middlewares=standard@file"
+    ],
+    "check": {
+      "name": "Keycloak prêt",
+      "http": "http://keycloak:9000/auth/health/ready",
+      "interval": "10s",
+      "timeout": "5s"
+    }
+  }
+}

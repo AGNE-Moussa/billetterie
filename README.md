@@ -25,16 +25,22 @@ make up          # démarre la plateforme locale
 
 ## Accès locaux
 
-Après `make up`, tout est publié sur `127.0.0.1` uniquement :
+Après `make up`, tout est publié sur la machine locale uniquement. La gateway sert un seul
+domaine, `http://localhost`, pour l'API, l'authentification et (plus tard) le front :
 
 | Composant | Adresse |
 |---|---|
-| API Gateway (point d'entrée de l'API) | http://127.0.0.1:8000 |
+| API Gateway (point d'entrée de l'API) | http://localhost/api/v1/... |
+| Keycloak, realm `billetterie` | http://localhost/auth/realms/billetterie |
+| Console d'administration Keycloak | http://localhost/auth/admin (`KEYCLOAK_ADMIN` du `.env`) |
 | Tableau de bord Traefik | http://127.0.0.1:8080/dashboard/ |
 | Consul (registre de services) | http://127.0.0.1:8500 |
 | RabbitMQ (interface de gestion) | http://127.0.0.1:15672 |
 | Mailpit (boîte de réception de test) | http://127.0.0.1:8025 |
 | PostgreSQL / Redis | `127.0.0.1:5432` / `127.0.0.1:6379` |
+
+Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`),
+`partenaire.test` (`partner`), `admin.test` (`admin`).
 
 ## Structure
 
