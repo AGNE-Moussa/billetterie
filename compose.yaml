@@ -173,6 +173,8 @@ services:
     environment: &echo-env
       DATABASE_URL: postgresql+asyncpg://echo:${ECHO_DB_PASSWORD:?à définir dans .env}@postgres:5432/echo
       CONSUL_URL: http://consul:8500
+      # Relais de l'outbox : publie les événements sur l'exchange ticketing.
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       # Revérification des jetons par le service (commun.auth), comme le vérificateur.
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs

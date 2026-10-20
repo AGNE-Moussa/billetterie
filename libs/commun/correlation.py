@@ -16,7 +16,8 @@ import logging
 import re
 import sys
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
@@ -35,6 +36,17 @@ _correlation: ContextVar[str | None] = ContextVar("correlation_id", default=None
 def correlation_id() -> str | None:
     """Identifiant de la requête en cours ; None hors requête (démarrage, tâches de fond)."""
     return _correlation.get()
+
+
+@contextmanager
+def correlation(identifiant: str | None) -> Iterator[None]:
+    """Bloc qui porte l'identifiant d'un message reçu : ses journaux et ses événements le
+    reprennent, comme pour une requête HTTP."""
+    jeton = _correlation.set(identifiant)
+    try:
+        yield
+    finally:
+        _correlation.reset(jeton)
 
 
 class MiddlewareCorrelation:

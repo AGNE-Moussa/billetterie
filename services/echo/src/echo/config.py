@@ -15,6 +15,9 @@ class Parametres(BaseSettings):
     port: int = 8000
     # Désactivé dans les tests qui n'ont pas de Consul.
     consul_actif: bool = True
+    # Broker des événements (relais de l'outbox) ; sans URL, les événements restent dans
+    # l'outbox (tests sans RabbitMQ). Exemple : amqp://<utilisateur>:<mot de passe>@rabbitmq:5672/
+    rabbitmq_url: str | None = None
     # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
     jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
     jwt_audience: str = "billetterie-api"

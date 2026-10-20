@@ -4,7 +4,9 @@ from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from echo.domaine.echos import Echo, EchoDejaExistant
+from commun.evenements import Evenement
+from commun.outbox import publier_plus_tard
+from echo.domaine.echos import EVENEMENT_ECHO_CREE, Echo, EchoDejaExistant
 from echo.infra.base import EchoLigne
 
 
@@ -16,6 +18,14 @@ class DepotEchosSql:
         requete = insert(EchoLigne).values(message=message).returning(EchoLigne.cree_le)
         try:
             cree_le = (await self._session.execute(requete)).scalar_one()
+            # Même transaction que l'écriture : l'événement part si, et seulement si, l'echo
+            # est enregistré.
+            await publier_plus_tard(
+                self._session,
+                Evenement.creer(
+                    EVENEMENT_ECHO_CREE, {"message": message, "cree_le": cree_le.isoformat()}
+                ),
+            )
             await self._session.commit()
         except IntegrityError as erreur:
             # La contrainte unique tranche, même si deux instances écrivent en même temps.

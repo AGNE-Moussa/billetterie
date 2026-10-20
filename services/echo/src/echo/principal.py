@@ -1,4 +1,5 @@
-"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, routes.
+"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, relais de
+l'outbox, routes.
 
 Lancement : uvicorn --factory echo.principal:creer_app
 """
@@ -7,12 +8,14 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from commun.auth import installer_auth
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
+from commun.outbox import RelaisOutbox
 from commun.registre import inscription, tags_traefik
 from echo.api.routes import routeur_echos, routeur_sante
 from echo.config import Parametres, parametres
@@ -48,6 +51,12 @@ def creer_app(
                             tags_traefik(NOM_SERVICE, *RESSOURCES),
                         )
                     )
+                if config.rabbitmq_url:
+                    # Relais de l'outbox : publie les événements écrits par les requêtes.
+                    broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
+                    pile.push_async_callback(broker.stop)
+                    relais = RelaisOutbox(app.state.sessions, broker)
+                    await pile.enter_async_context(relais.en_fond())
                 yield
         finally:
             await moteur.dispose()

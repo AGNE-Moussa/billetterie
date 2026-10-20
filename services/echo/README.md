@@ -29,13 +29,26 @@ Dans les tests, `commun.faux_jetons.EmetteurDeTest` signe des jetons avec une cl
 `creer_app(config, verificateur_jetons=emetteur.verificateur())`, puis
 `headers=emetteur.entetes(roles=[...], scopes=[...])`.
 
+## Événements
+
+Le POST publie `ticketing.echo.created` par l'outbox (`commun.outbox`) : l'événement est écrit
+dans la table `outbox` dans la même transaction que l'echo, puis le relais (tâche de fond du
+lifespan, activée par `RABBITMQ_URL`) le publie sur l'exchange `ticketing`. Le service écrit
+même si RabbitMQ est arrêté ; les événements partent à son retour. Aucun code métier ne publie
+directement sur RabbitMQ.
+
+Un service qui consomme des événements utilise `commun.consommateurs.consommateur_idempotent`
+(table `messages_traites`, trois tentatives puis `<file>.dlq`) et démarre ses consommateurs
+avec `messagerie(broker)` dans son lifespan.
+
 ## Structure
 
 ```text
 services/echo/
   openapi.yaml           contrat écrit d'abord, vérifié par tests/contract
   Dockerfile             multi-étapes (uv puis image finale non root), construit depuis la racine
-  alembic.ini, alembic/  migrations (lancées par le conteneur echo-migrations)
+  alembic.ini, alembic/  migrations (lancées par le conteneur echo-migrations) ; 0002 crée les
+                         tables de messagerie (migration type à reprendre)
   src/echo/
     config.py            Pydantic Settings : DATABASE_URL, INSTANCE, PORT, CONSUL_ACTIF, JWT_*, JWKS_URL
     principal.py         creer_app() : journaux, erreurs, corrélation, base, Consul, routes
@@ -54,4 +67,6 @@ services/echo/
 2. Ajouter sa base dans `infra/postgres/init/01-bases.sh` et son mot de passe dans `.env.example`.
 3. Ajouter `services/<nom>/src` à `[tool.mypy] files` et le module à `known-first-party`.
 4. Ajouter le service (nom et Dockerfile) à la matrice du job `images` de la CI.
-5. Déclarer dans le compose `<nom>-migrations` puis ses instances.
+5. Déclarer dans le compose `<nom>-migrations` puis ses instances (avec `RABBITMQ_URL`).
+6. Reprendre la migration `0002_creer_tables_messagerie.py` et `METADONNEES_MESSAGERIE` dans
+   `alembic/env.py` si le service publie ou consomme des événements.
