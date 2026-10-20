@@ -1,0 +1,11 @@
+# Tableaux de bord versionnés dans infra/grafana/tableaux, rechargés à chaque modification.
+apiVersion: 1
+
+providers:
+  - name: billetterie
+    folder: Billetterie
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/tableaux

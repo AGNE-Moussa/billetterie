@@ -22,6 +22,7 @@ from commun.jetons import (
     VerificateurJetons,
     jeton_bearer,
 )
+from commun.observabilite import installer_observabilite
 from verificateur import routes_publiques
 from verificateur.config import Parametres, parametres
 
@@ -64,6 +65,8 @@ def creer_app(
     app = FastAPI(
         title="Vérificateur de jetons", version="0.1.0", lifespan=cycle_de_vie, openapi_url=None
     )
+
+    installer_observabilite(app, "verificateur")
 
     @app.get("/health")
     async def sante() -> dict[str, str]:

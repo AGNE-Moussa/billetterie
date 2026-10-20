@@ -15,6 +15,7 @@ from commun.auth import installer_auth
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
+from commun.observabilite import installer_observabilite, instrumenter_moteur
 from commun.outbox import RelaisOutbox
 from commun.registre import inscription, tags_traefik
 from echo.api.routes import routeur_echos, routeur_sante
@@ -38,6 +39,7 @@ def creer_app(
     @asynccontextmanager
     async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
         moteur = creer_moteur(config.database_url)
+        instrumenter_moteur(moteur)
         app.state.sessions = async_sessionmaker(moteur, expire_on_commit=False)
         try:
             async with AsyncExitStack() as pile:
@@ -67,6 +69,7 @@ def creer_app(
     installer_erreurs(app)
     installer_auth(app, verificateur)
     app.add_middleware(MiddlewareCorrelation)
+    installer_observabilite(app, NOM_SERVICE)
     app.include_router(routeur_sante)
     app.include_router(routeur_echos)
     return app

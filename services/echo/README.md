@@ -29,6 +29,14 @@ Dans les tests, `commun.faux_jetons.EmetteurDeTest` signe des jetons avec une cl
 `creer_app(config, verificateur_jetons=emetteur.verificateur())`, puis
 `headers=emetteur.entetes(roles=[...], scopes=[...])`.
 
+## Observabilité
+
+`installer_observabilite(app, "echo")` (commun.observabilite) expose `/metrics` et trace
+FastAPI et httpx ; `instrumenter_moteur(moteur)` trace les requêtes SQL. Prometheus trouve les
+instances dans Consul (métadonnée `metriques` posée par commun.registre) ; les traces partent
+vers Tempo (`OTEL_EXPORTER_OTLP_ENDPOINT`). Tableau de bord : `make observabilite`, puis
+http://127.0.0.1:3000.
+
 ## Événements
 
 Le POST publie `ticketing.echo.created` par l'outbox (`commun.outbox`) : l'événement est écrit

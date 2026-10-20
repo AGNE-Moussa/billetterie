@@ -21,6 +21,7 @@ cp .env.example .env
 make init        # active les hooks Git (refus des messages hors Conventional Commits)
 make help        # liste les commandes disponibles
 make up          # démarre la plateforme locale
+make observabilite  # idem, avec Prometheus et Grafana (tableau de bord de la démo)
 ```
 
 ## Accès locaux
@@ -37,6 +38,8 @@ domaine, `http://localhost`, pour l'API, l'authentification et (plus tard) le fr
 | Consul (registre de services) | http://127.0.0.1:8500 |
 | RabbitMQ (interface de gestion) | http://127.0.0.1:15672 |
 | Mailpit (boîte de réception de test) | http://127.0.0.1:8025 |
+| Grafana : tableau de bord et traces (`make observabilite`) | http://127.0.0.1:3000 (lecture sans compte ; admin : `GRAFANA_ADMIN_PASSWORD` du `.env`) |
+| Prometheus (`make observabilite`) | http://127.0.0.1:9090 |
 | PostgreSQL / Redis | `127.0.0.1:5432` / `127.0.0.1:6379` |
 
 Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`),
@@ -52,7 +55,8 @@ répond 401 sans appeler le service. Les routes ouvertes sans jeton se déclaren
 .claude/             outillage Claude (rules, agents, skills, hooks)
 .github/workflows/   CI, déploiement, GitHub Pages
 docs/                conception, ADR, contrats, plans de test, reviews, tickets
-infra/               postgres, traefik, consul, keycloak, rabbitmq, grafana, verificateur
+infra/               postgres, traefik, consul, keycloak, rabbitmq, prometheus, tempo, grafana,
+                     verificateur
 libs/commun/         code partagé entre les services
 services/            microservices FastAPI
 frontend/            application React

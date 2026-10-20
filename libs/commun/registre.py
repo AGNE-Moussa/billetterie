@@ -69,8 +69,12 @@ async def enregistrer(
     port: int,
     tags: Sequence[str] = (),
     chemin_sante: str = "/health",
+    chemin_metriques: str | None = "/metrics",
 ) -> str:
     """Enregistre l'instance dans Consul et renvoie son identifiant.
+
+    `chemin_metriques` est annoncé dans les métadonnées (`metriques`) : Prometheus mesure toute
+    instance qui le porte (infra/prometheus/prometheus.yml). None : instance non mesurée.
 
     Lève une erreur si Consul refuse ou ne répond pas : une instance absente du registre ne
     recevrait aucun trafic, elle ne doit donc pas démarrer.
@@ -82,6 +86,7 @@ async def enregistrer(
         "Address": adresse,
         "Port": port,
         "Tags": list(tags),
+        "Meta": {"metriques": chemin_metriques} if chemin_metriques else {},
         "Check": {
             "HTTP": f"http://{adresse}:{port}{chemin_sante}",
             "Interval": INTERVALLE_CHECK,
