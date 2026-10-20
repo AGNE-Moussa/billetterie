@@ -6,6 +6,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.149.0",
     "httpx>=0.28.1",
+    "prometheus-client>=0.26.0",
+    "tenacity>=9.2.1",
 ]
 
 [build-system]
