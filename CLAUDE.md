@@ -61,3 +61,4 @@ Les règles détaillées par sujet vivent dans `.claude/rules/`, pas ici.
 - Aucun agent ne merge, jamais : le développeur décide du merge.
 - Une décision non prévue par le ticket remonte en question, elle n'est pas tranchée en silence.
 - Si Notion est injoignable, s'arrêter plutôt qu'inventer le contenu d'un ticket.
+- Conception du pipeline (agents, skills, rules, hooks, marqueurs d'étape) : `docs/workflow.md`.
