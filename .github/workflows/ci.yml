@@ -151,6 +151,7 @@ jobs:
       - if: steps.projet.outputs.present == 'true'
         run: npm run lint
       - if: steps.projet.outputs.present == 'true'
-        run: npm run test -- --run
+        # --if-present : Vitest et le build arrivent avec le squelette Vite (BIL-F26).
+        run: npm run --if-present test -- --run
       - if: steps.projet.outputs.present == 'true'
-        run: npm run build
+        run: npm run --if-present build

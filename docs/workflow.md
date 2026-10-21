@@ -103,6 +103,12 @@ Une rule guide l'agent mais ne garantit rien ; ce qui doit être garanti passe p
 | Fin de tour | Tests rapides | Lance pytest unitaire si du Python a changé, Vitest si le front a changé ; signale un échec |
 | Commit | Hook Git `commit-msg` | Refuse un message hors Conventional Commits (déjà en place, `.githooks/`) |
 
+Mise en œuvre (BIL-F19) : scripts Python de `.claude/hooks/`, testés par
+`tests/unit/test_hooks.py`. « Git sûr » couvre les outils Bash **et** PowerShell ; il refuse aussi
+les écritures par le shell dans `.env`, dans les tests verrouillés et dans un contrat hors de
+l'étape `contrat`. Cette détection est une heuristique (redirections, `tee`, `Set-Content`,
+`Out-File`, `cp`, `mv`, `sed -i`) : un programme qui écrit lui-même un fichier n'est pas vu.
+
 ## 8. Pipeline d'un ticket
 
 ```mermaid
