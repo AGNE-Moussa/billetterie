@@ -201,6 +201,10 @@ tickets BIL-F01 à BIL-F24).
 | `review` | Review et validation 2 | Tests protégés, contrat protégé | Tests et contrat verrouillés ; un point bloquant renvoie à `implementation` |
 | `pr` | Ouverture de la PR, CI | Tests protégés, contrat protégé | Idem ; un échec de CI renvoie à `implementation` |
 
+Les agents `contract-writer` et `test-planner` portent en plus un hook dans leur en-tête
+(`limiter_ecriture.py`, BIL-F20) : actif seulement pendant qu'ils travaillent, il refuse toute
+écriture hors de `services/*/openapi.yaml` et de `docs/test-plans/*.md`.
+
 Hooks indépendants du marqueur, toujours actifs : formatage (ruff, Prettier), protection de
 `.env` et des secrets, interdiction d'écrire sur `main`, « Git sûr », tests rapides en fin de
 tour, `commit-msg`.

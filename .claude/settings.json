@@ -12,7 +12,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/.claude/hooks/proteger_fichiers.py\"",
+            "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/proteger_fichiers.py\"",
             "timeout": 30
           }
         ]
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/.claude/hooks/git_sur.py\"",
+            "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/git_sur.py\"",
             "timeout": 30
           }
         ]
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/.claude/hooks/formater.py\"",
+            "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/formater.py\"",
             "timeout": 120
           }
         ]
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/.claude/hooks/tests_rapides.py\"",
+            "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/tests_rapides.py\"",
             "timeout": 600
           }
         ]
