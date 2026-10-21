@@ -1,0 +1,112 @@
+{
+  "info": {
+    "name": "Billetterie : pannes de l'infrastructure",
+    "description": "Appels rejoués en boucle par scripts/pannes.sh pendant une panne (BIL-F16). Le client ne doit voir aucune erreur : chaque appel doit réussir.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Jeton du client « services » (Client Credentials), gardé jusqu'à 30 s avant son expiration.",
+          "const expire = Number(pm.collectionVariables.get('jeton_expire') || 0);",
+          "if (pm.collectionVariables.get('jeton') && Date.now() < expire) { return; }",
+          "pm.sendRequest({",
+          "  url: pm.variables.get('base_url') + '/auth/realms/billetterie/protocol/openid-connect/token',",
+          "  method: 'POST',",
+          "  header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "  body: { mode: 'urlencoded', urlencoded: [",
+          "    { key: 'grant_type', value: 'client_credentials' },",
+          "    { key: 'client_id', value: 'services' },",
+          "    { key: 'client_secret', value: pm.variables.get('client_secret') }",
+          "  ] }",
+          "}, (erreur, reponse) => {",
+          "  if (erreur || reponse.code !== 200) { console.error('Jeton impossible à obtenir', erreur || reponse.code); return; }",
+          "  const corps = reponse.json();",
+          "  pm.collectionVariables.set('jeton', corps.access_token);",
+          "  pm.collectionVariables.set('jeton_expire', Date.now() + (corps.expires_in - 30) * 1000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://traefik"
+    },
+    {
+      "key": "client_secret",
+      "value": ""
+    },
+    {
+      "key": "jeton",
+      "value": ""
+    },
+    {
+      "key": "jeton_expire",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "Créer un echo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 : echo enregistré', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) { pm.collectionVariables.set('dernier', pm.response.json().message); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jeton}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/echos",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"message\": \"panne-{{$guid}}\"}"
+        }
+      }
+    },
+    {
+      "name": "Relire l'echo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 : echo relu', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jeton}}"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/echos/{{dernier}}"
+      }
+    }
+  ]
+}

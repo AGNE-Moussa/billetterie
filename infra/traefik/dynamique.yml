@@ -48,15 +48,26 @@ http:
         address: http://verificateur:8000/verifier
         authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
 
+    # Instance injoignable (tuée, pas encore retirée de Consul) : la requête est rejouée vers
+    # une autre instance. Seules les erreurs réseau sont rejouées, jamais une réponse HTTP.
+    # Limite : une instance qui meurt après avoir traité un POST, avant d'avoir répondu, voit
+    # ce POST rejoué ailleurs (docs/pannes-infra.md).
+    nouvelles-tentatives:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+
     # Le CORS passe avant la vérification : un preflight OPTIONS n'a jamais de jeton.
+    # Les nouvelles tentatives viennent en dernier : seul l'appel au service est rejoué.
     standard:
       chain:
-        middlewares: [correlation, cors, limite-generale, verification-jeton]
+        middlewares: [correlation, cors, limite-generale, verification-jeton, nouvelles-tentatives]
 
     # Le quota par jeton ne compte que les jetons valides.
     partenaires:
       chain:
-        middlewares: [correlation, cors, verification-jeton, limite-partenaires]
+        middlewares:
+          [correlation, cors, verification-jeton, limite-partenaires, nouvelles-tentatives]
 
     # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un.
     public:

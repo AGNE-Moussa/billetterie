@@ -88,6 +88,10 @@ async def enregistrer(
         "Tags": list(tags),
         "Meta": {"metriques": chemin_metriques} if chemin_metriques else {},
         "Check": {
+            # Routée dès l'inscription : sans cela, une instance réinscrite (redémarrage de
+            # Consul) resterait « critical », donc hors de Traefik, jusqu'à son premier check.
+            # L'inscription a lieu en fin de démarrage, quand l'instance est prête.
+            "Status": "passing",
             "HTTP": f"http://{adresse}:{port}{chemin_sante}",
             "Interval": INTERVALLE_CHECK,
             "Timeout": DELAI_CHECK,

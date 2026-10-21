@@ -2,7 +2,7 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up observabilite down reset test test-unit test-integration lint typecheck
+.PHONY: help init up observabilite pannes down reset test test-unit test-integration lint typecheck
 
 # Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
 TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
@@ -13,6 +13,7 @@ help:
 	@echo   init              active les hooks Git du projet (.githooks)
 	@echo   up                demarre la plateforme locale (Docker Compose)
 	@echo   observabilite     demarre la plateforme avec Prometheus et Grafana (http://127.0.0.1:3000)
+	@echo   pannes            rejoue les scenarios de panne (docs/pannes-infra.md), plateforme demarree
 	@echo   down              arrete la plateforme locale (observabilite comprise)
 	@echo   reset             arrete la plateforme et efface ses donnees (volumes)
 	@echo   test              lance tous les tests (pytest)
@@ -29,6 +30,9 @@ up:
 
 observabilite:
 	docker compose --profile observabilite up -d --wait
+
+pannes:
+	bash scripts/pannes.sh tous
 
 down:
 	docker compose --profile observabilite down

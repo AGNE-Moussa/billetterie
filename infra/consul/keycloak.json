@@ -12,6 +12,7 @@
     ],
     "check": {
       "name": "Keycloak prêt",
+      "status": "passing",
       "http": "http://keycloak:9000/auth/health/ready",
       "interval": "10s",
       "timeout": "5s"
