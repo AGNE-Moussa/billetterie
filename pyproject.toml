@@ -17,9 +17,11 @@ package = false
 
 [tool.uv.workspace]
 # libs/ porte la bibliothèque billetterie-commun (module « commun ») ;
-# chaque dossier de services/ est un service avec son propre pyproject.toml ;
-# infra/verificateur est le vérificateur de jetons appelé par Traefik.
-members = ["libs", "services/*", "infra/verificateur"]
+# chaque service a son propre pyproject.toml ; infra/verificateur est le vérificateur de jetons
+# appelé par Traefik. Liste explicite, pas « services/* » : le contrat d'un nouveau service
+# (services/<nom>/openapi.yaml) existe avant son code, son dossier n'est alors pas un membre.
+# Ajouter le service ici quand son pyproject.toml est créé (tests/unit/test_workspace.py).
+members = ["libs", "services/echo", "infra/verificateur"]
 
 [tool.uv.sources]
 billetterie-commun = { workspace = true }

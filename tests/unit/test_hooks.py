@@ -268,3 +268,18 @@ def test_une_commande_ordinaire_passe(tmp_path: Path) -> None:
 
     assert resultat.returncode == 0
     assert resultat.stderr == ""
+
+
+def test_les_hooks_ne_dependent_pas_du_workspace_uv() -> None:
+    """Un workspace momentanément invalide (services/<nom>/ sans pyproject.toml, le temps qu'un
+    contrat précède le code) ne doit ni désactiver ni bloquer les hooks : `--no-project`."""
+    fichiers = [RACINE / ".claude" / "settings.json", *(RACINE / ".claude" / "agents").glob("*.md")]
+    commandes = [
+        ligne
+        for fichier in fichiers
+        for ligne in fichier.read_text(encoding="utf-8").splitlines()
+        if "/.claude/hooks/" in ligne
+    ]
+
+    assert commandes
+    assert all("uv run --no-project python" in ligne for ligne in commandes), commandes

@@ -73,7 +73,8 @@ services/echo/
 
 1. Copier la structure et renommer le paquet (`pyproject.toml`, `module-name`).
 2. Ajouter sa base dans `infra/postgres/init/01-bases.sh` et son mot de passe dans `.env.example`.
-3. Ajouter `services/<nom>/src` à `[tool.mypy] files` et le module à `known-first-party`.
+3. Ajouter `services/<nom>` aux membres du workspace (`[tool.uv.workspace] members`), puis
+   `services/<nom>/src` à `[tool.mypy] files` et le module à `known-first-party`.
 4. Ajouter le service (nom et Dockerfile) à la matrice du job `images` de la CI.
 5. Déclarer dans le compose `<nom>-migrations` puis ses instances (avec `RABBITMQ_URL`).
 6. Reprendre la migration `0002_creer_tables_messagerie.py` et `METADONNEES_MESSAGERIE` dans
