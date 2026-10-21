@@ -19,6 +19,7 @@ uv sync                    # installer l'environnement
 make init                  # activer le hook commit-msg (.githooks/)
 make up / make down        # démarrer (attend healthy) / arrêter la plateforme locale
 make observabilite         # démarrer avec Prometheus et Grafana (profil Compose observabilite)
+make pannes                # rejouer les scénarios de panne (docs/pannes-infra.md)
 make reset                 # tout arrêter et effacer les volumes (rejoue l'init des bases)
 make test                  # tous les tests (uv run pytest)
 make test-unit             # tests unitaires (tests/unit et services/*/tests/unit), sans Docker

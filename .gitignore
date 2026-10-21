@@ -377,3 +377,6 @@ vite.config.ts.timestamp-*
 # ===== Spécifique au projet billetterie =====
 # Le modèle d'exemple des variables d'environnement est versionné (aucune valeur réelle).
 !.env.example
+
+# Résultats des scénarios de panne (scripts/pannes.sh)
+postman/resultats/
