@@ -69,7 +69,7 @@ def test_sur_main_aucun_fichier_du_projet_ne_s_ecrit() -> None:
         "frontend/e2e/achat.spec.ts",
     ],
 )
-@pytest.mark.parametrize("etape", ["implementation", "review", "pr"])
+@pytest.mark.parametrize("etape", ["squelette", "implementation", "review", "pr"])
 def test_les_tests_sont_verrouilles_a_partir_de_l_implementation(chemin: str, etape: str) -> None:
     motif = proteger_fichiers.decision(chemin, Path(chemin).name, BRANCHE, etape)
 
@@ -283,3 +283,13 @@ def test_les_hooks_ne_dependent_pas_du_workspace_uv() -> None:
 
     assert commandes
     assert all("uv run --no-project python" in ligne for ligne in commandes), commandes
+
+
+def test_a_l_etape_tests_les_tests_rouges_ne_bloquent_pas_la_fin_du_tour(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "etape").write_text("tests\n", encoding="utf-8")
+
+    resultat = _lancer("tests_rapides.py", {"stop_hook_active": False}, tmp_path)
+
+    assert resultat.returncode == 0
+    assert resultat.stderr == ""

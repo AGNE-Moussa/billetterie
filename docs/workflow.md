@@ -61,7 +61,7 @@ Les statuts `TO TEST` et `DONE` restent humains.
 | `test-planner` | Déduit les cas de test du ticket, du contrat, des critères et, pour le front, des maquettes ; étiquette chaque cas `unitaire`, `intégration`, `composant` ou `parcours` ; ajoute toujours un cas de concurrence quand Billets ou Commandes sont touchés | Lecture ; écriture dans `docs/test-plans/` uniquement | `docs/test-plans/<ticket>.md` |
 | `unit-test-writer` | Tests unitaires de la logique métier et tests de composants React | Lecture ; écriture dans les dossiers de tests unitaires et `*.test.tsx` ; pas de Docker | Tests rouges |
 | `integration-test-writer` | Tests d'API sur vraie base, Redis et RabbitMQ ; conformité au contrat ; concurrence avec de vraies requêtes parallèles ; parcours Playwright des écrans | Lecture ; écriture dans les dossiers de tests d'intégration et `frontend/e2e/` ; Docker (Testcontainers, `docker compose`) | Tests rouges |
-| `implementer` | Code de production jusqu'au vert | Écriture dans le code de production, les migrations, `libs/`, `frontend/src/` ; tests et contrats interdits (hook) | Code, tests verts |
+| `implementer` | Squelette du code avant les tests (paquet, `creer_app`, routes du contrat en 501, fonctions du domaine vides), puis code de production jusqu'au vert | Écriture dans le code de production, les migrations, `libs/`, `frontend/src/` ; tests et contrats interdits (hook) | Code, tests verts |
 | `reviewer` | Relit le diff ; vérifie en priorité qu'aucune place ne peut être vendue deux fois et qu'un revendeur ne voit que ses commandes | Lecture seule et `git diff` | `docs/reviews/<ticket>.md` (bloquant, à corriger, suggestion) |
 
 ## 5. Skills : ceux qui enchaînent les étapes
@@ -69,7 +69,7 @@ Les statuts `TO TEST` et `DONE` restent humains.
 | Skill | Rôle |
 |---|---|
 | `/ticket <ID>` | Lit le ticket dans Notion, met à jour son statut, orchestre le pipeline ; s'arrête pour ta validation après le contrat (s'il change), après le plan et après la review |
-| `/write-tests` | Répartit les cas du plan selon leur niveau (`unitaire` et `composant` d'un côté, `intégration` et `parcours` de l'autre), en parallèle ; vérifie que les tests échouent pour la bonne raison |
+| `/write-tests` | Refuse un plan qui a encore des questions ouvertes ; répartit les cas du plan selon leur niveau (`unitaire` et `composant` d'un côté, `intégration` et `parcours` de l'autre), en parallèle ; vérifie que les tests échouent pour la bonne raison |
 | `/open-pr` | Commit en Conventional Commits, push, PR qui référence le ticket, le plan et la review ; ticket Notion en IN REVIEW |
 | `/smoke-tests` | Hors pipeline : complète `tests/smoke/` quand une user story ajoute un parcours critique de bout en bout ; les tests Playwright d'un écran restent dans le pipeline du ticket |
 
@@ -122,7 +122,8 @@ flowchart TD
   C -->|non| TP[test-planner<br/>docs/test-plans/BIL-xxx.md]
   TP --> V1{{"Validation 1 : le plan<br/>(humain)"}}
   V1 -->|à reprendre| TP
-  V1 -->|validé| WT["/write-tests<br/>unit-test-writer et integration-test-writer en parallèle"]
+  V1 -->|validé| SQ["implementer : squelette<br/>routes en 501, fonctions vides, aucun test"]
+  SQ --> WT["/write-tests<br/>unit-test-writer et integration-test-writer en parallèle"]
   WT --> R{Tests rouges pour<br/>la bonne raison ?}
   R -->|non| WT
   R -->|oui| IM[implementer<br/>code jusqu'au vert, tests et contrat verrouillés]
@@ -145,7 +146,8 @@ flowchart TD
 | 3 | **Validation du contrat** (si l'étape 2 a eu lieu) | **humain** | Diff du contrat | Accord ou reprise | `contrat` |
 | 4 | Écrire le plan de test | agent `test-planner` | Ticket, contrat, critères, maquettes | `docs/test-plans/BIL-xxx.md` | `plan` |
 | 5 | **Validation 1 : le plan** | **humain** | Plan | Accord ou reprise | `plan` |
-| 6 | Répartir et faire écrire les tests, vérifier qu'ils échouent pour la bonne raison | skill `/write-tests` | Plan validé | Tests rouges | `tests` |
+| 5b | Poser le squelette : paquet, `creer_app`, routes du contrat qui répondent 501, fonctions du domaine déclarées mais vides (BIL-F21) | agent `implementer` | Plan validé, contrat | Code qui compile, tests encore absents | `squelette` |
+| 6 | Répartir et faire écrire les tests, vérifier qu'ils échouent pour la bonne raison | skill `/write-tests` | Plan validé, squelette | Tests rouges, sur une assertion | `tests` |
 | 6a | Tests unitaires et de composants | agent `unit-test-writer` | Cas `unitaire`, `composant` | Tests rouges | `tests` |
 | 6b | Tests d'intégration et parcours | agent `integration-test-writer` | Cas `intégration`, `parcours` | Tests rouges | `tests` |
 | 7 | Coder jusqu'au vert | agent `implementer` | Tests rouges, contrat | Code, tests verts | `implementation` |
@@ -157,7 +159,11 @@ flowchart TD
 | 13 | **TO TEST puis DONE** | **humain** | Plateforme, Postman | Ticket clos | aucun |
 
 Les étapes 6a et 6b tournent en parallèle sous la responsabilité de `/write-tests`, chacune avec
-son propre agent : chaque niveau de test a un seul auteur. `/ticket` orchestre les étapes 2 à 9
+son propre agent : chaque niveau de test a un seul auteur. Le squelette (5b) existe pour que ces tests échouent **sur
+une assertion** (501 au lieu de 201) et non sur une `ImportError` : un test rouge pour une
+mauvaise raison ne prouve rien. Le squelette porte les gardes déclarées par le contrat
+(sécurité, validation 422), sans quoi le test de contrat échouerait : un test qui ne vérifie
+qu'une de ces gardes est donc vert dès le squelette, ce qui est permis et signalé à part. `/ticket` orchestre les étapes 2 à 9
 mais n'en exécute aucune lui-même : il lance l'agent responsable et pose le marqueur.
 
 **Points de décision humaine** : la validation du contrat (seulement si une route change), la
@@ -196,7 +202,8 @@ tickets BIL-F01 à BIL-F24).
 | `cadrage` | Lecture du ticket, branche | — | Aucun blocage propre |
 | `contrat` | Écriture et validation du contrat | Contrat protégé | `openapi.yaml` modifiable ; seule étape où il l'est |
 | `plan` | Plan de test et validation 1 | Contrat protégé | Contrat verrouillé |
-| `tests` | Écriture des tests | Contrat protégé | Contrat verrouillé ; tests modifiables |
+| `squelette` | Squelette du code par `implementer` | Tests protégés, contrat protégé | Tests et contrat verrouillés |
+| `tests` | Écriture des tests | Contrat protégé ; tests rapides de fin de tour suspendus (rouges attendus) | Contrat verrouillé ; tests modifiables |
 | `implementation` | Code jusqu'au vert | Tests protégés, contrat protégé | Tests et contrat verrouillés |
 | `review` | Review et validation 2 | Tests protégés, contrat protégé | Tests et contrat verrouillés ; un point bloquant renvoie à `implementation` |
 | `pr` | Ouverture de la PR, CI | Tests protégés, contrat protégé | Idem ; un échec de CI renvoie à `implementation` |
