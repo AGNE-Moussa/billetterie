@@ -4,6 +4,9 @@ Fichiers modifiés depuis le dernier commit (suivis ou nouveaux) : du Python lan
 unitaires (pytest), du code du front lance Vitest. Jamais Testcontainers ni Playwright, trop
 lents pour chaque tour. En cas d'échec, l'agent doit corriger ; s'il s'arrête de nouveau avec
 des tests rouges (stop_hook_active), il est laissé finir, avec l'échec signalé.
+
+À l'étape « tests » (marqueur `.claude/etape`), les tests rouges sont le résultat attendu : le
+hook ne les lance pas.
 """
 
 import json
@@ -11,9 +14,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _commun import bloquer, lire_entree, racine_projet
+from _commun import bloquer, etape_courante, lire_entree, racine_projet
 
 EXTENSIONS_FRONT = (".ts", ".tsx", ".js", ".jsx", ".css")
+# Étapes où des tests rouges sont attendus : rien à faire corriger.
+ETAPES_ROUGES_ATTENDUS = {"tests"}
 LIGNES_SORTIE = 40
 
 
@@ -56,6 +61,8 @@ def commande(suite: str, racine: Path) -> list[str] | None:
 def main() -> None:
     entree = lire_entree()
     racine = racine_projet()
+    if etape_courante(racine) in ETAPES_ROUGES_ATTENDUS:
+        return
     echecs = []
     for suite in a_lancer(fichiers_modifies(racine)):
         cmd = commande(suite, racine)

@@ -13,19 +13,29 @@ from fnmatch import fnmatchcase
 from _commun import bloquer, chemin_relatif, lire_entree, racine_projet
 
 
+def _correspond(segments: list[str], attendus: list[str]) -> bool:
+    if not attendus:
+        return not segments
+    if attendus[0] == "**":
+        # « ** » : zéro, un ou plusieurs dossiers.
+        return any(_correspond(segments[i:], attendus[1:]) for i in range(len(segments) + 1))
+    return (
+        bool(segments)
+        and fnmatchcase(segments[0], attendus[0])
+        and _correspond(segments[1:], attendus[1:])
+    )
+
+
 def autorise(chemin_rel: str | None, motifs: list[str]) -> bool:
     """Vrai si le chemin correspond à un motif, segment par segment.
 
     « * » ne franchit pas « / » : `services/*/openapi.yaml` n'autorise pas un sous-dossier.
+    « ** » couvre n'importe quelle profondeur : `tests/unit/**`.
     """
     if chemin_rel is None:
         return False  # hors du projet : jamais pour un agent du pipeline
     segments = chemin_rel.split("/")
-    for motif in motifs:
-        attendus = motif.split("/")
-        if len(attendus) == len(segments) and all(map(fnmatchcase, segments, attendus)):
-            return True
-    return False
+    return any(_correspond(segments, motif.split("/")) for motif in motifs)
 
 
 def main() -> None:

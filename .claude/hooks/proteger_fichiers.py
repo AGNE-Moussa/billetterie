@@ -2,7 +2,7 @@
 
 - `.env` et ses variantes (sauf `.env.example`) et les fichiers de secrets, où qu'ils soient ;
 - tout fichier du projet quand la branche courante est `main` ;
-- les tests pendant l'implémentation, la review et la PR (marqueur `.claude/etape`) ;
+- les tests pendant le squelette, l'implémentation, la review et la PR (marqueur `.claude/etape`) ;
 - les contrats `openapi.yaml` hors de l'étape `contrat`, quand un marqueur est posé.
 """
 
@@ -20,7 +20,8 @@ from _commun import (
 
 EXTENSIONS_SECRETS = {".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
 NOMS_SECRETS = re.compile(r"^(id_rsa|id_ecdsa|id_ed25519|credentials|secrets?)(\..+)?$")
-ETAPES_TESTS_VERROUILLES = {"implementation", "review", "pr"}
+# « squelette » : implementer prépare le code vide avant les tests, il ne les écrit pas.
+ETAPES_TESTS_VERROUILLES = {"squelette", "implementation", "review", "pr"}
 TESTS = re.compile(r"(^|/)tests/|\.test\.tsx?$|^frontend/e2e/")
 
 
