@@ -1,0 +1,352 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Workflows Billetterie</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Tableau large par workflow : 7 étapes en colonnes, bandes skills / agents / humain / marqueur, puis un ticket réel déroulé critère par critère */
+:root{
+ --bg:#eef1f5;--card:#ffffff;--ink:#16202e;--muted:#5a6577;--line:#dde3eb;--rule:#c5cdd8;
+ --soft:#f7f9fb;--codebg:#e9edf3;--redbg:#fde8e6;--greenbg:#e1f3ea;
+ --s1:#4b5a70;--s2:#c2560c;--s3:#7b4fd6;--s4:#16865f;--s5:#cf3f35;--s6:#2a6fd6;--s7:#a8680a;
+ --p6bg:#f1f6fe;--p6line:#b9cdf2;--p7bg:#fdf6ea;--p7line:#ecd09c;
+ --tu:#22a06b;--ti:#2a6fd6;--tc:#8a4fd6;--te:#d9800f;
+ --sans:"IBM Plex Sans","Segoe UI",Arial,sans-serif;--mono:"IBM Plex Mono",Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+ --bg:#0f141b;--card:#161d27;--ink:#e6ebf2;--muted:#9aa6b8;--line:#28323f;--rule:#344152;
+ --soft:#1b2430;--codebg:#232d3a;--redbg:#3a1f1f;--greenbg:#16302a;
+ --s1:#9aaac0;--s2:#f08c4a;--s3:#a888f0;--s4:#3cc18a;--s5:#f0766c;--s6:#6ea3f5;--s7:#e0a845;
+ --p6bg:#17233a;--p6line:#2f4a78;--p7bg:#2a2216;--p7line:#6b5221;
+ --tu:#3cc18a;--ti:#6ea3f5;--tc:#a888f0;--te:#f0a24a;color-scheme:dark}}
+:root[data-theme="dark"]{
+ --bg:#0f141b;--card:#161d27;--ink:#e6ebf2;--muted:#9aa6b8;--line:#28323f;--rule:#344152;
+ --soft:#1b2430;--codebg:#232d3a;--redbg:#3a1f1f;--greenbg:#16302a;
+ --s1:#9aaac0;--s2:#f08c4a;--s3:#a888f0;--s4:#3cc18a;--s5:#f0766c;--s6:#6ea3f5;--s7:#e0a845;
+ --p6bg:#17233a;--p6line:#2f4a78;--p7bg:#2a2216;--p7line:#6b5221;
+ --tu:#3cc18a;--ti:#6ea3f5;--tc:#a888f0;--te:#f0a24a;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);margin:0;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.scroll{overflow-x:auto;margin-bottom:32px;border-radius:6px}
+.board{width:2080px;background:var(--card);padding:34px 38px 30px;border:1px solid var(--line);border-radius:6px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
+.eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:32px;font-weight:700;margin:4px 0 0;text-wrap:balance}
+.feat{font-size:14.5px;color:var(--muted);margin-top:6px}
+.feat b{color:var(--ink)}
+code{font-family:var(--mono);font-size:12px;background:var(--codebg);padding:1px 5px;border-radius:4px}
+.G{display:grid;grid-template-columns:210px repeat(7,1fr);column-gap:14px}
+.colhead{margin-top:26px;align-items:end}
+.ch{text-align:center;padding-bottom:10px;border-bottom:4px solid}
+.ch .n{font-size:14px;font-weight:700}
+.ch .t{font-size:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-top:2px}
+.lane{align-items:center;padding:14px 0;border-bottom:1.5px solid var(--rule)}
+.lanelabel{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:15px;font-weight:700}
+.cell{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;min-height:54px;text-align:center}
+.chip{display:flex;align-items:center;gap:8px;border:2px solid;border-radius:9px;padding:6px 12px 6px 9px;background:var(--card);font-family:var(--mono);font-size:14px;font-weight:700;text-align:left}
+.chip small{display:block;font-family:var(--sans);font-size:11px;font-weight:600;opacity:.85}
+.agent{display:flex;flex-direction:column;align-items:center;gap:5px}
+.agent .nm{font-family:var(--mono);font-size:12.5px;font-weight:700}
+.agent .rl{font-size:11px;color:var(--muted);max-width:150px;line-height:1.3}
+.human{display:flex;align-items:center;gap:7px;border:2px dashed;border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700;line-height:1.3;text-align:left}
+.marker{font-family:var(--mono);font-size:13px;font-weight:700;padding:4px 10px;border-radius:6px;background:var(--codebg)}
+.marker i{display:block;font-style:normal;font-family:var(--sans);font-size:10.5px;font-weight:500;color:var(--muted);margin-top:2px}
+.skip{font-size:12px;color:var(--muted);font-style:italic}
+.body{margin-top:18px;align-items:start}
+.legend{display:flex;flex-direction:column;gap:11px;font-size:13.5px;padding-top:4px}
+.legend .lt{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.li{display:flex;align-items:center;gap:9px}
+.li .sub{color:var(--muted);font-size:12px}
+.dot{width:15px;height:15px;border-radius:50%;flex:none;border:2px solid rgba(0,0,0,.12)}
+.st{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 9px;border-radius:14px}
+.st.red{background:var(--redbg);color:var(--s5)}.st.green{background:var(--greenbg);color:var(--s4)}
+.mini{border:1.5px solid var(--line);border-radius:10px;padding:12px 12px 10px;background:var(--soft)}
+.mini h4{margin:0 0 8px;font-size:12.5px;font-weight:700;font-family:var(--mono);word-break:break-all}
+.mini ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.mini li{font-size:12.5px;line-height:1.35;display:flex;gap:7px}
+.mini li:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.45;flex:none;margin-top:6px}
+.mini.c1{border-color:var(--s1)}.mini.c1 h4{color:var(--s1)}
+.mini.c2{border-color:var(--s2)}.mini.c2 h4{color:var(--s2)}
+.mini.off{border-style:dashed}
+.groups{grid-column:4 / span 3;display:flex;flex-direction:column;gap:16px}
+.grp .gt{font-size:13.5px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.grp .gt span{font-weight:500;color:var(--muted);font-size:12px}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;column-gap:14px;align-items:center;min-height:44px;margin-bottom:6px}
+.ca{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--soft);font-size:12.5px;line-height:1.3;position:relative;margin-left:22px}
+.ca .id{font-family:var(--mono);font-weight:700;font-size:11.5px;color:var(--muted);flex:none;width:26px}
+.ca .tx{flex:1;min-width:0}
+.ca .dots{display:flex;gap:3px;flex:none}
+.ca .dots .dot{width:12px;height:12px}
+.ca .ok{position:absolute;left:-26px;top:50%;transform:translateY(-50%);display:flex}
+.tt{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700}
+.tt .ar{flex:none;width:22px;height:2px;background:var(--muted);position:relative}
+.tt .ar:after{content:"";position:absolute;right:-1px;top:-4px;border-left:7px solid var(--muted);border-top:5px solid transparent;border-bottom:5px solid transparent}
+.tt .lab{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tt .lab i{font-style:normal;font-weight:500;color:var(--muted);font-size:11px}
+.c3c{display:flex;justify-content:center}
+.panel{border:2px solid;border-radius:12px;padding:14px 14px 12px}
+.panel h3{font-size:14px;font-weight:700;margin:0 0 10px}
+.panel ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.panel li{display:flex;gap:8px;font-size:12.5px;line-height:1.35}
+.box{width:15px;height:15px;border:2px solid;border-radius:4px;flex:none;margin-top:1px}
+.p6{border-color:var(--s6);background:var(--p6bg)}.p6 h3{color:var(--s6)}.p6 .box{border-color:var(--s6)}
+.p7{border-color:var(--s7);background:var(--p7bg)}.p7 h3{color:var(--s7)}.p7 .box{border-color:var(--s7)}
+.panel .who{margin-top:12px;padding-top:9px;border-top:1.5px dashed;font-size:12px;font-weight:700}
+.p6 .who{border-color:var(--p6line);color:var(--s6)}.p7 .who{border-color:var(--p7line);color:var(--s7)}
+.foot{margin-top:22px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:24px}
+.note{max-width:2080px;font-size:13px;color:var(--muted);margin:0 0 14px}
+</style>
+
+<p class="note">Faites défiler horizontalement sur petit écran. Un tableau par workflow : backend puis frontend.</p>
+<div id="root"></div>
+
+<script>
+function pix(rows,pal,s){
+  const w=rows[0].length;let r="";
+  rows.forEach((row,y)=>[...row].forEach((c,x)=>{if(c!=="."&&pal[c])r+=`<rect x="${x*s}" y="${y*s}" width="${s}" height="${s}" fill="${pal[c]}"/>`}));
+  return {svg:r,w:w*s,h:rows.length*s};
+}
+const BOT=[
+"....CCCCCCCC......",
+"...CCCCCCCCCC.....",
+"..CCCCCCCCCCCC....",
+"..CCCCCCCCCCCC....",
+".VVVVVVVVVVVVVVV..",
+"..OBBBBBBBBBBBO...",
+"..BBBBBBBBBBBBB...",
+"..BBDDDDDDDDDBB...",
+"..BBDWWDDDWWDBB...",
+"..BBDWWDDDWWDBB...",
+"..BBDDDDDDDDDBB...",
+"..BBBBBMMMBBBBB...",
+"AABBBBBBBBBBBBBAA.",
+"AABBBBBBBBBBBBBAA.",
+"..BBBBBBBBBBBBB...",
+"..BBB..BBB..BBB...",
+"..KKK..KKK..KKK..."];
+function mascot(cap,capDark,initials,acc){
+  const s=4;
+  const pal={C:cap,V:capDark,B:"#2bb3a3",O:"#5fd0c2",D:"#163b45",W:"#e8fffb",M:"#0f6f63",A:"#1f9789",K:"#163b45"};
+  const b=pix(BOT,pal,s),a=acc(s);
+  const W=b.w+a.w-8,H=Math.max(b.h,a.h+a.dy)+2;
+  return `<svg width="${Math.round(W*1.15)}" height="${Math.round(H*1.15)}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges" role="img" aria-label="mascotte ${initials}">
+   ${b.svg}
+   <text x="${7*s+2}" y="${3*s+1}" text-anchor="middle" font-family="Consolas,monospace" font-weight="900" font-size="${2.6*s}" fill="#fff">${initials}</text>
+   <g transform="translate(${b.w-8},${a.dy})">${a.svg}</g></svg>`;
+}
+const acc=(rows,pal,dyRows)=>s=>{const p=pix(rows,pal,s);p.dy=dyRows*s;return p;};
+const CONTRACT=acc([
+"PPPPPPP...",
+"PWWWWWP...",
+"PWDDDWP...",
+"PWWWWWP..Y",
+"PWDDDWP.YY",
+"PWWWWWPYY.",
+"PWDDWWYY..",
+"PWWWWKY...",
+"PWRRWWP...",
+"PWRRWWP...",
+"PPPPPPP..."],{P:"#3b4252",W:"#ffffff",D:"#9aa3b5",R:"#d4453b",Y:"#f2b33d",K:"#3b4252"},6);
+const LOUPE=acc([
+"..GGGGG...",
+".GLLLLLG..",
+"GLLWLLLLG.",
+"GLWLLLLLG.",
+"GLLLLLLLG.",
+"GLLLLLLLG.",
+".GLLLLLG..",
+"..GGGGGHH.",
+".......HHH",
+"........HH"],{G:"#3b4252",L:"#bfe6ff",W:"#ffffff",H:"#8a5a2b"},8);
+const FLASK=acc([
+"...HHHH...",
+"...GLLG...",
+"...GLLG...",
+"..GLLLLG..",
+".GLLLLLLG.",
+"GLLTTTTLLG",
+"GLTTTTTTLG",
+"GTTTWTTTTG",
+"GTTTTTTTTG",
+".GGGGGGGG."],{G:"#3b4252",L:"#dff3ff",T:"#22a06b",W:"#c9f5df",H:"#8a5a2b"},7);
+const BOXES=acc([
+"...CCCC...",
+"...CwwC...",
+"...CCCC...",
+"CCCC.CCCC.",
+"CwwC.CwwC.",
+"CCCC.CCCC."],{C:"#0e7490",w:"#8fdcef"},11);
+const WRENCH=acc([
+"......GG..",
+".....GGG.G",
+".....GGGGG",
+"....GGGGG.",
+"...GGG....",
+"..GGG.....",
+".GGG......",
+"GGG.......",
+"GG........"],{G:"#6b7486"},8);
+const DOC=acc([
+"PPPPPPPP..",
+"PWWWWWWPP.",
+"PWDDDDWWP.",
+"PWWWWWWWP.",
+"PWDDDDDWP.",
+"PWWWWWWWP.",
+"PWDDDWGGGG",
+"PWWWWGGWWG",
+"PWDDWGWGWG",
+"PWWWWGGWGG",
+"PPPPPPGGGG"],{P:"#3b4252",W:"#ffffff",D:"#9aa3b5",G:"#22a06b"},6);
+
+const AG={
+ cw:()=>agent(mascot("#c2560c","#8f3e08","CW",CONTRACT),"contract-writer","écrit le contrat OpenAPI, seulement si une route change"),
+ tp:()=>agent(mascot("#7b4fd6","#5a35ad","TP",LOUPE),"test-planner","déduit les cas de test et leur niveau"),
+ ut:()=>agent(mascot("#16865f","#0f5f43","UT",FLASK),"unit-test-writer","unitaires et composants, sans Docker"),
+ it:()=>agent(mascot("#0e7490","#0a5368","IT",BOXES),"integration-test-writer","vraie base, Redis, RabbitMQ, Playwright"),
+ im:()=>agent(mascot("#cf3f35","#992a22","IM",WRENCH),"implementer","code jusqu'au vert, tests verrouillés"),
+ rv:()=>agent(mascot("#2a6fd6","#1c4fa0","RV",DOC),"reviewer","relit le diff en lecture seule")
+};
+function agent(svg,nm,rl){return `<div class="agent">${svg}<div class="nm">${nm}</div><div class="rl">${rl}</div></div>`;}
+
+const ICONS={
+ ticket:'<path d="M3 5.5h14v3a1.5 1.5 0 0 0 0 3v3H3v-3a1.5 1.5 0 0 0 0-3z"/><path d="M8 5.5v9" stroke-dasharray="1.5 1.8"/>',
+ tests:'<path d="M7.5 2.5h5M8.5 2.5v5.2L3.6 15.6A1.8 1.8 0 0 0 5.2 18.4h9.6a1.8 1.8 0 0 0 1.6-2.8L11.5 7.7V2.5"/><path d="M5.6 13h8.8"/>',
+ pr:'<circle cx="5" cy="4.5" r="2"/><circle cx="5" cy="15.5" r="2"/><circle cx="15" cy="15.5" r="2"/><path d="M5 6.5v7M15 13.5V8.5a3 3 0 0 0-3-3H9"/><path d="M11 3.5l-2 2 2 2"/>',
+ user:'<circle cx="10" cy="6.5" r="3.2"/><path d="M3.5 17.5c.8-3.4 3.4-5.2 6.5-5.2s5.7 1.8 6.5 5.2"/>'
+};
+function icon(n,c,sz=20){return `<svg width="${sz}" height="${sz}" viewBox="0 0 20 20" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;}
+function folder(c,c2){const p=pix(["KKKK........","KKKKK.......","KKKKKKKKKKKK","LLLLLLLLLLLL","LLLLLLLLLLLL","LLLLLLLLLLLL","LLLLLLLLLLLL","LLLLLLLLLLLL","LLLLLLLLLLLL"],{K:c2,L:c},3);
+ return `<svg width="${p.w}" height="${p.h}" shape-rendering="crispEdges" aria-hidden="true">${p.svg}</svg>`;}
+function chip(ic,name,sub,color){return `<div class="chip" style="border-color:${color};color:${color}">${icon(ic,color)}<div>${name}${sub?`<small>${sub}</small>`:""}</div></div>`;}
+function human(txt,color){return `<div class="human" style="border-color:${color};color:${color}">${icon("user",color,18)}<span>${txt}</span></div>`;}
+const okSvg=c=>`<svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="${c}"/><path d="M6.5 11.5l3 3 6-6.5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const STEPS=[["Cadrer","s1"],["Contrat","s2"],["Planifier les tests","s3"],["Écrire les tests","s4"],["Écrire le code","s5"],["Relire","s6"],["PR et merge","s7"]];
+const MARKERS=["cadrage","contrat","plan","tests","implementation","review","pr"];
+const MARKNOTE=["aucun blocage","contrat modifiable","contrat verrouillé","tests modifiables","tests et contrat verrouillés","tests et contrat verrouillés","retiré après la PR"];
+
+const TYPES={
+ back:[["tu","Unitaire","pytest","unit-test-writer"],["ti","Intégration","pytest, Testcontainers","integration-test-writer"]],
+ front:[["tc","Composant","Vitest, Testing Library, MSW","unit-test-writer"],["te","Parcours","Playwright","integration-test-writer"]]
+};
+
+const BOARDS=[
+{key:"back",eyebrow:"Workflow backend · services/billets",title:"Verrouiller une place pendant l'achat",
+ feat:"Exemple déroulé : <b>BIL-006</b> (US2, réservation de places). Le ticket ajoute des routes : l'étape contrat a lieu.",
+ branch:"feat/bil-006-verrou-places",
+ cadrage:{h:"/ticket BIL-006",items:["Ticket lu dans le board Notion","BIL-004 en DONE, sinon arrêt avec la liste des bloquants","Statut passé en DOING","<code>docs/tickets/BIL-006.md</code> écrit","Branche créée depuis la propriété Branche"]},
+ contrat:{h:"services/billets/openapi.yaml",items:["Route de verrouillage d'une place","Levée du verrou par son détenteur","Disponibilité par séance","Erreur métier <code>SEAT_ALREADY_TAKEN</code> en 409"],off:false},
+ groups:[
+  ["Critères du ticket","BIL-006",[
+   ["CA1","Une place verrouillée est refusée à un autre client",["ti"],"Intégration","409, Redis réel"],
+   ["CA2","Le verrou expire seul après la durée fixée",["tu","ti"],"Unitaire + Intégration","10 min par défaut, durée courte en test"],
+   ["CA3","Seul le détenteur du verrou peut le lever",["ti"],"Intégration","identifiant du client en valeur"]]],
+  ["Cas ajoutés par test-planner","concurrence obligatoire sur Billets",[
+   ["P1","50 requêtes parallèles sur la même place : une seule obtient le verrou",["ti"],"Intégration","vraies requêtes parallèles"],
+   ["P2","Même sans verrou, la base refuse un deuxième billet vendu",["ti"],"Intégration","contrainte unique (séance, place)"],
+   ["P3","Statuts de place : libre, verrouillée, vendue",["tu"],"Unitaire","transitions autorisées"],
+   ["P4","Réponse 409 conforme au contrat",["ti"],"Intégration (contrat)","services/billets/tests/contract"]]]
+ ],
+ review:["Aucune place vendable deux fois : verrou <code>SET NX</code> et contrainte unique en base","Jamais de lecture puis écriture sans verrou","Levée du verrou réservée au client qui le détient","Erreur 409 en Problem Details, code <code>SEAT_ALREADY_TAKEN</code>","Aucun test ni contrat modifié depuis l'étape tests","Rapport <code>docs/reviews/BIL-006.md</code> : bloquant, à corriger, suggestion"],
+ reviewWho:"Validation 2 : un point bloquant renvoie à implementer",
+ merge:["<code>/open-pr</code> : commit Conventional Commits, push, PR qui cite le ticket, le plan et la review","Ticket Notion en IN REVIEW, lien de la PR en commentaire","CI verte : ruff, mypy, tests unitaires et d'intégration","Un échec de CI renvoie à implementer","TO TEST après vérification Postman, puis DONE"],
+ mergeWho:"Merge par le développeur ; gh pr merge bloqué pour Claude"
+},
+{key:"front",eyebrow:"Workflow frontend · frontend/",title:"Plan de salle et compte à rebours",
+ feat:"Exemple déroulé : <b>BIL-020</b> (US2, front). Aucune route ajoutée : l'étape contrat est sautée.",
+ branch:"feat/bil-020-front-plan-salle",
+ cadrage:{h:"/ticket BIL-020",items:["Ticket lu dans le board Notion","BIL-006 et BIL-019 en DONE, sinon arrêt","Statut passé en DOING","<code>docs/tickets/BIL-020.md</code> écrit","Branche créée depuis la propriété Branche"]},
+ contrat:{h:"Étape sautée",items:["Le ticket n'ajoute ni ne change de route","Le front consomme le contrat écrit pour BIL-006 via le client d'API généré","Le marqueur passe directement de cadrage à plan"],off:true},
+ groups:[
+  ["Critères du ticket","BIL-020",[
+   ["CA1","Une place prise par un autre client est signalée sans casser la page",["tc"],"Composant","MSW renvoie 409, plan rafraîchi"],
+   ["CA2","Le plan est navigable au clavier",["tc"],"Composant","flèches, Entrée, focus visible"]]],
+  ["Cas ajoutés par test-planner","à partir des étapes et contraintes du ticket",[
+   ["P1","Quatre états visibles : libre, verrouillée, vendue, sélectionnée",["tc"],"Composant","rendu par état"],
+   ["P2","Compte à rebours calé sur l'expiration renvoyée par l'API",["tc"],"Composant","horloge simulée"],
+   ["P3","Place libérée à la fin du compte à rebours",["tc"],"Composant","expiration simulée"],
+   ["P4","Choisir une place puis voir le compte à rebours, de bout en bout",["te"],"Parcours","backend démarré"],
+   ["P5","Deux navigateurs, même place : le second voit le refus",["te"],"Parcours","deux contextes Playwright"]]]
+ ],
+ review:["Place prise : message clair, plan rafraîchi, aucune erreur non gérée","Compte à rebours fondé sur l'expiration de l'API, pas sur une horloge locale","Chaque place atteignable au clavier, focus visible","Client d'API généré, jeton gardé en mémoire","Aucun test modifié depuis l'étape tests","Rapport <code>docs/reviews/BIL-020.md</code>"],
+ reviewWho:"Validation 2 : un point bloquant renvoie à implementer",
+ merge:["<code>/open-pr</code> : commit Conventional Commits, push, PR qui cite le ticket, le plan et la review","Ticket Notion en IN REVIEW, lien de la PR en commentaire","CI verte : ESLint, Vitest, Playwright","Un échec de CI renvoie à implementer","TO TEST puis DONE, décidés par le développeur"],
+ mergeWho:"Merge par le développeur ; gh pr merge bloqué pour Claude"
+}];
+
+function mini(o,cls){return `<div class="mini ${cls}${o.off?" off":""}"><h4>${o.h}</h4><ul>${o.items.map(x=>`<li><span>${x}</span></li>`).join("")}</ul></div>`;}
+
+function board(b){
+ const T=TYPES[b.key],front=b.key==="front";
+ const v=n=>`var(--${n})`;
+ return `<div class="scroll"><section class="board" id="board-${b.key}">
+ <div class="top"><div><div class="eyebrow">${b.eyebrow}</div><h1>${b.title}</h1><div class="feat">${b.feat}</div></div>
+ <div class="feat">Branche <code>${b.branch}</code></div></div>
+
+ <div class="G colhead"><div></div>
+  ${STEPS.map((s,i)=>`<div class="ch" style="color:${v(s[1])};border-color:${v(s[1])}"><div class="n">${i+1}.</div><div class="t">${s[0]}</div></div>`).join("")}
+ </div>
+
+ <div class="G lane"><div class="lanelabel">${folder("#f2b33d","#d98f12")}.claude/skills/</div>
+  <div class="cell">${chip("ticket","/ticket "+(front?"BIL-020":"BIL-006"),"lit Notion, orchestre",v("s1"))}</div>
+  <div class="cell"></div><div class="cell"></div>
+  <div class="cell">${chip("tests","/write-tests","répartit, vérifie le rouge",v("s4"))}</div>
+  <div class="cell"></div><div class="cell"></div>
+  <div class="cell">${chip("pr","/open-pr","commit, push, PR",v("s7"))}</div>
+ </div>
+
+ <div class="G lane"><div class="lanelabel">${folder("#d64545","#a82f2f")}.claude/agents/</div>
+  <div class="cell"></div>
+  <div class="cell">${front?`<span class="skip">contract-writer non lancé</span>`:AG.cw()}</div>
+  <div class="cell">${AG.tp()}</div>
+  <div class="cell">${AG.ut()}${AG.it()}</div>
+  <div class="cell">${AG.im()}</div>
+  <div class="cell">${AG.rv()}</div>
+  <div class="cell"></div>
+ </div>
+
+ <div class="G lane"><div class="lanelabel">${icon("user","currentColor",22)}Développeur</div>
+  <div class="cell"></div>
+  <div class="cell">${front?`<span class="skip">pas de validation</span>`:human("Validation du contrat",v("s2"))}</div>
+  <div class="cell">${human("Validation 1 : le plan",v("s3"))}</div>
+  <div class="cell"></div><div class="cell"></div>
+  <div class="cell">${human("Validation 2 : la review",v("s6"))}</div>
+  <div class="cell">${human("Merge, TO TEST, DONE",v("s7"))}</div>
+ </div>
+
+ <div class="G lane"><div class="lanelabel" style="font-size:14px">.claude/etape</div>
+  ${MARKERS.map((m,i)=>`<div class="cell">${front&&i===1?`<span class="skip">sauté</span>`:`<div class="marker">${m}<i>${MARKNOTE[i]}</i></div>`}</div>`).join("")}
+ </div>
+
+ <div class="G body">
+  <div class="legend"><div class="lt">Niveau de test</div>
+   ${T.map(t=>`<div class="li"><div class="dot" style="background:${v(t[0])}"></div><div><b>${t[1]}</b><br><span class="sub">${t[2]}</span><br><span class="sub">écrit par <b>${t[3]}</b></span></div></div>`).join("")}
+   <div class="lt" style="margin-top:12px">État du cas</div>
+   <div class="li">${okSvg(v("s3"))} dans le plan validé</div>
+   <div class="li"><span class="st red">✕ échoue</span> test écrit, code absent</div>
+   <div class="li"><span class="st green">✓ passe</span> code écrit, test vert</div>
+  </div>
+  <div>${mini(b.cadrage,"c1")}</div>
+  <div>${mini(b.contrat,"c2")}</div>
+  <div class="groups">
+   ${b.groups.map(g=>`<div class="grp"><div class="gt">${g[0]} <span>${g[1]}</span></div>
+    ${g[2].map(c=>`<div class="row">
+      <div class="ca"><span class="ok">${okSvg(v("s3"))}</span><span class="id">${c[0]}</span><span class="tx">${c[1]}</span><span class="dots">${c[2].map(t=>`<span class="dot" style="background:${v(t)}"></span>`).join("")}</span></div>
+      <div class="tt"><span class="ar"></span><span class="lab">${c[3]}<i>${c[4]}</i></span><span style="margin-left:auto" class="st red">✕ échoue</span></div>
+      <div class="c3c"><span class="st green">✓ passe</span></div>
+    </div>`).join("")}</div>`).join("")}
+  </div>
+  <div class="panel p6"><h3>Rapport du reviewer</h3><ul>${b.review.map(x=>`<li><span class="box"></span><span>${x}</span></li>`).join("")}</ul>
+   <div class="who">${b.reviewWho}</div></div>
+  <div class="panel p7"><h3>Jusqu'au merge</h3><ul>${b.merge.map(x=>`<li><span class="box"></span><span>${x}</span></li>`).join("")}</ul>
+   <div class="who">${b.mergeWho}</div></div>
+ </div>
+
+ <div class="foot"><span>Hooks toujours actifs : ${front?"Prettier et ESLint":"ruff format et ruff check"}, <code>.env</code> et secrets bloqués, aucune écriture sur main, Git sûr (<code>git push --force</code> et <code>gh pr merge</code> bloqués), tests rapides en fin de tour, hook <code>commit-msg</code>.</span><span style="white-space:nowrap"><code>/smoke-tests</code> reste hors pipeline</span></div>
+ </section></div>`;
+}
+document.getElementById("root").innerHTML=BOARDS.map(board).join("");
+</script>
+
+</body></html>
