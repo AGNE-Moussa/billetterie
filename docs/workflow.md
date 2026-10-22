@@ -111,6 +111,9 @@ l'étape `contrat`. Cette détection est une heuristique (redirections, `tee`, `
 
 ## 8. Pipeline d'un ticket
 
+Vue illustrée, avec un ticket back (BIL-006) et un ticket front (BIL-020) déroulés étape par
+étape : `docs/schemas/workflows-billetterie.html` (à ouvrir dans un navigateur).
+
 ```mermaid
 flowchart TD
   A["/ticket BIL-xxx<br/>lit Notion, vérifie Dépend de"] -->|bloquant non DONE| STOP[Arrêt : liste des bloquants]
