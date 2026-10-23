@@ -28,6 +28,8 @@ c. Lis la page du ticket et **affiche** son titre, son objectif, ses critères e
 d. Passe `Agile Statut` à `DOING`.
 e. Écris `docs/tickets/$ARGUMENTS.md` avec **seulement** : titre, branche, dépendances, service,
    objectif, étapes (cases à cocher), critères d'acceptance, contraintes. Pas la théorie.
+   S'il existe déjà, **ne l'écrase pas** (il porte peut-être l'avancement, les décisions et les
+   résultats d'un passage précédent) : signale-le et demande au développeur s'il faut le garder.
 f. Crée la branche de la propriété `Branche` depuis `main` à jour (`git switch main`,
    `git pull`, `git switch -c <branche>`), puis écris `cadrage` dans `.claude/etape`.
 

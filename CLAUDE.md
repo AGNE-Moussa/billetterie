@@ -53,6 +53,9 @@ Les règles détaillées par sujet vivent dans `.claude/rules/`, pas ici.
 - `TO TEST` et `✅ DONE` sont posés par le développeur
 - Un ticket ne démarre que si tous ceux de `Dépend de` sont en `✅ DONE`
 - Branche : celle de la propriété `Branche` du ticket
+- `/ticket <ID>` lit le ticket dans Notion et déroule le pipeline. Serveur MCP Notion du projet :
+  `.mcp.json` ; sur un nouveau poste, lancer `claude`, approuver le serveur `notion`, puis `/mcp`
+  pour l'authentifier.
 
 ## Pipeline
 
