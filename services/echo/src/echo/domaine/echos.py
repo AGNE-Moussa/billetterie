@@ -48,6 +48,20 @@ class DepotEchos(Protocol):
 
     async def trouver(self, message: str) -> Echo | None: ...
 
+    async def lister(self, decalage: int, limite: int) -> list[Echo]:
+        """Au plus `limite` echos après les `decalage` premiers, du plus récent au plus ancien."""
+        ...
+
+    async def compter(self) -> int:
+        """Nombre total d'echos enregistrés."""
+        ...
+
+
+@dataclass(frozen=True)
+class PageEchos:
+    echos: list[Echo]
+    total: int
+
 
 async def enregistrer_echo(depot: DepotEchos, message: str) -> Echo:
     return await depot.ajouter(message)
@@ -58,3 +72,12 @@ async def lire_echo(depot: DepotEchos, message: str) -> Echo:
     if echo is None:
         raise EchoIntrouvable(message)
     return echo
+
+
+async def lister_echos(depot: DepotEchos, page: int, size: int) -> PageEchos:
+    """La page `page` (à partir de 1) de `size` echos, et le total.
+
+    Une page au-delà de la fin renvoie une liste vide, le total restant celui de tous les echos.
+    """
+    echos = await depot.lister(decalage=(page - 1) * size, limite=size)
+    return PageEchos(echos=echos, total=await depot.compter())

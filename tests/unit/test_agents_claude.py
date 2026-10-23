@@ -58,7 +58,11 @@ def _motifs_du_hook(nom: str) -> list[str]:
     ("nom", "outils", "motifs"),
     [
         ("test-planner", "Read, Grep, Glob, Write", ["docs/test-plans/*.md"]),
-        ("contract-writer", "Read, Grep, Glob, Write, Edit", ["services/*/openapi.yaml"]),
+        (
+            "contract-writer",
+            "Read, Grep, Glob, Write, Edit",
+            ["services/*/openapi.yaml", "docs/conventions.md"],  # BIL-F25 : formes communes
+        ),
     ],
 )
 def test_l_agent_n_a_que_ses_outils_et_ses_chemins(
@@ -186,8 +190,88 @@ def test_le_shell_d_un_ecrivain_est_limite_a_sa_liste(commande: str) -> None:
     assert limiter_commandes.decision(commande, permises) is not None
 
 
+# Liste d'essai : avec make et docker compose, un refus prouve le filtrage de leurs arguments.
+PERMISES_ESSAI = ["uv run pytest", "git diff", "make test-unit", "docker compose"]
+
+
 def test_la_fusion_des_sorties_reste_permise() -> None:
     assert limiter_commandes.decision("uv run pytest tests/unit -q 2>&1", ["uv run pytest"]) is None
+
+
+@pytest.mark.parametrize(
+    "commande",
+    [
+        "uv run pytest tests/unit -q 2>&1 | tail -5",
+        "cat services/echo/README.md",
+        "head -40 docs/test-plans/BIL-F25.md | grep CA1",
+        "git -C services/echo diff --stat",
+        "cd services/echo && uv run pytest tests/unit -q",
+        # Guillemets : leur contenu ne découpe ni ne redirige rien.
+        "grep -n 'a;b' services/echo/README.md",
+        'grep -E "lister|compter" services/echo/src/echo/infra/depot.py',
+        "uv run pytest -k 'liste and (vide or page)' -q",
+        "uv run pytest tests/unit -q -p no:cacheprovider",
+        "make test-unit",
+        "docker compose ps",
+        "docker compose --profile observabilite up -d --wait",
+        "docker compose -f compose.yaml logs echo-1",
+    ],
+)
+def test_lire_sans_ecrire_est_permis_a_tous_les_agents(commande: str) -> None:
+    assert limiter_commandes.decision(commande, PERMISES_ESSAI) is None  # BIL-F25
+
+
+@pytest.mark.parametrize(
+    "commande",
+    [
+        "uv run pytest $(rm -rf services)",
+        "cat `rm -rf services`",
+        "git -C services checkout -- tests",
+        "sed -i 's/assert/# assert/' tests/unit/test_auth.py",
+        "find . -name '*.py' -delete",
+        "uv run pytest -q | tee rapport.txt",
+        "cd services && rm -rf echo",
+        # Failles relevées par la deuxième review de BIL-F25.
+        "cat README.md & rm -rf services",
+        "cat README.md &> tests/unit/test_x.py",
+        "sort -o tests/unit/test_x.py README.md",
+        "uniq README.md tests/unit/test_x.py",
+        "git diff --output=tests/unit/test_x.py",
+        'git diff "--output"=tests/unit/test_x.py',
+        "uv run pytest --junitxml=tests/unit/test_x.py",
+        "cat <(rm -rf services)",
+        "(rm -rf services)",
+        "cat 'README.md",
+        'cat "$(rm -rf services)"',
+        # Troisième review : guillemets lus autrement que par le shell.
+        "cat \\' ; rm -rf services ; cat \\'",
+        'cat \\" ; rm -rf services ; cat \\"',
+        "cat $'\\'' ; rm -rf services ; cat $'\\''",
+        "cat \u201c ; rm -rf services ; cat \u201d",
+        "cat README.md\rrm -rf services",
+        "git diff \\--output=tests/unit/test_x.py",
+        "git diff \u2014output=tests/unit/test_x.py",
+        # Arguments qui font écrire une commande permise.
+        "make test-unit PYTEST=rm",
+        "make -f /tmp/Makefile test-unit",
+        "docker compose cp fichier echo-1:/app/tests/x.py",
+        "docker compose run --rm echo sh",
+        "docker compose exec echo-1 sh",
+        "uv run pytest -c /tmp/pytest.ini",
+        "uv run pytest -o addopts=-x",
+        "uv run pytest --rootdir=/tmp",
+        "uv run pytest -p greffon_maison",
+        "uv run pytest -pgreffon_maison",
+        # Quatrième review.
+        "uv run pytest --debug=tests/unit/test_x.py",
+        "docker compose cp fichier echo-1:/app/x.py",
+        "docker compose --profile observabilite run echo sh",
+        "docker compose create",
+        "docker compose",
+    ],
+)
+def test_la_lecture_ne_cache_aucune_ecriture(commande: str) -> None:
+    assert limiter_commandes.decision(commande, PERMISES_ESSAI) is not None
 
 
 # --- Implementer et reviewer (BIL-F22) -------------------------------------------------------

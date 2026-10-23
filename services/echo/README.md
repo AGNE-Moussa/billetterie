@@ -9,6 +9,7 @@ Service sans métier qui valide toute la chaîne : Consul, Traefik, PostgreSQL, 
 |---|---|---|
 | `GET` | `/health` | Santé de l'instance et de sa base, appelée par Consul (non exposée par Traefik) |
 | `POST` | `/api/v1/echos` | Enregistre un message, scope `echos:write` (201, 403 `SCOPE_MANQUANT`, 409 `ECHO_EXISTANT`, 422 `REQUETE_INVALIDE`) |
+| `GET` | `/api/v1/echos?page=&size=` | Liste paginée `EchoPage` `{elements, page, size, total}`, scope `echos:read` ; du plus récent au plus ancien, `page` ≥ 1 (1), `size` de 1 à 100 (20) ; page au-delà de la fin : `elements` vide (401 `JETON_*`, 403 `SCOPE_MANQUANT`, 422 `REQUETE_INVALIDE`) |
 | `GET` | `/api/v1/echos/{message}` | Relit un message, appelant authentifié (401 `JETON_*`, 404 `ECHO_INTROUVABLE`) |
 
 Le contrat fait foi : `openapi.yaml`. Les erreurs sont au format Problem Details

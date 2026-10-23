@@ -41,7 +41,8 @@ Repère les fichiers de tests créés ou modifiés (`git status --short`) et lan
 --run`, et Playwright si la plateforme tourne). Classe chaque test :
 
 - **rouge, assertion** (`assert 501 == 204`, élément introuvable) : attendu ;
-- **vert par une garde du contrat** (401, 403, 422 portés par le squelette) : admis, à lister ;
+- **vert par le squelette** : une garde du contrat (401, 403, 422) ou la forme d'un schéma du
+  contrat (champs d'un modèle de réponse) posées par le squelette : admis, à lister ;
 - **erreur** (`ERROR collecting`, `ImportError`, `NameError`, fixture introuvable, erreur
   TypeScript) ou **vert sans raison** : renvoie l'agent concerné corriger son test, une fois ;
   s'il échoue encore, arrête-toi et signale-le.

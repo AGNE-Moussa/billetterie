@@ -285,9 +285,14 @@ def test_les_hooks_ne_dependent_pas_du_workspace_uv() -> None:
     assert all("uv run --no-project python" in ligne for ligne in commandes), commandes
 
 
-def test_a_l_etape_tests_les_tests_rouges_ne_bloquent_pas_la_fin_du_tour(tmp_path: Path) -> None:
+@pytest.mark.parametrize("etape", ["tests", "implementation"])
+def test_quand_des_rouges_sont_attendus_ils_ne_bloquent_pas_la_fin_du_tour(
+    tmp_path: Path, etape: str
+) -> None:
+    """« implementation » (BIL-F25) : l'implementer travaille en fond, la session principale
+    mesure le vert elle-même une fois l'agent terminé."""
     (tmp_path / ".pipeline").mkdir()
-    (tmp_path / ".pipeline" / "etape").write_text("tests\n", encoding="utf-8")
+    (tmp_path / ".pipeline" / "etape").write_text(f"{etape}\n", encoding="utf-8")
 
     resultat = _lancer("tests_rapides.py", {"stop_hook_active": False}, tmp_path)
 

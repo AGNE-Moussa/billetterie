@@ -7,7 +7,9 @@ paths:
 
 - Contrat d'abord : `services/<nom>/openapi.yaml` (OpenAPI 3.1) est la référence. Le test
   `pytest -m contract` compare le schéma généré par FastAPI au contrat.
-- Routes : `/api/v1/<ressource>` au pluriel, verbes HTTP standards, pagination `?page=&size=`.
+- Routes : `/api/v1/<ressource>` au pluriel, verbes HTTP standards. Pagination `?page=&size=`
+  (1 et 20 par défaut, `size` ≤ 100, sinon 422) ; réponse `Page[T]` de commun.pagination,
+  sous-classée par ressource : `{elements, page, size, total}`, ordre stable (`docs/conventions.md`).
 - Chaque route déclare un `operation_id` en camelCase et ses réponses d'erreur.
 - Erreurs : Problem Details `application/problem+json` (`reponse_probleme(...)`) avec un code
   métier stable en MAJUSCULES (`SEAT_ALREADY_TAKEN`), jamais un message seul.

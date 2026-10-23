@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, Index, String, func
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -18,6 +18,10 @@ class EchoLigne(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     message: Mapped[str] = mapped_column(String(100), unique=True)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# Couvre le tri de la liste (cree_le décroissant puis message) : migration 0003.
+Index("ix_echos_cree_le_message", EchoLigne.cree_le.desc(), EchoLigne.message)
 
 
 def creer_moteur(database_url: str) -> AsyncEngine:

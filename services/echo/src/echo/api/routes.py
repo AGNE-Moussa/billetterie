@@ -2,15 +2,22 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from commun.auth import REPONSE_NON_AUTHENTIFIE, REPONSES_AUTH, Appelant, AppelantDep, exige_scopes
 from commun.erreurs import ErreurMetier, reponse_probleme
+from commun.pagination import (
+    PAGE_MINIMALE,
+    PAGE_PAR_DEFAUT,
+    TAILLE_MAXIMALE,
+    TAILLE_MINIMALE,
+    TAILLE_PAR_DEFAUT,
+)
 from echo.api.dependances import DepotDep, ParametresDep, SessionDep
-from echo.api.schemas import EchoCreation, EchoReponse, Message, Sante
-from echo.domaine.echos import Echo, enregistrer_echo, lire_echo
+from echo.api.schemas import EchoCreation, EchoPage, EchoReponse, Message, Sante
+from echo.domaine.echos import Echo, enregistrer_echo, lire_echo, lister_echos
 
 routeur_sante = APIRouter(tags=["santé"])
 routeur_echos = APIRouter(prefix="/api/v1/echos", tags=["echos"])
@@ -61,6 +68,33 @@ async def creer_echo(
     _appelant: Annotated[Appelant, Depends(exige_scopes("echos:write"))],
 ) -> EchoReponse:
     return _reponse(await enregistrer_echo(depot, corps.message), parametres)
+
+
+@routeur_echos.get(
+    "",
+    operation_id="listerEchos",
+    response_model=EchoPage,
+    response_description="Page de messages enregistrés.",
+    responses={
+        **REPONSES_AUTH,
+        422: reponse_probleme("Paramètres de pagination invalides (REQUETE_INVALIDE)."),
+    },
+    summary="Lister les messages enregistrés, page par page (scope echos:read)",
+)
+async def lister(
+    depot: DepotDep,
+    parametres: ParametresDep,
+    _appelant: Annotated[Appelant, Depends(exige_scopes("echos:read"))],
+    page: Annotated[int, Query(ge=PAGE_MINIMALE)] = PAGE_PAR_DEFAUT,
+    size: Annotated[int, Query(ge=TAILLE_MINIMALE, le=TAILLE_MAXIMALE)] = TAILLE_PAR_DEFAUT,
+) -> EchoPage:
+    resultat = await lister_echos(depot, page, size)
+    return EchoPage(
+        elements=[_reponse(echo, parametres) for echo in resultat.echos],
+        page=page,
+        size=size,
+        total=resultat.total,
+    )
 
 
 @routeur_echos.get(

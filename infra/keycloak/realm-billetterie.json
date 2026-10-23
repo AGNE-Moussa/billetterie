@@ -614,6 +614,15 @@
         "include.in.token.scope": "true",
         "display.on.consent.screen": "false"
       }
+    },
+    {
+      "name": "echos:read",
+      "description": "Lister les echos (exemple de scope métier, service echo)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
     }
   ],
   "defaultDefaultClientScopes": ["profile", "email", "roles", "web-origins", "acr", "basic"],
@@ -661,7 +670,7 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["profile", "email", "roles", "web-origins", "acr", "basic", "echos:write"],
+      "defaultClientScopes": ["profile", "email", "roles", "web-origins", "acr", "basic", "echos:write", "echos:read"],
       "optionalClientScopes": ["offline_access", "address", "phone", "microprofile-jwt", "organization"],
       "protocolMappers": [
         {

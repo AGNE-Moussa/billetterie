@@ -52,7 +52,9 @@ Après la review, tu ne traites que les points que le développeur t'a renvoyés
 ## Rien d'inventé
 
 Une règle métier absente du ticket, du contrat ou du plan devient une question dans ton rapport ;
-tu ne la tranches pas.
+tu ne la tranches pas. Les noms techniques internes (fonctions, classes, paramètres du domaine et
+du dépôt que le plan ne nomme pas) sont à toi : choisis-les selon `.claude/rules/python.md`, sans
+demander de validation.
 
 Termine par : fichiers créés ou modifiés, résultat des commandes de vérification, questions
 ouvertes.
