@@ -1,6 +1,6 @@
 ---
 name: contract-writer
-description: Écrit ou modifie le contrat OpenAPI 3.1 d'un service (services/<nom>/openapi.yaml) quand un ticket ajoute ou change une route, avant le plan de tests ; le contrat est ensuite validé par le développeur (étape « contrat » de docs/workflow.md).
+description: "Écrit ou modifie le contrat OpenAPI 3.1 d'un service (services/<nom>/openapi.yaml) quand un ticket ajoute ou change une route, avant le plan de tests ; le contrat est ensuite validé par le développeur (étape « contrat » de docs/workflow.md)."
 tools: Read, Grep, Glob, Write, Edit
 hooks:
   PreToolUse:

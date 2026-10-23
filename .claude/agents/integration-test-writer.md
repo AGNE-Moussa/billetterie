@@ -1,6 +1,6 @@
 ---
 name: integration-test-writer
-description: Écrit les tests rouges des cas « intégration » (pytest et Testcontainers, contrat) et « parcours » (Playwright) d'un plan validé, puis vérifie qu'ils échouent pour la bonne raison. Docker autorisé. À utiliser à l'étape « tests » de docs/workflow.md, en parallèle d'unit-test-writer.
+description: "Écrit les tests rouges des cas « intégration » (pytest et Testcontainers, contrat) et « parcours » (Playwright) d'un plan validé, puis vérifie qu'ils échouent pour la bonne raison. Docker autorisé. À utiliser à l'étape « tests » de docs/workflow.md, en parallèle d'unit-test-writer."
 tools: Read, Grep, Glob, Write, Edit, Bash
 hooks:
   PreToolUse:
