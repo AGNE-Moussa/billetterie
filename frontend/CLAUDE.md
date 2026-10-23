@@ -8,7 +8,7 @@ construit dans BIL-F26 à BIL-F28 ; tant qu'il n'existe pas, ces commandes ne fo
 ```sh
 npm install        # installer les dépendances
 npm run dev        # serveur de développement Vite
-npm run build      # build de production (GitHub Pages)
+npm run build      # build de production (dist/, servi par Nginx derrière Traefik)
 npm run test       # Vitest et Testing Library
 npm run lint       # ESLint et Prettier
 npx playwright test  # parcours de bout en bout

@@ -383,3 +383,7 @@ postman/resultats/
 
 # Marqueur d'étape du pipeline (docs/workflow.md), propre à la session
 .pipeline/
+
+# Front : sorties de Playwright (BIL-F26).
+frontend/test-results/
+frontend/playwright-report/

@@ -1,7 +1,7 @@
 # Middlewares partagés, référencés par les tags Consul des services :
-#   traefik.http.routers.<nom>.middlewares=standard@file     (front et clients)
+#   traefik.http.routers.<nom>.middlewares=standard@file     (API des clients du front)
 #   traefik.http.routers.<nom>.middlewares=partenaires@file  (API des revendeurs)
-#   traefik.http.routers.<nom>.middlewares=public@file       (Keycloak seulement)
+#   traefik.http.routers.<nom>.middlewares=public@file       (Keycloak et fichiers du front)
 # Aucune route ici : chaque service déclare la sienne dans ses tags.
 # standard et partenaires vérifient le jeton : un service est protégé par défaut, ses routes
 # publiques se déclarent dans ROUTES_PUBLIQUES du vérificateur.
@@ -69,7 +69,8 @@ http:
         middlewares:
           [correlation, cors, verification-jeton, limite-partenaires, nouvelles-tentatives]
 
-    # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un.
+    # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un ; les
+    # fichiers du front se chargent avant toute connexion.
     public:
       chain:
         middlewares: [correlation, cors, limite-generale]

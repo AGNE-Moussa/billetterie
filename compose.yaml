@@ -274,6 +274,21 @@ services:
       <<: *echo-env
       INSTANCE: echo-2
 
+  # --- Front : React construit par Vite, servi par Nginx -----------------------------------
+  # Routé par Traefik sur / hors /api et /auth (priorité 1) : tags dans infra/consul/frontend.json.
+  # Nginx non privilégié (utilisateur nginx, port 8080).
+  frontend:
+    image: billetterie/frontend:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [billetterie]
+
   mailpit:
     image: axllent/mailpit:v1.27.10
     ports:

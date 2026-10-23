@@ -97,7 +97,8 @@ jobs:
             echo "Aucun contrat OpenAPI dans services/ : rien à comparer."
           fi
 
-  # Images des services et du vérificateur en amd64 et arm64 (démo sur VPS ARM), sans publication.
+  # Images des services, du vérificateur et du front en amd64 et arm64 (démo sur VPS ARM), sans
+  # publication.
   images:
     name: images (${{ matrix.image }})
     runs-on: ubuntu-latest
@@ -106,16 +107,21 @@ jobs:
       matrix:
         include:
           - image: echo
+            context: .
             dockerfile: services/echo/Dockerfile
           - image: verificateur
+            context: .
             dockerfile: infra/verificateur/Dockerfile
+          - image: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: false
@@ -132,26 +138,16 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - name: Présence du projet front
-        id: projet
-        run: |
-          if [ -f package.json ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Pas encore de package.json dans frontend/ (squelette prévu en BIL-F26)."
-          fi
       - uses: actions/setup-node@v4
-        if: steps.projet.outputs.present == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - if: steps.projet.outputs.present == 'true'
-        run: npm ci
-      - if: steps.projet.outputs.present == 'true'
-        run: npm run lint
-      - if: steps.projet.outputs.present == 'true'
-        # --if-present : Vitest et le build arrivent avec le squelette Vite (BIL-F26).
-        run: npm run --if-present test -- --run
-      - if: steps.projet.outputs.present == 'true'
-        run: npm run --if-present build
+      - run: npm ci
+      - run: npm run lint
+      # Types de tout le front, tests et parcours Playwright compris (le build ne vérifie que src/).
+      - run: npm run typecheck
+      - run: npm run test -- --run
+      - run: npm run build
+      # Parcours joués en local contre make up ; ici, on vérifie seulement qu'ils se chargent.
+      - run: npx playwright test --list

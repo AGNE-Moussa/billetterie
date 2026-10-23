@@ -1,0 +1,22 @@
+{
+  "service": {
+    "id": "frontend",
+    "name": "frontend",
+    "address": "frontend",
+    "port": 8080,
+    "tags": [
+      "traefik.enable=true",
+      "traefik.http.routers.frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/auth`)",
+      "traefik.http.routers.frontend.priority=1",
+      "traefik.http.routers.frontend.entrypoints=web",
+      "traefik.http.routers.frontend.middlewares=public@file"
+    ],
+    "check": {
+      "name": "Front servi par Nginx",
+      "status": "passing",
+      "http": "http://frontend:8080/",
+      "interval": "10s",
+      "timeout": "5s"
+    }
+  }
+}

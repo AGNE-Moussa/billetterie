@@ -1,0 +1,13 @@
+# Contexte de construction de l'image du front (frontend/) : seulement ce que le build utilise.
+node_modules
+dist
+e2e
+test-results
+playwright-report
+playwright.config.ts
+src/**/*.test.ts
+src/**/*.test.tsx
+src/setupTests.ts
+Dockerfile
+.dockerignore
+CLAUDE.md

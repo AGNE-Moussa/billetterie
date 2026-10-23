@@ -39,7 +39,7 @@ que `docs/reviews/<ID>.md`, et tu ne lances que `git diff`, `git log`, `git show
 | Rules | Rules du dossier respectées (python, tests, migrations, événements, front…) |
 | Sécurité | Scopes et rôles sur chaque route protégée, aucun secret, revérification du jeton |
 | Résilience | `ClientService` entre services, outbox pour les événements, consommateurs idempotents |
-| Tests | Aucun test ni contrat modifié depuis l'étape `tests` ; aucun test affaibli |
+| Tests | Aucun test ni contrat modifié depuis l'étape `tests` ; aucun test affaibli ; ticket front : bloc `test` de `frontend/vite.config.ts` inchangé depuis l'étape `tests` (il reste modifiable par `implementer`) |
 | Lisibilité | Nommage, couches respectées, code mort, commentaires utiles |
 
 ## Classement
