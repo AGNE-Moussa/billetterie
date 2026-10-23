@@ -5,6 +5,13 @@
     "pr": "",
     "sessionUrl": false
   },
+  "permissions": {
+    "allow": [
+      "Edit(.pipeline/etape)",
+      "Bash(mkdir -p .pipeline)",
+      "Bash(rm -f .pipeline/etape)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

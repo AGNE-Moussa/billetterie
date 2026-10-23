@@ -2,7 +2,8 @@
 
 - `.env` et ses variantes (sauf `.env.example`) et les fichiers de secrets, où qu'ils soient ;
 - tout fichier du projet quand la branche courante est `main` ;
-- les tests pendant le squelette, l'implémentation, la review et la PR (marqueur `.claude/etape`) ;
+- les tests pendant le squelette, l'implémentation, la review et la PR (marqueur
+  `.pipeline/etape`) ;
 - les contrats `openapi.yaml` hors de l'étape `contrat`, quand un marqueur est posé.
 """
 

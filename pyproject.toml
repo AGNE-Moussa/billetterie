@@ -48,10 +48,13 @@ files = ["libs", "services/echo/src", "infra/verificateur/src"]
 [tool.pytest.ini_options]
 testpaths = ["tests", "services", "libs", "infra/verificateur"]
 # Chaque service a ses propres tests/unit, tests/integration : le mode importlib évite les
-# conflits entre fichiers de test de même nom.
-addopts = "--import-mode=importlib"
+# conflits entre fichiers de test de même nom. Les smoke tests visent la plateforme lancée par
+# make up : exclus par défaut, joués par make test-smoke (un -m sur la ligne de commande
+# remplace celui-ci).
+addopts = "--import-mode=importlib -m 'not smoke'"
 markers = [
     "contract: compare le schéma OpenAPI généré par FastAPI au contrat validé",
+    "smoke: parcours de bout en bout contre la plateforme démarrée (make test-smoke)",
 ]
 
 [dependency-groups]

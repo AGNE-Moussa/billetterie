@@ -52,8 +52,8 @@ def branche_courante(racine: Path) -> str | None:
 
 
 def etape_courante(racine: Path) -> str | None:
-    """Valeur du marqueur `.claude/etape` posé par /ticket (docs/workflow.md) ; None si absent."""
-    marqueur = racine / ".claude" / "etape"
+    """Valeur du marqueur `.pipeline/etape` posé par /ticket (docs/workflow.md) ; None si absent."""
+    marqueur = racine / ".pipeline" / "etape"
     try:
         valeur = marqueur.read_text(encoding="utf-8").strip()
     except OSError:
