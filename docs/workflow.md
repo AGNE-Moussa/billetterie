@@ -166,7 +166,8 @@ son propre agent : chaque niveau de test a un seul auteur. Le squelette (5b) exi
 une assertion** (501 au lieu de 201) et non sur une `ImportError` : un test rouge pour une
 mauvaise raison ne prouve rien. Le squelette porte les gardes déclarées par le contrat
 (sécurité, validation 422), sans quoi le test de contrat échouerait : un test qui ne vérifie
-qu'une de ces gardes est donc vert dès le squelette, ce qui est permis et signalé à part. `/ticket` orchestre les étapes 2 à 9
+qu'une de ces gardes, ou la forme d'un schéma du contrat (champs d'un modèle de réponse), est
+donc vert dès le squelette, ce qui est permis et signalé à part. `/ticket` orchestre les étapes 2 à 9
 mais n'en exécute aucune lui-même : il lance l'agent responsable et pose le marqueur.
 
 **Points de décision humaine** : la validation du contrat (seulement si une route change), la
@@ -182,7 +183,7 @@ pour chaque composant.
 | Acteur | Lit | Écrit | Lance | Interdit (garanti par hook) |
 |---|---|---|---|---|
 | `/ticket` | Notion (MCP), dépôt | `docs/tickets/`, `.pipeline/etape`, statut Notion (DOING) | `git switch -c`, les agents | Écrire sur `main` |
-| `contract-writer` | Ticket, `docs/conventions.md`, contrats | `services/*/openapi.yaml` | Rien | Tout autre chemin ; écrire hors étape `contrat` |
+| `contract-writer` | Ticket, `docs/conventions.md`, contrats | `services/*/openapi.yaml`, `docs/conventions.md` (forme commune ; la rule est recopiée par `/ticket`) | Rien | Tout autre chemin ; écrire hors étape `contrat` |
 | `test-planner` | Ticket, contrats, code, maquettes | `docs/test-plans/` | Rien | Tout autre chemin |
 | `/write-tests` | Plan | Rien lui-même | `unit-test-writer`, `integration-test-writer`, `make test-unit`, `make test-integration` | — |
 | `unit-test-writer` | Plan, contrat, code | `tests/unit/`, `services/*/tests/unit/`, `infra/*/tests/unit/`, `frontend/src/**/*.test.tsx` | `make test-unit`, Vitest | Docker ; code de production |
@@ -192,6 +193,16 @@ pour chaque composant.
 | `/open-pr` | Branche, plan, review | Commit, `.pipeline/etape` (retrait), statut Notion (IN REVIEW), commentaire | `git commit`, `git push`, `gh pr create` | `git push --force`, `gh pr merge` |
 | Hooks | Fichier édité, commande, marqueur | Rien (sauf ruff et Prettier sur le fichier édité) | ruff, Prettier, ESLint, pytest, Vitest | — |
 | Humain | Tout | Tout | Validations, merge, TO TEST, DONE | — |
+
+Les commandes des agents passent par `limiter_commandes` : leur liste blanche, plus des commandes
+de lecture seule (`cat`, `head`, `tail`, `wc`, `ls`, `grep`, `cut`) communes à tous. C'est un
+**filtre au mieux**, pas un analyseur de shell : il refuse partout les caractères qui échappent,
+développent ou redirigent (`` \ $ ` { } < > ``, retour chariot, non ASCII), les parenthèses hors
+guillemets, les options qui écrivent un fichier, et limite `make` à des cibles, `docker compose` à
+ses sous-commandes de gestion (`up`, `down`, `ps`, `logs`…) et `pytest` à des options sans effet
+sur sa configuration. Limite connue : scripts npm, options de Vitest et de Playwright. Il n'est
+qu'une défense parmi d'autres : `proteger_fichiers` et `git_sur` (tests et contrat verrouillés),
+la review (aucun test modifié depuis l'étape `tests`) et la CI (`docs/retro-workflow.md`).
 
 ## 11. Marqueurs d'étape (`.pipeline/etape`)
 

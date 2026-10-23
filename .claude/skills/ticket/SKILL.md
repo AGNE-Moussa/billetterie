@@ -38,7 +38,10 @@ f. Crée la branche de la propriété `Branche` depuis `main` à jour (`git swit
 
 Écris `contrat` dans `.pipeline/etape`, lance l'agent `contract-writer`, puis affiche les routes
 ajoutées et ses questions. **Validation du contrat : arrête-toi** et attends l'accord du
-développeur (« à reprendre » relance `contract-writer` avec ses remarques). Sinon, passe à 3.
+développeur (« à reprendre » relance `contract-writer` avec ses remarques). Si le contrat fixe une
+forme commune à tous les services, `contract-writer` l'écrit dans `docs/conventions.md` et rend la
+ligne de rule : recopie-la toi-même dans `.claude/rules/contrats-api.md` (Claude Code interdit
+`.claude/` aux agents). Sinon, passe à 3.
 
 ## 3. Plan (marqueur `plan`)
 
@@ -68,7 +71,9 @@ ticket a des tests d'intégration).
 
 Écris `review` dans `.pipeline/etape`, lance l'agent `reviewer`, puis affiche le verdict et les
 points bloquants. **Validation 2 : arrête-toi** et attends la décision du développeur. Les points
-qu'il renvoie repartent vers `implementer` (marqueur `implementation`), puis nouvelle review.
+qu'il renvoie repartent vers `implementer` (marqueur `implementation`) ; refais alors les
+vérifications de l'étape 6 (le hook Stop est suspendu pendant `implementation`), puis nouvelle
+review.
 
 ## 8. PR (marqueur `pr`)
 

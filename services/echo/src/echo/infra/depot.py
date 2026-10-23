@@ -1,6 +1,6 @@
 """Dépôt des echos sur PostgreSQL."""
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,3 +39,19 @@ class DepotEchosSql:
         if ligne is None:
             return None
         return Echo(message=ligne.message, cree_le=ligne.cree_le)
+
+    async def lister(self, decalage: int, limite: int) -> list[Echo]:
+        # Ordre total et stable : cree_le décroissant, puis message (unique) croissant, pour
+        # qu'aucun echo ne soit répété ni perdu d'une page à l'autre.
+        requete = (
+            select(EchoLigne)
+            .order_by(EchoLigne.cree_le.desc(), EchoLigne.message.asc())
+            .offset(decalage)
+            .limit(limite)
+        )
+        lignes = (await self._session.execute(requete)).scalars().all()
+        return [Echo(message=ligne.message, cree_le=ligne.cree_le) for ligne in lignes]
+
+    async def compter(self) -> int:
+        requete = select(func.count()).select_from(EchoLigne)
+        return (await self._session.execute(requete)).scalar_one()

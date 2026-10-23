@@ -62,7 +62,8 @@ Lance tes tests : `uv run pytest <fichiers> -q`. Chaque test doit échouer **sur
 (501 au lieu de 201, élément introuvable à l'écran). Corrige ton test tant qu'il échoue
 autrement : `ERROR collecting`, `ImportError`, `NameError`, fixture introuvable, conteneur qui ne
 démarre pas, erreur TypeScript. Un test qui **passe** déjà est suspect, sauf s'il ne vérifie qu'une **garde du contrat**
-portée par le squelette (401, 403, 422 : sécurité et validation déclarées dans `openapi.yaml`) :
+portée par le squelette (401, 403, 422 : sécurité et validation déclarées dans `openapi.yaml`)
+ou la **forme** d'un schéma du contrat (champs d'un modèle de réponse posé par le squelette) :
 classe-le alors « vert par le squelette ». Tout autre test vert doit être signalé : il ne teste
 peut-être rien.
 

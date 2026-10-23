@@ -69,6 +69,56 @@ paths:
                 $ref: '#/components/schemas/Probleme'
       security:
       - HTTPBearer: []
+    get:
+      tags:
+      - echos
+      summary: Lister les messages enregistrés, page par page (scope echos:read)
+      operationId: listerEchos
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de messages enregistrés.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EchoPage'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Paramètres de pagination invalides (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/echos/{message}:
     get:
       tags:
@@ -145,6 +195,30 @@ components:
       - instance
       - cree_le
       title: EchoReponse
+    EchoPage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/EchoReponse'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de messages enregistrés.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: EchoPage
     Probleme:
       properties:
         type:

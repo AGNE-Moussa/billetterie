@@ -69,3 +69,29 @@ def test_le_scope_echos_write_est_donne_au_seul_client_services() -> None:
     assert "echos:write" in clients["services"]["defaultClientScopes"]
     assert "echos:write" not in realm["defaultDefaultClientScopes"]
     assert "echos:write" not in clients["frontend"].get("defaultClientScopes", [])
+
+
+def test_le_realm_donne_le_scope_echos_read_par_defaut_au_client_services() -> None:
+    realm = _realm()
+    clients = {client["clientId"]: client for client in realm["clients"]}
+
+    assert "echos:read" in {scope["name"] for scope in realm["clientScopes"]}
+    assert "echos:read" in clients["services"]["defaultClientScopes"]
+
+
+def test_le_scope_echos_read_n_est_donne_qu_au_client_services() -> None:
+    # Garde-fou : le client public du front ne doit jamais pouvoir obtenir echos:read.
+    realm = _realm()
+    clients = {client["clientId"]: client for client in realm["clients"]}
+
+    assert "echos:read" not in clients["frontend"].get("defaultClientScopes", [])
+    assert "echos:read" not in clients["frontend"].get("optionalClientScopes", [])
+    assert "echos:read" not in realm["defaultDefaultClientScopes"]
+    assert "echos:read" not in realm["defaultOptionalClientScopes"]
+    detenteurs = {
+        nom
+        for nom, client in clients.items()
+        if "echos:read"
+        in client.get("defaultClientScopes", []) + client.get("optionalClientScopes", [])
+    }
+    assert detenteurs == {"services"}

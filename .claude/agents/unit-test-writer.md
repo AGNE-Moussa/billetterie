@@ -55,7 +55,8 @@ Chaque test doit échouer **sur une assertion** (valeur attendue absente : 501 a
 `None` au lieu d'un verrou). Corrige ton test tant qu'il échoue autrement : `ERROR collecting`,
 `ImportError`, `NameError`, `SyntaxError`, `TypeError` d'appel, fixture introuvable, erreur
 TypeScript. Un test qui **passe** déjà est suspect, sauf s'il ne vérifie qu'une **garde du contrat**
-portée par le squelette (401, 403, 422 : sécurité et validation déclarées dans `openapi.yaml`) :
+portée par le squelette (401, 403, 422 : sécurité et validation déclarées dans `openapi.yaml`)
+ou la **forme** d'un schéma du contrat (champs d'un modèle de réponse posé par le squelette) :
 classe-le alors « vert par le squelette ». Tout autre test vert doit être signalé : il ne teste
 peut-être rien.
 

@@ -8,6 +8,11 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
   CI compare le schéma généré par FastAPI au contrat validé.
 - **Routes** : `/api/v1/<ressource>` en pluriel, verbes HTTP standards, pagination
   `?page=&size=`.
+- **Pagination** : une collection répond `{elements, page, size, total}` avec le modèle commun
+  `commun.pagination.Page[T]`, sous-classé par ressource pour nommer le schéma du contrat
+  (`EchoPage(Page[EchoReponse])`). `page` ≥ 1 (1 par défaut), `size` de 1 à 100 (20 par
+  défaut) ; hors bornes : `422 REQUETE_INVALIDE`. Une page au-delà de la fin répond 200 avec
+  `elements` vide. L'ordre des éléments est stable et documenté pour chaque ressource.
 - **Erreurs** : Problem Details (RFC 9457) avec un code métier stable, par exemple
   `SEAT_ALREADY_TAKEN`.
 - **Données** : une base par service, aucune jointure entre services ; on référence un objet d'un

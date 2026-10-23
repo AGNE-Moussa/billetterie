@@ -5,8 +5,10 @@ unitaires (pytest), du code du front lance Vitest. Jamais Testcontainers ni Play
 lents pour chaque tour. En cas d'échec, l'agent doit corriger ; s'il s'arrête de nouveau avec
 des tests rouges (stop_hook_active), il est laissé finir, avec l'échec signalé.
 
-À l'étape « tests » (marqueur `.pipeline/etape`), les tests rouges sont le résultat attendu : le
-hook ne les lance pas.
+Aux étapes « tests » et « implementation » (marqueur `.pipeline/etape`), des tests rouges sont
+attendus : le hook ne les lance pas. Pendant l'implémentation, l'agent `implementer` travaille en
+fond et la session principale rend la main à chaque tour ; elle vérifie le vert elle-même
+(`/ticket`, étape 6) une fois l'agent terminé.
 """
 
 import json
@@ -18,7 +20,7 @@ from _commun import bloquer, etape_courante, lire_entree, racine_projet
 
 EXTENSIONS_FRONT = (".ts", ".tsx", ".js", ".jsx", ".css")
 # Étapes où des tests rouges sont attendus : rien à faire corriger.
-ETAPES_ROUGES_ATTENDUS = {"tests"}
+ETAPES_ROUGES_ATTENDUS = {"tests", "implementation"}
 LIGNES_SORTIE = 40
 
 
