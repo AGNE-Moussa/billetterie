@@ -1,6 +1,6 @@
 ---
 name: test-planner
-description: Transforme un ticket du board (back ou front) en plan de tests étiqueté, écrit dans docs/test-plans/<ID>.md et soumis à la validation du développeur. À utiliser après le contrat, avant toute écriture de test ou de code (étape « plan » de docs/workflow.md).
+description: "Transforme un ticket du board (back ou front) en plan de tests étiqueté, écrit dans docs/test-plans/<ID>.md et soumis à la validation du développeur. À utiliser après le contrat, avant toute écriture de test ou de code (étape « plan » de docs/workflow.md)."
 tools: Read, Grep, Glob, Write
 hooks:
   PreToolUse:

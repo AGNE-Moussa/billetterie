@@ -66,7 +66,10 @@ def _cibles_ecrites(segment: str, mots: list[str]) -> list[str]:
 
 def _ecriture_verrouillee(cible: str, etape: str | None) -> str | None:
     if etape in ETAPES_TESTS_VERROUILLES and TESTS.search(cible):
-        return f"Commande refusée : les tests sont verrouillés à l'étape « {etape} » ({cible})."
+        return (
+            f"Commande refusée : les tests sont verrouillés à l'étape « {etape} » ({cible}). "
+            "L'implémentation fait passer les tests, elle ne les modifie pas."
+        )
     if etape is not None and etape != "contrat" and cible.endswith("openapi.yaml"):
         return f"Commande refusée : le contrat {cible} ne se modifie qu'à l'étape « contrat »."
     return None

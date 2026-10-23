@@ -1,6 +1,6 @@
 ---
 name: unit-test-writer
-description: Écrit les tests rouges des cas « unitaire » (pytest, sans Docker) et « composant » (Vitest, Testing Library, MSW) d'un plan validé, puis vérifie qu'ils échouent pour la bonne raison. À utiliser à l'étape « tests » de docs/workflow.md, en parallèle d'integration-test-writer.
+description: "Écrit les tests rouges des cas « unitaire » (pytest, sans Docker) et « composant » (Vitest, Testing Library, MSW) d'un plan validé, puis vérifie qu'ils échouent pour la bonne raison. À utiliser à l'étape « tests » de docs/workflow.md, en parallèle d'integration-test-writer."
 tools: Read, Grep, Glob, Write, Edit, Bash
 hooks:
   PreToolUse:

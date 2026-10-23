@@ -5,6 +5,7 @@ travaille. Les motifs sont relatifs au projet, un segment par niveau de dossier 
 
     limiter_ecriture.py "docs/test-plans/*.md"        # test-planner
     limiter_ecriture.py "services/*/openapi.yaml"     # contract-writer
+    limiter_ecriture.py "libs/**" "!**/tests/**"      # « ! » : exclusion, prioritaire
 """
 
 import sys
@@ -31,11 +32,16 @@ def autorise(chemin_rel: str | None, motifs: list[str]) -> bool:
 
     « * » ne franchit pas « / » : `services/*/openapi.yaml` n'autorise pas un sous-dossier.
     « ** » couvre n'importe quelle profondeur : `tests/unit/**`.
+    « ! » en tête exclut : `!**/tests/**` l'emporte sur toute autorisation.
     """
     if chemin_rel is None:
         return False  # hors du projet : jamais pour un agent du pipeline
     segments = chemin_rel.split("/")
-    return any(_correspond(segments, motif.split("/")) for motif in motifs)
+    exclusions = [m[1:] for m in motifs if m.startswith("!")]
+    if any(_correspond(segments, motif.split("/")) for motif in exclusions):
+        return False
+    inclusions = [m for m in motifs if not m.startswith("!")]
+    return any(_correspond(segments, motif.split("/")) for motif in inclusions)
 
 
 def main() -> None:

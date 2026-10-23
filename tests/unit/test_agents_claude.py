@@ -188,3 +188,73 @@ def test_le_shell_d_un_ecrivain_est_limite_a_sa_liste(commande: str) -> None:
 
 def test_la_fusion_des_sorties_reste_permise() -> None:
     assert limiter_commandes.decision("uv run pytest tests/unit -q 2>&1", ["uv run pytest"]) is None
+
+
+# --- Implementer et reviewer (BIL-F22) -------------------------------------------------------
+
+
+def test_implementer_et_reviewer_ont_leurs_outils() -> None:
+    assert _entete("implementer")["tools"] == "Read, Grep, Glob, Write, Edit, Bash"
+    assert _entete("reviewer")["tools"] == "Read, Grep, Glob, Write, Bash"
+    assert _motifs_du_hook("reviewer") == ["docs/reviews/*.md"]
+
+
+@pytest.mark.parametrize(
+    ("chemin", "permis"),
+    [
+        ("services/billets/src/billets/domaine/places.py", True),
+        ("services/billets/alembic/versions/0001_creer_places.py", True),
+        ("services/billets/pyproject.toml", True),
+        ("libs/commun/http.py", True),
+        ("infra/verificateur/src/verificateur/principal.py", True),
+        ("frontend/src/composants/CompteurPlaces.tsx", True),
+        ("pyproject.toml", True),
+        # Tests et contrats : jamais, même dans un dossier autorisé (CA1).
+        ("services/billets/tests/unit/test_places.py", False),
+        ("services/billets/tests/integration/test_verrou.py", False),
+        ("tests/unit/test_auth.py", False),
+        ("libs/commun/tests/test_http.py", False),
+        ("infra/verificateur/tests/unit/test_verificateur.py", False),
+        ("frontend/src/composants/CompteurPlaces.test.tsx", False),
+        ("frontend/e2e/achat.spec.ts", False),
+        ("services/billets/openapi.yaml", False),
+        ("docs/test-plans/BIL-006.md", False),
+        (".claude/agents/implementer.md", False),
+    ],
+)
+def test_implementer_n_ecrit_jamais_un_test_ni_un_contrat(chemin: str, permis: bool) -> None:
+    assert limiter_ecriture.autorise(chemin, _motifs_du_hook("implementer")) is permis
+
+
+@pytest.mark.parametrize(
+    ("commande", "permis"),
+    [
+        ("git diff main...HEAD", True),
+        ("git log --oneline -5", True),
+        ("uv run pytest", False),
+        ("git checkout -- services", False),
+        ("git commit -m 'correction'", False),
+    ],
+)
+def test_reviewer_ne_lance_que_git_en_lecture(commande: str, permis: bool) -> None:
+    permises = _arguments_du_hook("reviewer", "limiter_commandes.py", "Bash|PowerShell")
+
+    assert (limiter_commandes.decision(commande, permises) is None) is permis
+
+
+def test_une_exclusion_l_emporte_sur_une_autorisation() -> None:
+    motifs = ["libs/**", "!**/tests/**"]
+
+    assert limiter_ecriture.autorise("libs/commun/auth.py", motifs)
+    assert not limiter_ecriture.autorise("libs/commun/tests/test_auth.py", motifs)
+
+
+@pytest.mark.parametrize("fichier", sorted(AGENTS.glob("*.md")), ids=lambda f: f.stem)
+def test_chaque_agent_a_un_en_tete_lisible(fichier: Path) -> None:
+    """Un en-tête YAML invalide (« : » non protégé dans la description) rendrait l'agent
+    illisible pour Claude Code."""
+    entete = _entete(fichier.stem)
+
+    assert entete["name"] == fichier.stem
+    assert isinstance(entete["description"], str) and entete["description"]
+    assert entete["tools"]
