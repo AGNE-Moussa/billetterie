@@ -382,4 +382,4 @@ vite.config.ts.timestamp-*
 postman/resultats/
 
 # Marqueur d'étape du pipeline (docs/workflow.md), propre à la session
-.claude/etape
+.pipeline/

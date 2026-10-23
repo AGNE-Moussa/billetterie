@@ -5,7 +5,7 @@ unitaires (pytest), du code du front lance Vitest. Jamais Testcontainers ni Play
 lents pour chaque tour. En cas d'échec, l'agent doit corriger ; s'il s'arrête de nouveau avec
 des tests rouges (stop_hook_active), il est laissé finir, avec l'échec signalé.
 
-À l'étape « tests » (marqueur `.claude/etape`), les tests rouges sont le résultat attendu : le
+À l'étape « tests » (marqueur `.pipeline/etape`), les tests rouges sont le résultat attendu : le
 hook ne les lance pas.
 """
 

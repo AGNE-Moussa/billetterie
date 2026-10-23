@@ -142,7 +142,7 @@ flowchart TD
 
 ## 9. Un responsable unique par étape
 
-| # | Étape | Responsable unique | Entrée | Sortie | Marqueur `.claude/etape` |
+| # | Étape | Responsable unique | Entrée | Sortie | Marqueur `.pipeline/etape` |
 |---|---|---|---|---|---|
 | 1 | Lire le ticket, vérifier les dépendances, passer en DOING, écrire `docs/tickets/`, créer la branche | skill `/ticket` | Board Notion | `docs/tickets/BIL-xxx.md`, branche | `cadrage` |
 | 2 | Écrire ou modifier le contrat (si une route change) | agent `contract-writer` | Ticket, `docs/conventions.md`, contrat existant | `services/*/openapi.yaml` | `contrat` |
@@ -181,7 +181,7 @@ pour chaque composant.
 
 | Acteur | Lit | Écrit | Lance | Interdit (garanti par hook) |
 |---|---|---|---|---|
-| `/ticket` | Notion (MCP), dépôt | `docs/tickets/`, `.claude/etape`, statut Notion (DOING) | `git switch -c`, les agents | Écrire sur `main` |
+| `/ticket` | Notion (MCP), dépôt | `docs/tickets/`, `.pipeline/etape`, statut Notion (DOING) | `git switch -c`, les agents | Écrire sur `main` |
 | `contract-writer` | Ticket, `docs/conventions.md`, contrats | `services/*/openapi.yaml` | Rien | Tout autre chemin ; écrire hors étape `contrat` |
 | `test-planner` | Ticket, contrats, code, maquettes | `docs/test-plans/` | Rien | Tout autre chemin |
 | `/write-tests` | Plan | Rien lui-même | `unit-test-writer`, `integration-test-writer`, `make test-unit`, `make test-integration` | — |
@@ -189,13 +189,14 @@ pour chaque composant.
 | `integration-test-writer` | Plan, contrat, code | `tests/integration/`, `services/*/tests/{integration,contract}/`, `frontend/e2e/` | `make test-integration`, `docker compose`, Playwright | Code de production |
 | `implementer` | Tout le dépôt | `services/*/src/`, `services/*/alembic/`, `libs/`, `infra/`, `frontend/src/` (hors `*.test.tsx`), `compose.yaml` | `make test`, `make lint`, `make typecheck`, `docker compose` | Tests et contrats (étape `implementation`) ; `.env` |
 | `reviewer` | Tout le dépôt, `git diff` | `docs/reviews/` | `git diff`, `git log` | Toute autre écriture |
-| `/open-pr` | Branche, plan, review | Commit, `.claude/etape` (retrait), statut Notion (IN REVIEW), commentaire | `git commit`, `git push`, `gh pr create` | `git push --force`, `gh pr merge` |
+| `/open-pr` | Branche, plan, review | Commit, `.pipeline/etape` (retrait), statut Notion (IN REVIEW), commentaire | `git commit`, `git push`, `gh pr create` | `git push --force`, `gh pr merge` |
 | Hooks | Fichier édité, commande, marqueur | Rien (sauf ruff et Prettier sur le fichier édité) | ruff, Prettier, ESLint, pytest, Vitest | — |
 | Humain | Tout | Tout | Validations, merge, TO TEST, DONE | — |
 
-## 11. Marqueurs d'étape (`.claude/etape`)
+## 11. Marqueurs d'étape (`.pipeline/etape`)
 
-Fichier d'une ligne, posé et mis à jour par `/ticket`, retiré par `/open-pr` une fois la PR
+Fichier d'une ligne, hors de `.claude/` (Claude Code y protège chaque fichier et refuse de l'écrire
+sans permission, même autorisé ; constaté en BIL-F24), posé et mis à jour par `/ticket`, retiré par `/open-pr` une fois la PR
 ouverte. Il est local au poste (ignoré par Git) : il décrit l'état de la session, pas du dépôt.
 Absent, aucune restriction liée au pipeline ne s'applique (travail hors pipeline, comme les
 tickets BIL-F01 à BIL-F24).

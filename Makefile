@@ -2,7 +2,7 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up observabilite pannes down reset test test-unit test-integration lint typecheck
+.PHONY: help init up observabilite pannes down reset test test-unit test-integration test-smoke lint typecheck
 
 # Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
 TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
@@ -19,6 +19,7 @@ help:
 	@echo   test              lance tous les tests (pytest)
 	@echo   test-unit         tests unitaires, rapides, sans Docker
 	@echo   test-integration  tests d'integration (Testcontainers, Docker requis)
+	@echo   test-smoke        smoke tests contre la plateforme demarree (make up)
 	@echo   lint              verifie le style et le formatage (ruff)
 	@echo   typecheck         verifie le typage strict (mypy)
 
@@ -48,6 +49,9 @@ test-unit:
 
 test-integration:
 	uv run pytest $(TESTS_INTEGRATION)
+
+test-smoke:
+	uv run pytest tests/smoke -m smoke
 
 lint:
 	uv run ruff check .
