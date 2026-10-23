@@ -3,7 +3,7 @@
 - `.env` et ses variantes (sauf `.env.example`) et les fichiers de secrets, où qu'ils soient ;
 - tout fichier du projet quand la branche courante est `main` ;
 - les tests pendant le squelette, l'implémentation, la review et la PR (marqueur
-  `.pipeline/etape`) ;
+  `.pipeline/etape`), et la configuration Playwright à partir de l'implémentation ;
 - les contrats `openapi.yaml` hors de l'étape `contrat`, quand un marqueur est posé.
 """
 
@@ -24,6 +24,10 @@ NOMS_SECRETS = re.compile(r"^(id_rsa|id_ecdsa|id_ed25519|credentials|secrets?)(\
 # « squelette » : implementer prépare le code vide avant les tests, il ne les écrit pas.
 ETAPES_TESTS_VERROUILLES = {"squelette", "implementation", "review", "pr"}
 TESTS = re.compile(r"(^|/)tests/|\.test\.tsx?$|^frontend/e2e/")
+# Configuration des tests posée par le squelette (BIL-F26) : verrouillée dès l'implémentation,
+# pour qu'elle ne puisse pas affaiblir les tests (baseURL, testDir, projets).
+CONFIG_TESTS = re.compile(r"^frontend/playwright\.config\.ts$")
+ETAPES_CONFIG_TESTS_VERROUILLEE = {"implementation", "review", "pr"}
 
 
 def decision(
@@ -47,6 +51,11 @@ def decision(
         return (
             f"Écriture refusée : les tests sont verrouillés à l'étape « {etape} » "
             f"({chemin_rel}). L'implémentation fait passer les tests, elle ne les modifie pas."
+        )
+    if etape in ETAPES_CONFIG_TESTS_VERROUILLEE and CONFIG_TESTS.search(chemin_rel):
+        return (
+            f"Écriture refusée : la configuration des tests {chemin_rel} est verrouillée à "
+            f"l'étape « {etape} »."
         )
     if etape is not None and etape != "contrat" and nom == "openapi.yaml":
         return (

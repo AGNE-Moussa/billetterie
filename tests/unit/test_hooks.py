@@ -76,6 +76,22 @@ def test_les_tests_sont_verrouilles_a_partir_de_l_implementation(chemin: str, et
     assert motif is not None and etape in motif  # CA2
 
 
+@pytest.mark.parametrize(
+    ("etape", "verrouillee"),
+    [("squelette", False), ("tests", False), ("implementation", True), ("review", True)],
+)
+def test_la_configuration_playwright_se_verrouille_a_l_implementation(
+    etape: str, verrouillee: bool
+) -> None:
+    """BIL-F26 : posée au squelette, elle ne peut plus affaiblir les parcours ensuite."""
+    chemin = "frontend/playwright.config.ts"
+    motif = proteger_fichiers.decision(chemin, "playwright.config.ts", BRANCHE, etape)
+    shell = git_sur.decision(f"echo x > {chemin}", BRANCHE, etape)
+
+    assert (motif is not None) is verrouillee
+    assert (shell is not None) is verrouillee
+
+
 @pytest.mark.parametrize("etape", [None, "cadrage", "plan", "tests"])
 def test_les_tests_restent_modifiables_avant_l_implementation(etape: str | None) -> None:
     assert proteger_fichiers.decision("tests/unit/test_x.py", "test_x.py", BRANCHE, etape) is None

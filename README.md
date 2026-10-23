@@ -27,10 +27,11 @@ make observabilite  # idem, avec Prometheus et Grafana (tableau de bord de la d�
 ## Accès locaux
 
 Après `make up`, tout est publié sur la machine locale uniquement. La gateway sert un seul
-domaine, `http://localhost`, pour l'API, l'authentification et (plus tard) le front :
+domaine, `http://localhost`, pour l'API, l'authentification et le front :
 
 | Composant | Adresse |
 |---|---|
+| Front React (Nginx) | http://localhost/ |
 | API Gateway (point d'entrée de l'API) | http://localhost/api/v1/... |
 | Keycloak, realm `billetterie` | http://localhost/auth/realms/billetterie |
 | Console d'administration Keycloak | http://localhost/auth/admin (`KEYCLOAK_ADMIN` du `.env`) |
@@ -53,7 +54,7 @@ répond 401 sans appeler le service. Les routes ouvertes sans jeton se déclaren
 
 ```text
 .claude/             outillage Claude (rules, agents, skills, hooks)
-.github/workflows/   CI, déploiement, GitHub Pages
+.github/workflows/   CI, déploiement
 docs/                conception, ADR, contrats, plans de test, reviews, tickets
 infra/               postgres, traefik, consul, keycloak, rabbitmq, prometheus, tempo, grafana,
                      verificateur

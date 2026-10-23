@@ -16,7 +16,12 @@ import re
 import shlex
 
 from _commun import bloquer, branche_courante, etape_courante, lire_entree, racine_projet
-from proteger_fichiers import ETAPES_TESTS_VERROUILLES, TESTS
+from proteger_fichiers import (
+    CONFIG_TESTS,
+    ETAPES_CONFIG_TESTS_VERROUILLEE,
+    ETAPES_TESTS_VERROUILLES,
+    TESTS,
+)
 
 SEPARATEURS = re.compile(r"&&|\|\||;|\||\n")
 OPTIONS_FORCE = {"-f", "--force", "--force-with-lease", "--force-if-includes"}
@@ -70,6 +75,8 @@ def _ecriture_verrouillee(cible: str, etape: str | None) -> str | None:
             f"Commande refusée : les tests sont verrouillés à l'étape « {etape} » ({cible}). "
             "L'implémentation fait passer les tests, elle ne les modifie pas."
         )
+    if etape in ETAPES_CONFIG_TESTS_VERROUILLEE and CONFIG_TESTS.search(cible):
+        return f"Commande refusée : la configuration des tests {cible} est verrouillée."
     if etape is not None and etape != "contrat" and cible.endswith("openapi.yaml"):
         return f"Commande refusée : le contrat {cible} ne se modifie qu'à l'étape « contrat »."
     return None

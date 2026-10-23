@@ -293,6 +293,16 @@ def test_implementer_et_reviewer_ont_leurs_outils() -> None:
         ("infra/verificateur/src/verificateur/principal.py", True),
         ("frontend/src/composants/CompteurPlaces.tsx", True),
         ("pyproject.toml", True),
+        # Configuration du front (BIL-F26) et documentation de déploiement.
+        ("frontend/vite.config.ts", True),
+        ("frontend/playwright.config.ts", True),
+        ("frontend/tsconfig.json", True),
+        ("frontend/index.html", True),
+        ("frontend/Dockerfile", True),
+        ("frontend/nginx.conf", True),
+        (".env.example", True),
+        ("README.md", True),
+        ("frontend/CLAUDE.md", False),
         # Tests et contrats : jamais, même dans un dossier autorisé (CA1).
         ("services/billets/tests/unit/test_places.py", False),
         ("services/billets/tests/integration/test_verrou.py", False),
@@ -324,6 +334,14 @@ def test_reviewer_ne_lance_que_git_en_lecture(commande: str, permis: bool) -> No
     permises = _arguments_du_hook("reviewer", "limiter_commandes.py", "Bash|PowerShell")
 
     assert (limiter_commandes.decision(commande, permises) is None) is permis
+
+
+def test_le_reviewer_controle_la_configuration_de_vitest() -> None:
+    """BIL-F26 : vite.config.ts reste modifiable par implementer (build), donc sa partie tests est
+    vérifiée en review."""
+    consignes = (AGENTS / "reviewer.md").read_text(encoding="utf-8")
+
+    assert "bloc `test` de `frontend/vite.config.ts`" in consignes
 
 
 def test_une_exclusion_l_emporte_sur_une_autorisation() -> None:
