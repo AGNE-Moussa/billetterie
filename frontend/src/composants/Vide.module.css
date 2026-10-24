@@ -1,0 +1,15 @@
+.vide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  align-items: flex-start;
+  padding: var(--espace-6);
+  background-color: var(--couleur-surface);
+  border: 1px dashed var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.message {
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}

@@ -1,0 +1,31 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Lien d'évitement : hors de l'écran tant qu'il n'a pas le focus, visible dès qu'il l'a. */
+.evitement {
+  position: absolute;
+  inset-block-start: var(--espace-2);
+  inset-inline-start: var(--espace-2);
+  z-index: 20;
+  padding: var(--espace-2) var(--espace-4);
+  font-weight: 600;
+  color: var(--couleur-sur-principale);
+  background-color: var(--couleur-principale);
+  border-radius: var(--rayon);
+  transform: translateY(-200%);
+}
+
+.evitement:focus {
+  transform: none;
+}
+
+.contenu {
+  flex: 1;
+  width: 100%;
+  max-width: var(--largeur-contenu);
+  padding: var(--espace-6) var(--espace-4);
+  margin: 0 auto;
+}

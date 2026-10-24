@@ -40,6 +40,25 @@ it("test_le_composant_d_erreur_annonce_le_titre_le_detail_et_la_reference_en_ale
   expect(alerte).not.toHaveTextContent(/Error|at \S+ \(/);
 });
 
+// Cas composant de BIL-F28 (CA1, état commun « erreur ») : sans identifiant de corrélation,
+// aucune référence n'est affichée.
+it("test_l_etat_erreur_sans_identifiant_de_correlation_n_affiche_pas_de_reference", () => {
+  const probleme: ProblemeAffichable = {
+    titre: "Erreur de test",
+    detail: "Détail de l'erreur de test.",
+    code: "ERREUR_DE_TEST",
+    correlationId: null,
+    erreurs: [],
+  };
+
+  render(<Erreur probleme={probleme} />);
+
+  const alerte = screen.getByRole("alert");
+  expect(alerte).toHaveTextContent("Erreur de test");
+  expect(alerte).toHaveTextContent("Détail de l'erreur de test.");
+  expect(alerte).not.toHaveTextContent("Référence");
+});
+
 it("test_le_composant_d_erreur_liste_les_erreurs_d_une_requete_invalide", async () => {
   serveurMsw.use(
     http.get("*/api/v1/echos", () =>

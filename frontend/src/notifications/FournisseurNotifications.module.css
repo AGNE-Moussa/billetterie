@@ -1,0 +1,65 @@
+/* Pile en bas à droite, la plus récente en bas de sa région (statuts, puis alertes). */
+.pile {
+  position: fixed;
+  inset-block-end: var(--espace-4);
+  inset-inline-end: var(--espace-4);
+  z-index: 10;
+  width: min(24rem, calc(100vw - 2 * var(--espace-4)));
+}
+
+/* Régions toujours rendues (jamais display: none, qui couperait l'annonce). */
+.region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.region:not(:empty) + .region:not(:empty) {
+  margin-block-start: var(--espace-2);
+}
+
+.notification {
+  display: flex;
+  gap: var(--espace-3);
+  align-items: flex-start;
+  padding: var(--espace-3) var(--espace-4);
+  color: var(--couleur-texte);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure);
+  border-inline-start-width: 0.375rem;
+  border-radius: var(--rayon);
+  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 15%);
+}
+
+.succes {
+  border-inline-start-color: var(--couleur-succes);
+}
+
+.info {
+  border-inline-start-color: var(--couleur-info);
+}
+
+.erreur {
+  border-inline-start-color: var(--couleur-erreur);
+}
+
+.message {
+  flex: 1;
+  margin: 0;
+}
+
+.fermer {
+  padding: 0 var(--espace-2);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rayon);
+}
+
+.fermer:hover {
+  border-color: var(--couleur-bordure);
+}

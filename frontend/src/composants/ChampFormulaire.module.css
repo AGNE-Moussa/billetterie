@@ -1,0 +1,42 @@
+.champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+  margin-block-end: var(--espace-4);
+}
+
+.libelle {
+  font-weight: 600;
+}
+
+.obligatoire {
+  font-weight: 400;
+  color: var(--couleur-texte-attenue);
+}
+
+.saisie {
+  padding: var(--espace-2) var(--espace-3);
+  font: inherit;
+  color: var(--couleur-texte);
+  background-color: var(--couleur-fond);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.saisieEnErreur {
+  border-color: var(--couleur-erreur);
+  border-width: 2px;
+}
+
+.aide {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.erreur {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--couleur-erreur);
+}
