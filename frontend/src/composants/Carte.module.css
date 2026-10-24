@@ -1,0 +1,28 @@
+.carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: var(--espace-4);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.titre {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.contenu > :first-child {
+  margin-block-start: 0;
+}
+
+.contenu > :last-child {
+  margin-block-end: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}

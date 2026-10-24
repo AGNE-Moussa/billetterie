@@ -1,0 +1,11 @@
+.pied {
+  padding: var(--espace-4);
+  color: var(--couleur-texte-attenue);
+  background-color: var(--couleur-surface);
+  border-block-start: 1px solid var(--couleur-bordure);
+}
+
+.texte {
+  max-width: var(--largeur-contenu);
+  margin: 0 auto;
+}

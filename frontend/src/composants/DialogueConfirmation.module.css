@@ -1,0 +1,28 @@
+.dialogue {
+  width: min(32rem, calc(100vw - 2 * var(--espace-4)));
+  padding: var(--espace-6);
+  color: var(--couleur-texte);
+  background-color: var(--couleur-fond);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.dialogue::backdrop {
+  background-color: var(--couleur-voile);
+}
+
+.titre {
+  margin: 0 0 var(--espace-3);
+  font-size: 1.25rem;
+}
+
+.message {
+  margin: 0 0 var(--espace-6);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  justify-content: flex-end;
+}
