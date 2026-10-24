@@ -27,13 +27,10 @@ export function PageRappelConnexion() {
     );
   }, [terminerConnexion, naviguer, pathname, search]);
 
-  return (
-    <main>
-      {echec === null ? (
-        <p role="status">Connexion en cours…</p>
-      ) : (
-        <Erreur probleme={echec.erreur} />
-      )}
-    </main>
+  // Rendue dans le <main> de la mise en page.
+  return echec === null ? (
+    <p role="status">Connexion en cours…</p>
+  ) : (
+    <Erreur probleme={echec.erreur} />
   );
 }

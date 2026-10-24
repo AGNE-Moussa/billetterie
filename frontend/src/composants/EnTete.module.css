@@ -1,0 +1,42 @@
+.entete {
+  padding: var(--espace-3) var(--espace-4);
+  background-color: var(--couleur-surface);
+  border-block-end: 1px solid var(--couleur-bordure);
+}
+
+.interieur {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-4);
+  align-items: center;
+  max-width: var(--largeur-contenu);
+  margin: 0 auto;
+}
+
+.session {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+}
+
+.expiree {
+  margin: 0;
+  font-weight: 600;
+  color: var(--couleur-erreur);
+}
+
+.action {
+  padding: var(--espace-2) var(--espace-3);
+  font: inherit;
+  font-weight: 600;
+  color: var(--couleur-sur-principale);
+  cursor: pointer;
+  background-color: var(--couleur-principale);
+  border: 1px solid transparent;
+  border-radius: var(--rayon);
+}
+
+.action:hover {
+  background-color: var(--couleur-principale-survol);
+}

@@ -387,3 +387,4 @@ postman/resultats/
 # Front : sorties de Playwright (BIL-F26).
 frontend/test-results/
 frontend/playwright-report/
+/test-results/

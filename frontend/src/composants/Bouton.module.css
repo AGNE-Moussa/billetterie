@@ -1,0 +1,51 @@
+.bouton {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
+  justify-content: center;
+  padding: var(--espace-2) var(--espace-4);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--rayon);
+}
+
+/* `disabled` natif ou `aria-disabled` (focus conservé) : même apparence. */
+.bouton:disabled,
+.bouton[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.bouton[aria-busy="true"] {
+  cursor: progress;
+}
+
+.principal {
+  color: var(--couleur-sur-principale);
+  background-color: var(--couleur-principale);
+}
+
+.principal:hover:not(:disabled, [aria-disabled="true"]) {
+  background-color: var(--couleur-principale-survol);
+}
+
+.secondaire {
+  color: var(--couleur-texte);
+  background-color: transparent;
+  border-color: var(--couleur-bordure);
+}
+
+.secondaire:hover:not(:disabled, [aria-disabled="true"]) {
+  background-color: var(--couleur-surface);
+}
+
+.danger {
+  color: var(--couleur-sur-danger);
+  background-color: var(--couleur-danger);
+}
+
+.danger:hover:not(:disabled, [aria-disabled="true"]) {
+  background-color: var(--couleur-danger-survol);
+}

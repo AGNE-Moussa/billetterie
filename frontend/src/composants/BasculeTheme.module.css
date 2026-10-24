@@ -1,0 +1,13 @@
+.bascule {
+  padding: var(--espace-2) var(--espace-3);
+  font: inherit;
+  color: var(--couleur-texte);
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.bascule[aria-pressed="true"] {
+  background-color: var(--couleur-surface);
+}

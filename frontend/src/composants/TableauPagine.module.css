@@ -1,0 +1,48 @@
+.conteneur {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+.defilement {
+  overflow-x: auto;
+  /* Le contour de focus (:focus-visible, theme.css) reste visible malgré le défilement. */
+  outline-offset: -2px;
+}
+
+.tableau {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableau[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.legende {
+  padding-block-end: var(--espace-2);
+  font-weight: 600;
+  text-align: start;
+}
+
+.tableau th,
+.tableau td {
+  padding: var(--espace-2) var(--espace-3);
+  text-align: start;
+  border-block-end: 1px solid var(--couleur-bordure);
+}
+
+.tableau th {
+  background-color: var(--couleur-surface);
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+}
+
+.position {
+  margin: 0;
+}

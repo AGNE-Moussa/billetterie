@@ -1,0 +1,85 @@
+/*
+ * Thème clair et sombre par propriétés personnalisées. Chaque couleur est écrite une seule fois,
+ * `light-dark(<clair>, <sombre>)`, et suit `color-scheme`. Le thème appliqué est l'attribut
+ * `data-theme` de <html>, posé par main.tsx avant le premier rendu puis par FournisseurTheme ;
+ * sans cet attribut (script pas encore exécuté), la préférence du système s'applique.
+ */
+:root {
+  color-scheme: light;
+  --couleur-fond: light-dark(#ffffff, #14161b);
+  --couleur-surface: light-dark(#f3f4f7, #1e2129);
+  --couleur-texte: light-dark(#1b1d23, #eceef3);
+  --couleur-texte-attenue: light-dark(#4b5161, #b4b9c6);
+  --couleur-bordure: light-dark(#b9bfcc, #4a5061);
+  --couleur-lien: light-dark(#1546c0, #9ab8ff);
+  --couleur-principale: light-dark(#1f4fd1, #8fb0ff);
+  --couleur-principale-survol: light-dark(#183fa8, #b3caff);
+  --couleur-sur-principale: light-dark(#ffffff, #0d1220);
+  --couleur-danger: light-dark(#b3261e, #ff9b93);
+  --couleur-danger-survol: light-dark(#8f1e18, #ffbdb8);
+  --couleur-sur-danger: light-dark(#ffffff, #2a0805);
+  --couleur-erreur: light-dark(#b3261e, #ff9b93);
+  --couleur-succes: light-dark(#1d6b33, #7fd99a);
+  --couleur-info: light-dark(#1546c0, #9ab8ff);
+  --couleur-focus: light-dark(#c2410c, #fdba74);
+  --couleur-voile: light-dark(rgb(15 18 25 / 55%), rgb(0 0 0 / 65%));
+
+  --police: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --espace-1: 0.25rem;
+  --espace-2: 0.5rem;
+  --espace-3: 0.75rem;
+  --espace-4: 1rem;
+  --espace-6: 1.5rem;
+  --espace-8: 2rem;
+  --rayon: 0.375rem;
+  --largeur-contenu: 72rem;
+  --epaisseur-focus: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="sombre"] {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--police);
+  line-height: 1.5;
+  color: var(--couleur-texte);
+  background-color: var(--couleur-fond);
+}
+
+a {
+  color: var(--couleur-lien);
+}
+
+/* Focus visible sur tout élément interactif atteint au clavier (WCAG 2.4.7). */
+:focus-visible {
+  outline: var(--epaisseur-focus) solid var(--couleur-focus);
+  outline-offset: 2px;
+}
+
+/* Cibles de focus programmatique (main, titres) : pas d'élément interactif, pas de contour. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
