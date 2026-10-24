@@ -6,12 +6,18 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/", "playwright-report/", "test-results/"] },
+  {
+    ignores: ["dist/", "node_modules/", "playwright-report/", "test-results/", "src/api/genere/"],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: { globals: globals.browser },
+  },
+  {
+    files: ["*.js"],
+    languageOptions: { globals: globals.node },
   },
   {
     files: ["**/*.{ts,tsx}"],
