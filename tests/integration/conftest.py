@@ -1,9 +1,13 @@
 """Conteneurs partagés par les tests d'intégration."""
 
+import json
+import os
 import secrets
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -14,8 +18,13 @@ IMAGE_CONSUL = "hashicorp/consul:1.21.5"
 IMAGE_FAUX_SERVICE = "hashicorp/http-echo:1.0"
 IMAGE_TRAEFIK = "traefik:v3.5.3"
 IMAGE_WHOAMI = "traefik/whoami:v1.11.0"
-DOSSIER_TRAEFIK = Path(__file__).resolve().parents[2] / "infra" / "traefik"
+RACINE = Path(__file__).resolve().parents[2]
+DOSSIER_TRAEFIK = RACINE / "infra" / "traefik"
+COMPOSE_PROD = RACINE / "compose.prod.yaml"
 ORIGINE_FRONT = "http://localhost:5173"
+DOMAINE_DEMO = "demo.exemple.test"
+
+ExecuterComposeProd = Callable[[dict[str, str], list[str]], subprocess.CompletedProcess[str]]
 
 
 def url_depuis_hote(conteneur: DockerContainer, port: int) -> str:
@@ -71,7 +80,80 @@ def secrets_realm() -> dict[str, str]:
         "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
         "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
         "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
+        "KEYCLOAK_URL_FRONT": "http://localhost",
     }
+
+
+@pytest.fixture(scope="module")
+def valeurs_env_prod() -> dict[str, str]:
+    """Fichier d'environnement de démo synthétique : jamais de Neon, jamais le vrai domaine."""
+    return {
+        "DOMAINE": DOMAINE_DEMO,
+        "IMAGE_TAG": "sha-0000000",
+        "ECHO_DATABASE_URL": (
+            f"postgresql+asyncpg://echo:{secrets.token_urlsafe(16)}@base.exemple.test:5432/echo"
+        ),
+        "KEYCLOAK_DB_URL": "jdbc:postgresql://base.exemple.test:5432/keycloak?sslmode=require",
+        "KEYCLOAK_DB_USERNAME": "keycloak",
+        "KEYCLOAK_DB_PASSWORD": secrets.token_urlsafe(16),
+        "KEYCLOAK_URL_FRONT": f"https://{DOMAINE_DEMO}",
+        "KEYCLOAK_ADMIN": "admin.demo",
+        "KEYCLOAK_ADMIN_PASSWORD": secrets.token_urlsafe(16),
+        "KEYCLOAK_REALM": "billetterie",
+        "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
+        "RABBITMQ_DEFAULT_USER": "billetterie",
+        "RABBITMQ_DEFAULT_PASS": secrets.token_urlsafe(16),
+        "ACME_EMAIL": "acme.test@exemple.test",
+        # Autorité injoignable : Traefik garde son certificat par défaut dans les tests.
+        "ACME_CA_SERVER": "https://acme.exemple.test/directory",
+        "CORS_ORIGINS": f"https://{DOMAINE_DEMO}",
+        "ROUTES_PUBLIQUES": "",
+        "TRAEFIK_POINT_ENTREE": "websecure",
+    }
+
+
+@pytest.fixture(scope="module")
+def compose_prod(
+    tmp_path_factory: pytest.TempPathFactory, valeurs_env_prod: dict[str, str]
+) -> ExecuterComposeProd:
+    """Lance `docker compose -f compose.prod.yaml --env-file <fichier> config <options>`.
+
+    Le fichier d'environnement est écrit dans un dossier temporaire ; les variables du poste
+    qui portent le même nom sont retirées, seul le fichier fait foi.
+    """
+    dossier = tmp_path_factory.mktemp("env-prod")
+
+    def executer(valeurs: dict[str, str], options: list[str]) -> subprocess.CompletedProcess[str]:
+        fichier = dossier / f"env-{secrets.token_hex(4)}"
+        fichier.write_text("".join(f"{nom}={valeur}\n" for nom, valeur in valeurs.items()))
+        environnement = {
+            nom: valeur for nom, valeur in os.environ.items() if nom not in valeurs_env_prod
+        }
+        return subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_PROD), "--env-file", str(fichier), "config"]
+            + options,
+            cwd=RACINE,
+            env=environnement,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60,
+            check=False,
+        )
+
+    return executer
+
+
+@pytest.fixture(scope="module")
+def config_prod(compose_prod: ExecuterComposeProd, valeurs_env_prod: dict[str, str]) -> Any:
+    """Configuration de prod résolue par Compose (ancres, interpolation, mémoire en octets)."""
+    resultat = compose_prod(valeurs_env_prod, ["--format", "json"])
+    if resultat.returncode != 0:
+        pytest.fail(f"docker compose config a échoué : {resultat.stderr}")
+    return json.loads(resultat.stdout)
 
 
 @pytest.fixture(scope="module")

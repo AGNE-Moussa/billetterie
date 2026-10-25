@@ -2,7 +2,17 @@
 
 import pytest
 
-from commun.registre import tags_traefik
+from commun.registre import VARIABLE_POINT_ENTREE, tags_traefik
+
+
+def test_les_tags_consul_visent_le_point_d_entree_https_en_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(VARIABLE_POINT_ENTREE, "websecure")
+    assert "traefik.http.routers.echo.entrypoints=websecure" in tags_traefik("echo", "echos")
+
+    monkeypatch.delenv(VARIABLE_POINT_ENTREE)
+    assert "traefik.http.routers.echo.entrypoints=web" in tags_traefik("echo", "echos")
 
 
 def test_une_ressource_donne_une_regle_path_prefix() -> None:

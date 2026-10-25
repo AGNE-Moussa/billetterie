@@ -130,6 +130,20 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
+  # Scan de secrets sur tout l'historique Git (BIL-F29, CA3) : sans fichier d'exceptions, valeurs
+  # trouvées masquées dans le journal (--redact).
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scanner l'historique
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/depot" zricethezav/gitleaks:v8.28.0
+          git /depot --redact --no-banner --verbose
+
   frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'

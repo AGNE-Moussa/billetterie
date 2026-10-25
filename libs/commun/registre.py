@@ -31,6 +31,10 @@ DELAI_CHECK = "5s"
 RETRAIT_APRES_CRITIQUE = "1m"
 DELAI_APPEL_CONSUL = 5.0
 
+# Point d'entrée Traefik des routes : `web` en local (HTTP), `websecure` en démo (HTTPS).
+VARIABLE_POINT_ENTREE = "TRAEFIK_POINT_ENTREE"
+POINT_ENTREE_PAR_DEFAUT = "web"
+
 
 def _client_consul() -> httpx.AsyncClient:
     url = os.environ.get("CONSUL_URL")
@@ -44,13 +48,22 @@ def identifiant_instance(nom: str, adresse: str, port: int) -> str:
     return f"{nom}-{adresse}-{port}"
 
 
-def tags_traefik(nom: str, *ressources: str, middlewares: str = "standard@file") -> list[str]:
+def tags_traefik(
+    nom: str,
+    *ressources: str,
+    middlewares: str = "standard@file",
+    point_entree: str | None = None,
+) -> list[str]:
     """Tags Consul qui exposent le service derrière Traefik.
 
     Chaque ressource devient une règle `PathPrefix(/api/v1/<ressource>)`. Les middlewares sont
     une chaîne définie dans infra/traefik/dynamique.yml : `standard@file` pour le front et les
     clients, `partenaires@file` pour l'API des revendeurs.
+
+    `point_entree` : point d'entrée Traefik du routeur. None : valeur de la variable
+    d'environnement `VARIABLE_POINT_ENTREE`, `web` si elle est absente (local).
     """
+    entree = point_entree or os.environ.get(VARIABLE_POINT_ENTREE) or POINT_ENTREE_PAR_DEFAUT
     if not ressources:
         raise ValueError("Au moins une ressource est nécessaire pour router le service.")
     regle = " || ".join(f"PathPrefix(`/api/v1/{ressource}`)" for ressource in ressources)
@@ -58,7 +71,7 @@ def tags_traefik(nom: str, *ressources: str, middlewares: str = "standard@file")
     return [
         "traefik.enable=true",
         f"{routeur}.rule={regle}",
-        f"{routeur}.entrypoints=web",
+        f"{routeur}.entrypoints={entree}",
         f"{routeur}.middlewares={middlewares}",
     ]
 

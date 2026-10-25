@@ -388,3 +388,6 @@ postman/resultats/
 frontend/test-results/
 frontend/playwright-report/
 /test-results/
+
+
+!.env.prod.example

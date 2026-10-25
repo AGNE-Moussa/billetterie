@@ -651,11 +651,11 @@
           }
         }
       ],
-      "redirectUris": ["http://localhost/*"],
-      "webOrigins": ["http://localhost"],
+      "redirectUris": ["${KEYCLOAK_URL_FRONT}/*"],
+      "webOrigins": ["${KEYCLOAK_URL_FRONT}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost/*"
+        "post.logout.redirect.uris": "${KEYCLOAK_URL_FRONT}/*"
       }
     },
     {
