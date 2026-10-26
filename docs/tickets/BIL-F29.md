@@ -109,5 +109,10 @@ derrière Traefik sur un domaine perso, pour que le déploiement final ne soit q
 - Tests d'abord (marqueur `tests`), puis implémentation.
 - Limite : les valeurs de `.env.prod` étant entre guillemets simples, aucun secret ne doit
   contenir d'apostrophe (`'`).
+- CI de la PR : gitleaks rouge sur un faux positif `generic-api-key` (URL JDBC sans identifiants
+  d'une base Testcontainers, `tests/integration/test_keycloak_prod.py`). Exception ciblée dans
+  `.gitleaks.toml` (règles par défaut, URL `jdbc:postgresql://hôte:port/base` sous `tests/`
+  seulement), passée par `--config` ; vérifié en local sur tout l'historique : rouge sans
+  l'exception, vert avec.
 - `test_demarrer_prod.py` exécute le script avec un `sh` POSIX (fixture `path_posix`, PATH du
   même environnement) ; un environnement cassé (code 127, « not found ») échoue au lieu de passer.
