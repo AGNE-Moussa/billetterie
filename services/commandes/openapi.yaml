@@ -1,0 +1,80 @@
+# Contrat OpenAPI 3.1 du service commandes : la référence que le code doit respecter.
+# Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
+openapi: 3.1.0
+info:
+  title: Service commandes
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      tags:
+      - santé
+      summary: État de l'instance, appelé par Consul toutes les 10 s
+      operationId: sante
+      responses:
+        '200':
+          description: L'instance et sa base répondent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sante'
+        '503':
+          description: La base de données ne répond pas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+components:
+  schemas:
+    Probleme:
+      properties:
+        type:
+          type: string
+          title: Type
+          default: about:blank
+        title:
+          type: string
+          title: Title
+        status:
+          type: integer
+          title: Status
+        detail:
+          type: string
+          title: Detail
+        code:
+          type: string
+          title: Code
+          description: Code métier stable, par exemple ECHO_INTROUVABLE.
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+          description: Identifiant de corrélation de la requête (X-Correlation-Id).
+        erreurs:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Erreurs
+          description: Détail des champs invalides (code REQUETE_INVALIDE).
+      type: object
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Probleme
+    Sante:
+      properties:
+        statut:
+          type: string
+          title: Statut
+          examples:
+          - ok
+      type: object
+      required:
+      - statut
+      title: Sante

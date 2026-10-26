@@ -276,6 +276,173 @@ services:
       <<: *echo-env
       INSTANCE: echo-2
 
+  # --- Services métier (squelettes BIL-001) ------------------------------------------------
+  # Même schéma qu'echo : migrations une seule fois, puis les instances. Ni RabbitMQ ni outbox
+  # tant qu'un service ne publie ni ne consomme d'événement. Aucun port publié : tout passe
+  # par Traefik (routes annoncées dans Consul par chaque instance).
+
+  # Catalogue : /api/v1/events.
+  catalogue-migrations:
+    image: billetterie/catalogue:dev
+    build:
+      context: .
+      dockerfile: services/catalogue/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &catalogue-env
+      DATABASE_URL: postgresql+asyncpg://catalogue:${CATALOGUE_DB_PASSWORD:?à définir dans .env}@postgres:5432/catalogue
+      CONSUL_URL: http://consul:8500
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  catalogue-1:
+    image: billetterie/catalogue:dev
+    environment:
+      <<: *catalogue-env
+      INSTANCE: catalogue-1
+    depends_on:
+      catalogue-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
+  # Billets : /api/v1/seats, deux instances.
+  billets-migrations:
+    image: billetterie/billets:dev
+    build:
+      context: .
+      dockerfile: services/billets/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &billets-env
+      DATABASE_URL: postgresql+asyncpg://billets:${BILLETS_DB_PASSWORD:?à définir dans .env}@postgres:5432/billets
+      CONSUL_URL: http://consul:8500
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  billets-1: &billets-instance
+    image: billetterie/billets:dev
+    environment:
+      <<: *billets-env
+      INSTANCE: billets-1
+    depends_on:
+      billets-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
+  billets-2:
+    <<: *billets-instance
+    environment:
+      <<: *billets-env
+      INSTANCE: billets-2
+
+  # Commandes : /api/v1/orders, deux instances.
+  commandes-migrations:
+    image: billetterie/commandes:dev
+    build:
+      context: .
+      dockerfile: services/commandes/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &commandes-env
+      DATABASE_URL: postgresql+asyncpg://commandes:${COMMANDES_DB_PASSWORD:?à définir dans .env}@postgres:5432/commandes
+      CONSUL_URL: http://consul:8500
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  commandes-1: &commandes-instance
+    image: billetterie/commandes:dev
+    environment:
+      <<: *commandes-env
+      INSTANCE: commandes-1
+    depends_on:
+      commandes-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
+  commandes-2:
+    <<: *commandes-instance
+    environment:
+      <<: *commandes-env
+      INSTANCE: commandes-2
+
+  # Paiements : /api/v1/payments.
+  paiements-migrations:
+    image: billetterie/paiements:dev
+    build:
+      context: .
+      dockerfile: services/paiements/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &paiements-env
+      DATABASE_URL: postgresql+asyncpg://paiements:${PAIEMENTS_DB_PASSWORD:?à définir dans .env}@postgres:5432/paiements
+      CONSUL_URL: http://consul:8500
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  paiements-1:
+    image: billetterie/paiements:dev
+    environment:
+      <<: *paiements-env
+      INSTANCE: paiements-1
+    depends_on:
+      paiements-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
+  # Notifications : /api/v1/notifications.
+  notifications-migrations:
+    image: billetterie/notifications:dev
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: &notifications-env
+      DATABASE_URL: postgresql+asyncpg://notifications:${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env}@postgres:5432/notifications
+      CONSUL_URL: http://consul:8500
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [billetterie]
+
+  notifications-1:
+    image: billetterie/notifications:dev
+    environment:
+      <<: *notifications-env
+      INSTANCE: notifications-1
+    depends_on:
+      notifications-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+    networks: [billetterie]
+
   # --- Front : React construit par Vite, servi par Nginx -----------------------------------
   # Routé par Traefik sur / hors /api et /auth (priorité 1) : tags dans infra/consul/frontend.json.
   # Nginx non privilégié (utilisateur nginx, port 8080).

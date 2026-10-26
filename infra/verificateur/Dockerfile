@@ -19,6 +19,11 @@ WORKDIR /depot
 COPY pyproject.toml uv.lock ./
 COPY libs/pyproject.toml libs/
 COPY services/echo/pyproject.toml services/echo/
+COPY services/catalogue/pyproject.toml services/catalogue/
+COPY services/billets/pyproject.toml services/billets/
+COPY services/commandes/pyproject.toml services/commandes/
+COPY services/paiements/pyproject.toml services/paiements/
+COPY services/notifications/pyproject.toml services/notifications/
 COPY infra/verificateur/pyproject.toml infra/verificateur/
 RUN uv sync --locked --no-dev --package billetterie-verificateur --no-install-workspace
 

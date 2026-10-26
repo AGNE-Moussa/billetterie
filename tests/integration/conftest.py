@@ -4,10 +4,11 @@ import json
 import os
 import secrets
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 import pytest
@@ -25,6 +26,118 @@ ORIGINE_FRONT = "http://localhost:5173"
 DOMAINE_DEMO = "demo.exemple.test"
 
 ExecuterComposeProd = Callable[[dict[str, str], list[str]], subprocess.CompletedProcess[str]]
+COMPOSE_LOCAL = RACINE / "compose.yaml"
+
+
+class Squelette(NamedTuple):
+    """Un service métier de BIL-001 (docs/test-plans/BIL-001.md, données communes)."""
+
+    nom: str
+    paquet: str
+    ressource: str
+    instances: tuple[str, ...]
+
+    @property
+    def migrations(self) -> str:
+        return f"{self.nom}-migrations"
+
+    @property
+    def variable_mot_de_passe(self) -> str:
+        return f"{self.nom.upper()}_DB_PASSWORD"
+
+
+# Table unique des squelettes : tout test qui prend un argument `squelette` est paramétré
+# dessus (pytest_generate_tests ci-dessous), aucune copie par service.
+SERVICES = (
+    Squelette("catalogue", "billetterie-catalogue", "events", ("catalogue-1",)),
+    Squelette("billets", "billetterie-billets", "seats", ("billets-1", "billets-2")),
+    Squelette("commandes", "billetterie-commandes", "orders", ("commandes-1", "commandes-2")),
+    Squelette("paiements", "billetterie-paiements", "payments", ("paiements-1",)),
+    Squelette("notifications", "billetterie-notifications", "notifications", ("notifications-1",)),
+)
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    # Portée module : les conteneurs d'un service (base, Consul) sont partagés par ses tests.
+    if "squelette" in metafunc.fixturenames:
+        metafunc.parametrize(
+            "squelette", SERVICES, ids=[service.nom for service in SERVICES], scope="module"
+        )
+
+
+@pytest.fixture(scope="session")
+def services_metier() -> tuple[Squelette, ...]:
+    """La table SERVICES, pour les tests qui portent sur les cinq services à la fois."""
+    return SERVICES
+
+
+# Échéance d'une étape d'attente (démarrage de conteneur, migration, Consul, gateway) : large
+# pour un poste lent, mais finie (pytest-timeout n'est pas dans le projet).
+DELAI_ETAPE = 120.0
+
+ExecuterBorne = Callable[[str, float, Callable[[], Any], Callable[[], str]], Any]
+
+
+def _observer(observe: Callable[[], str]) -> str:
+    """Dernier état observé, sans jamais masquer l'échec d'origine."""
+    try:
+        return observe()
+    except Exception as erreur:  # noqa: BLE001 : diagnostic seulement
+        return f"(observation impossible : {erreur!r})"
+
+
+def executer_borne(
+    etape: str, delai: float, fonction: Callable[[], Any], observe: Callable[[], str]
+) -> Any:
+    """Appel bloquant (Docker, build d'image) dans un fil, avec une échéance mesurée.
+
+    Au-delà de `delai`, AssertionError qui nomme l'étape et donne le dernier état observé ;
+    le fil bloqué est abandonné : fil démon, jamais rejoint, même à la fin de la session
+    (ceux d'un ThreadPoolExecutor seraient attendus à la sortie de Python).
+    """
+    resultat: list[Any] = []
+    erreur: list[BaseException] = []
+
+    def executer() -> None:
+        try:
+            resultat.append(fonction())
+        except BaseException as exception:  # noqa: BLE001 : relevée dans le fil appelant
+            erreur.append(exception)
+
+    debut = time.monotonic()
+    fil = threading.Thread(target=executer, name=f"etape {etape}", daemon=True)
+    fil.start()
+    fil.join(timeout=max(0.0, debut + delai - time.monotonic()))
+    if fil.is_alive():
+        duree = time.monotonic() - debut
+        raise AssertionError(
+            f"{etape} : échéance de {delai:.0f} s dépassée ({duree:.0f} s mesurées) ; "
+            f"dernier état observé : {_observer(observe)}"
+        )
+    if erreur:
+        raise erreur[0]
+    return resultat[0]
+
+
+def journal_conteneur(conteneur: DockerContainer, lignes: int = 30) -> str:
+    """Dernières lignes du journal d'un conteneur (sortie et erreurs), pour les diagnostics."""
+    if conteneur._container is None:  # noqa: SLF001 : conteneur jamais créé
+        return "(conteneur non créé)"
+    sortie, erreurs = conteneur.get_logs()
+    texte = (sortie + erreurs).decode("utf-8", errors="replace").splitlines()
+    return "\n".join(texte[-lignes:]) or "(journal vide)"
+
+
+@pytest.fixture(scope="session")
+def borne() -> ExecuterBorne:
+    """executer_borne, pour les fixtures et tests qui démarrent leurs propres conteneurs."""
+    return executer_borne
+
+
+@pytest.fixture(scope="session")
+def journal() -> Callable[[DockerContainer], str]:
+    """journal_conteneur, pour les messages d'échec des tests."""
+    return journal_conteneur
 
 
 def url_depuis_hote(conteneur: DockerContainer, port: int) -> str:
@@ -151,6 +264,80 @@ def compose_prod(
 def config_prod(compose_prod: ExecuterComposeProd, valeurs_env_prod: dict[str, str]) -> Any:
     """Configuration de prod résolue par Compose (ancres, interpolation, mémoire en octets)."""
     resultat = compose_prod(valeurs_env_prod, ["--format", "json"])
+    if resultat.returncode != 0:
+        pytest.fail(f"docker compose config a échoué : {resultat.stderr}")
+    return json.loads(resultat.stdout)
+
+
+@pytest.fixture(scope="module")
+def valeurs_env_locale() -> dict[str, str]:
+    """Fichier .env local synthétique : chaque mot de passe et secret est tiré au hasard."""
+    valeurs = {
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": secrets.token_urlsafe(16),
+        "ECHO_DB_PASSWORD": secrets.token_urlsafe(16),
+        "KEYCLOAK_DB_PASSWORD": secrets.token_urlsafe(16),
+        "RABBITMQ_DEFAULT_USER": "billetterie",
+        "RABBITMQ_DEFAULT_PASS": secrets.token_urlsafe(16),
+        "KEYCLOAK_ADMIN": "admin.test",
+        "KEYCLOAK_ADMIN_PASSWORD": secrets.token_urlsafe(16),
+        "KEYCLOAK_REALM": "billetterie",
+        "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
+        "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
+        "KEYCLOAK_URL_FRONT": "http://localhost",
+        "CORS_ORIGINS": "http://localhost",
+        "ROUTES_PUBLIQUES": "",
+        "GRAFANA_ADMIN_PASSWORD": secrets.token_urlsafe(16),
+    }
+    for service in SERVICES:
+        valeurs[service.variable_mot_de_passe] = secrets.token_urlsafe(16)
+    return valeurs
+
+
+@pytest.fixture(scope="module")
+def compose_local(
+    tmp_path_factory: pytest.TempPathFactory, valeurs_env_locale: dict[str, str]
+) -> Callable[[list[str]], subprocess.CompletedProcess[str]]:
+    """Lance `docker compose -f compose.yaml --env-file <fichier de test> config <options>`.
+
+    Les variables du poste de même nom sont retirées : seul le fichier de test fait foi.
+    """
+    fichier = tmp_path_factory.mktemp("env-local") / "env"
+    fichier.write_text("".join(f"{nom}={valeur}\n" for nom, valeur in valeurs_env_locale.items()))
+    environnement = {
+        nom: valeur for nom, valeur in os.environ.items() if nom not in valeurs_env_locale
+    }
+
+    def executer(options: list[str]) -> subprocess.CompletedProcess[str]:
+        commande = [
+            "docker", "compose", "-f", str(COMPOSE_LOCAL), "--env-file", str(fichier), "config"
+        ] + options  # fmt: skip
+        try:
+            return subprocess.run(
+                commande,
+                cwd=RACINE,
+                env=environnement,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=DELAI_ETAPE,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as depasse:
+            raise AssertionError(
+                f"docker compose config {' '.join(options)} : échéance de {DELAI_ETAPE:.0f} s "
+                f"dépassée ; dernière sortie d'erreur : {depasse.stderr!r}"
+            ) from None
+
+    return executer
+
+
+@pytest.fixture(scope="module")
+def config_locale(compose_local: Callable[[list[str]], subprocess.CompletedProcess[str]]) -> Any:
+    """Configuration locale résolue par Compose (ancres et interpolation appliquées)."""
+    resultat = compose_local(["--format", "json"])
     if resultat.returncode != 0:
         pytest.fail(f"docker compose config a échoué : {resultat.stderr}")
     return json.loads(resultat.stdout)

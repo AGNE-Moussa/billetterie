@@ -70,7 +70,8 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Cinq bases PostgreSQL et l'image de billets construite (BIL-001) : au-delà de 10 minutes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -111,6 +112,21 @@ jobs:
           - image: echo
             context: .
             dockerfile: services/echo/Dockerfile
+          - image: catalogue
+            context: .
+            dockerfile: services/catalogue/Dockerfile
+          - image: billets
+            context: .
+            dockerfile: services/billets/Dockerfile
+          - image: commandes
+            context: .
+            dockerfile: services/commandes/Dockerfile
+          - image: paiements
+            context: .
+            dockerfile: services/paiements/Dockerfile
+          - image: notifications
+            context: .
+            dockerfile: services/notifications/Dockerfile
           - image: verificateur
             context: .
             dockerfile: infra/verificateur/Dockerfile
