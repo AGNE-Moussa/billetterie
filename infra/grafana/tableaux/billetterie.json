@@ -59,7 +59,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (service) (rate(http_server_duree_secondes_count[1m]))",
+          "expr": "sum by (service) (rate(http_server_duree_secondes_count{service=~\"$service\"}[1m]))",
           "legendFormat": "{{service}}"
         }
       ]
@@ -109,7 +109,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_server_duree_secondes_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_server_duree_secondes_bucket{service=~\"$service\"}[5m])))",
           "legendFormat": "{{service}}"
         }
       ]
@@ -159,7 +159,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (service) (rate(http_server_duree_secondes_count{statut=~\"5..\"}[1m]))",
+          "expr": "sum by (service) (rate(http_server_duree_secondes_count{service=~\"$service\", statut=~\"5..\"}[1m]))",
           "legendFormat": "{{service}}"
         }
       ]
@@ -347,7 +347,8 @@
     {
       "id": 7,
       "type": "stat",
-      "title": "Instances mesurées",
+      "title": "Instances des services",
+      "description": "Instances inscrites dans Consul et mesurées par Prometheus, filtrées par la variable service.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -412,8 +413,82 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up",
+          "expr": "up{job=\"services\", service=~\"$service\"}",
           "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Infrastructure",
+      "description": "Cibles hors services métier : vérificateur, Traefik, RabbitMQ.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "en panne",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "en marche",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job!=\"services\"}",
+          "legendFormat": "{{job}}"
         }
       ]
     },
@@ -448,7 +523,38 @@
     }
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(up{job=\"services\"}, service)",
+          "refId": "service"
+        },
+        "definition": "label_values(up{job=\"services\"}, service)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      }
+    ]
   },
   "annotations": {
     "list": []

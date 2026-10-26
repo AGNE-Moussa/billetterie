@@ -6,8 +6,13 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "billetterie-billets",
+    "billetterie-catalogue",
+    "billetterie-commandes",
     "billetterie-commun",
     "billetterie-echo",
+    "billetterie-notifications",
+    "billetterie-paiements",
     "billetterie-verificateur",
 ]
 
@@ -21,11 +26,25 @@ package = false
 # appelé par Traefik. Liste explicite, pas « services/* » : le contrat d'un nouveau service
 # (services/<nom>/openapi.yaml) existe avant son code, son dossier n'est alors pas un membre.
 # Ajouter le service ici quand son pyproject.toml est créé (tests/unit/test_workspace.py).
-members = ["libs", "services/echo", "infra/verificateur"]
+members = [
+    "libs",
+    "services/echo",
+    "services/catalogue",
+    "services/billets",
+    "services/commandes",
+    "services/paiements",
+    "services/notifications",
+    "infra/verificateur",
+]
 
 [tool.uv.sources]
+billetterie-billets = { workspace = true }
+billetterie-catalogue = { workspace = true }
+billetterie-commandes = { workspace = true }
 billetterie-commun = { workspace = true }
 billetterie-echo = { workspace = true }
+billetterie-notifications = { workspace = true }
+billetterie-paiements = { workspace = true }
 billetterie-verificateur = { workspace = true }
 
 [tool.ruff]
@@ -36,14 +55,32 @@ line-length = 100
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["commun", "echo", "verificateur"]
+known-first-party = [
+    "billets",
+    "catalogue",
+    "commandes",
+    "commun",
+    "echo",
+    "notifications",
+    "paiements",
+    "verificateur",
+]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 # Dossiers vérifiés par `uv run mypy` : ajouter services/<nom>/src à la création de chaque service.
-files = ["libs", "services/echo/src", "infra/verificateur/src"]
+files = [
+    "libs",
+    "services/echo/src",
+    "services/catalogue/src",
+    "services/billets/src",
+    "services/commandes/src",
+    "services/paiements/src",
+    "services/notifications/src",
+    "infra/verificateur/src",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "services", "libs", "infra/verificateur"]

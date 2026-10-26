@@ -22,5 +22,8 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
 - **Cohérence** : publication via une table outbox, jamais directement.
 - **Traçabilité** : identifiant de corrélation créé par la gateway, propagé dans les appels et
   les messages, présent dans chaque ligne de journal.
-- **Santé** : `/health` sur chaque service, utilisé par Consul.
+- **Santé** : `/health` sur chaque service, utilisé par Consul. Les services métier l'exposent
+  aussi par la gateway sous `GET /api/v1/<ressource>/health`, avec jeton (chaîne
+  `standard@file`), par les tags de `commun.registre.tags_sante_traefik` (réécriture en
+  `/health`) ; cette route reste hors contrat.
 - **Configuration** : variables d'environnement uniquement, aucun secret dans le dépôt.

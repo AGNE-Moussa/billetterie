@@ -32,7 +32,7 @@ Mesures du 2026-10-21, plateforme locale (deux instances d'echo).
   chaînes `standard` et `partenaires` (`infra/traefik/dynamique.yml`). Une erreur réseau est
   rejouée vers une autre instance.
 - **Observé après correctif** : 0 erreur (151 × 200, 150 × 201).
-- **Dans Grafana** : « Instances mesurées » passe echo-1 en panne puis en marche ; « Débit par
+- **Dans Grafana** : « Instances des services » passe echo-1 en panne puis en marche ; « Débit par
   service » reste stable ; « Gateway : réponses par code » ne montre aucun 502 ; Prometheus
   compte plus de requêtes sur echo-2 que sur echo-1 sur la période.
 - **Limite connue** : seules les erreurs réseau sont rejouées. Une instance qui meurt *après*

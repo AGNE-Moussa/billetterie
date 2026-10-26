@@ -5,8 +5,13 @@ requires-python = "==3.12.*"
 [manifest]
 members = [
     "billetterie",
+    "billetterie-billets",
+    "billetterie-catalogue",
+    "billetterie-commandes",
     "billetterie-commun",
     "billetterie-echo",
+    "billetterie-notifications",
+    "billetterie-paiements",
     "billetterie-verificateur",
 ]
 
@@ -165,8 +170,13 @@ name = "billetterie"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "billetterie-billets" },
+    { name = "billetterie-catalogue" },
+    { name = "billetterie-commandes" },
     { name = "billetterie-commun" },
     { name = "billetterie-echo" },
+    { name = "billetterie-notifications" },
+    { name = "billetterie-paiements" },
     { name = "billetterie-verificateur" },
 ]
 
@@ -183,8 +193,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "billetterie-billets", editable = "services/billets" },
+    { name = "billetterie-catalogue", editable = "services/catalogue" },
+    { name = "billetterie-commandes", editable = "services/commandes" },
     { name = "billetterie-commun", editable = "libs" },
     { name = "billetterie-echo", editable = "services/echo" },
+    { name = "billetterie-notifications", editable = "services/notifications" },
+    { name = "billetterie-paiements", editable = "services/paiements" },
     { name = "billetterie-verificateur", editable = "infra/verificateur" },
 ]
 
@@ -197,6 +212,81 @@ dev = [
     { name = "ruff", specifier = ">=0.17.1" },
     { name = "testcontainers", specifier = ">=4.15.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
+]
+
+[[package]]
+name = "billetterie-billets"
+version = "0.1.0"
+source = { editable = "services/billets" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "billetterie-commun" },
+    { name = "fastapi" },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.20.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "billetterie-commun", editable = "libs" },
+    { name = "fastapi", specifier = ">=0.149.0" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
+]
+
+[[package]]
+name = "billetterie-catalogue"
+version = "0.1.0"
+source = { editable = "services/catalogue" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "billetterie-commun" },
+    { name = "fastapi" },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.20.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "billetterie-commun", editable = "libs" },
+    { name = "fastapi", specifier = ">=0.149.0" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
+]
+
+[[package]]
+name = "billetterie-commandes"
+version = "0.1.0"
+source = { editable = "services/commandes" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "billetterie-commun" },
+    { name = "fastapi" },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.20.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "billetterie-commun", editable = "libs" },
+    { name = "fastapi", specifier = ">=0.149.0" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [[package]]
@@ -238,6 +328,56 @@ requires-dist = [
 name = "billetterie-echo"
 version = "0.1.0"
 source = { editable = "services/echo" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "billetterie-commun" },
+    { name = "fastapi" },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.20.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "billetterie-commun", editable = "libs" },
+    { name = "fastapi", specifier = ">=0.149.0" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
+]
+
+[[package]]
+name = "billetterie-notifications"
+version = "0.1.0"
+source = { editable = "services/notifications" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "billetterie-commun" },
+    { name = "fastapi" },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.20.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "billetterie-commun", editable = "libs" },
+    { name = "fastapi", specifier = ">=0.149.0" },
+    { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
+]
+
+[[package]]
+name = "billetterie-paiements"
+version = "0.1.0"
+source = { editable = "services/paiements" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
