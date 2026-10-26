@@ -1,0 +1,233 @@
+# Plateforme de démonstration (BIL-F29) : VPS unique, HTTPS Let's Encrypt, bases Neon.
+# Déployée par .github/workflows/deploiement.yml dans /opt/billetterie, variables lues dans
+# .env.prod (écrit par le workflow, jamais commité ; modèle : .env.prod.example).
+#
+#   docker compose -f compose.prod.yaml --env-file .env.prod pull
+#   docker compose -f compose.prod.yaml --env-file .env.prod run --rm echo-migrations
+#   docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait
+#
+# Différences avec compose.yaml : ni PostgreSQL (Neon), ni Redis, ni observabilité, ni mailpit ;
+# images tirées de GHCR (aucun build) ; seul Traefik publie des ports (80 et 443) ; chaque
+# conteneur a une limite mémoire (total 2368 Mio, budget 3072 Mio).
+
+name: billetterie
+
+# Journaux bornés : le disque du VPS est petit.
+x-journaux: &journaux
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  traefik:
+    image: traefik:v3.5.3
+    # demarrer-prod.sh complète traefik.prod.yml (domaine, ACME) puis lance Traefik.
+    command: ["sh", "/etc/traefik/demarrer-prod.sh"]
+    environment:
+      DOMAINE: ${DOMAINE:?à définir dans .env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?à définir dans .env.prod}
+      # Staging (https://acme-staging-v02.api.letsencrypt.org/directory) au premier
+      # déploiement, puis production (https://acme-v02.api.letsencrypt.org/directory).
+      ACME_CA_SERVER: ${ACME_CA_SERVER:?à définir dans .env.prod}
+      # Front et API ont la même origine : seule celle du domaine est autorisée.
+      CORS_ORIGINS: https://${DOMAINE:?à définir dans .env.prod}
+    volumes:
+      - ./infra/traefik/demarrer-prod.sh:/etc/traefik/demarrer-prod.sh:ro
+      - ./infra/traefik/traefik.prod.yml:/etc/traefik/traefik.prod.yml:ro
+      - ./infra/traefik/dynamique.yml:/etc/traefik/dynamique.yml:ro
+      - ./infra/traefik/plugins-local:/plugins-local:ro
+      - traefik-acme:/acme
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      consul:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  consul:
+    image: hashicorp/consul:1.21.5
+    # Un seul nœud, état en mémoire : les services se réinscrivent à leur démarrage.
+    command: ["agent", "-dev", "-client=0.0.0.0", "-config-dir=/consul/definitions"]
+    volumes:
+      # Keycloak et le front, routés sur le point d'entrée websecure.
+      - ./infra/consul/prod:/consul/definitions:ro
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?à définir dans .env.prod}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?à définir dans .env.prod}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.1
+    # Mode production ; le realm versionné est importé s'il n'existe pas encore (un changement
+    # de domaine sur un realm déjà importé se fait à la main dans la console).
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      # Base Neon keycloak, URL JDBC avec sslmode=require.
+      KC_DB_URL: ${KEYCLOAK_DB_URL:?à définir dans .env.prod}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USERNAME:?à définir dans .env.prod}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?à définir dans .env.prod}
+      KC_HTTP_RELATIVE_PATH: /auth
+      # TLS terminé par Traefik : HTTP en clair sur le réseau interne seulement.
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: https://${DOMAINE:?à définir dans .env.prod}/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # Heap bornée sous la limite du conteneur (métaspace et piles en plus).
+      JAVA_OPTS_KC_HEAP: -Xms256m -Xmx640m
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?à définir dans .env.prod}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?à définir dans .env.prod}
+      # Remplacent les ${...} de infra/keycloak/realm-billetterie.json à l'import.
+      KEYCLOAK_SERVICES_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env.prod}
+      KEYCLOAK_MDP_CLIENT: ${KEYCLOAK_MDP_CLIENT:?à définir dans .env.prod}
+      KEYCLOAK_MDP_PARTENAIRE: ${KEYCLOAK_MDP_PARTENAIRE:?à définir dans .env.prod}
+      KEYCLOAK_MDP_ADMIN: ${KEYCLOAK_MDP_ADMIN:?à définir dans .env.prod}
+      KEYCLOAK_URL_FRONT: https://${DOMAINE:?à définir dans .env.prod}
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # L'image n'a ni curl ni wget : requête HTTP faite par bash sur le port de gestion.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /auth/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1024m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  verificateur:
+    image: ghcr.io/agne-moussa/billetterie-verificateur:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      # Émetteur public des jetons (KC_HOSTNAME) ; clés lues par le réseau interne.
+      JWT_EMETTEUR: https://${DOMAINE:?à définir dans .env.prod}/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}
+      JWT_AUDIENCE: billetterie-api
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/certs
+      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-}
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  # --- Service echo : une instance ---------------------------------------------------------
+  # Migrations lancées par le workflow avant up -d, puis de nouveau (sans effet) par up -d.
+  echo-migrations:
+    image: ghcr.io/agne-moussa/billetterie-echo:${IMAGE_TAG:?à définir dans .env.prod}
+    command: ["alembic", "upgrade", "head"]
+    environment: &echo-env
+      # Base Neon echo : postgresql+asyncpg://...?ssl=require (asyncpg, pas sslmode).
+      DATABASE_URL: ${ECHO_DATABASE_URL:?à définir dans .env.prod}
+      CONSUL_URL: http://consul:8500
+      # Routes Consul sur le point d'entrée HTTPS (commun.registre.tags_traefik).
+      TRAEFIK_POINT_ENTREE: websecure
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env.prod}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env.prod}@rabbitmq:5672/
+      # Pas de Tempo en démo : OTEL_EXPORTER_OTLP_ENDPOINT absente, aucune trace exportée.
+      JWT_EMETTEUR: https://${DOMAINE:?à définir dans .env.prod}/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/certs
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging: *journaux
+    networks: [billetterie]
+
+  echo:
+    image: ghcr.io/agne-moussa/billetterie-echo:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *echo-env
+      INSTANCE: echo
+    depends_on:
+      echo-migrations:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  # --- Front : Nginx non privilégié (port 8080), routé sur / hors /api et /auth -------------
+  frontend:
+    image: ghcr.io/agne-moussa/billetterie-frontend:${IMAGE_TAG:?à définir dans .env.prod}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+networks:
+  billetterie:
+    name: billetterie
+
+volumes:
+  # Certificats Let's Encrypt (acme.json) : conservés d'un déploiement à l'autre.
+  traefik-acme:
+  rabbitmq-data:

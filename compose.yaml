@@ -199,6 +199,8 @@ services:
       KEYCLOAK_MDP_CLIENT: ${KEYCLOAK_MDP_CLIENT:?à définir dans .env}
       KEYCLOAK_MDP_PARTENAIRE: ${KEYCLOAK_MDP_PARTENAIRE:?à définir dans .env}
       KEYCLOAK_MDP_ADMIN: ${KEYCLOAK_MDP_ADMIN:?à définir dans .env}
+      # Origine du front (redirect URIs du client frontend) : http://localhost si vide.
+      KEYCLOAK_URL_FRONT: ${KEYCLOAK_URL_FRONT:-http://localhost}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
     depends_on:

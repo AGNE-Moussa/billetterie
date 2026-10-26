@@ -1,0 +1,14 @@
+# Configuration de gitleaks (BIL-F29) : règles par défaut, plus une seule exception ciblée.
+title = "billetterie"
+
+[extend]
+useDefault = true
+
+# Faux positif de generic-api-key : URL JDBC d'une base Testcontainers dans les tests, sans
+# identifiants (pas de « @ ») ; le mot de passe de ces bases est généré par secrets.token_urlsafe.
+[[allowlists]]
+description = "URL JDBC sans identifiants dans les tests"
+condition = "AND"
+regexTarget = "line"
+regexes = ['''"jdbc:postgresql://[a-z0-9.-]+:[0-9]+/[a-z0-9_]+"''']
+paths = ['''^tests/''']

@@ -7,7 +7,7 @@ hooks:
     - matcher: "Write|Edit|NotebookEdit"
       hooks:
         - type: command
-          command: "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/limiter_ecriture.py\" \"services/*/src/**\" \"services/*/alembic/**\" \"services/*/alembic.ini\" \"services/*/pyproject.toml\" \"services/*/Dockerfile\" \"services/*/README.md\" \"libs/**\" \"infra/**\" \"frontend/src/**\" \"frontend/package.json\" \"frontend/package-lock.json\" \"frontend/*.ts\" \"frontend/*.js\" \"frontend/*.json\" \"frontend/index.html\" \"frontend/Dockerfile\" \"frontend/nginx.conf\" \"frontend/.dockerignore\" \"frontend/public/**\" \".env.example\" \"README.md\" \"compose.yaml\" \"pyproject.toml\" \"uv.lock\" \".github/workflows/ci.yml\" \"!**/tests/**\" \"!**/*.test.tsx\" \"!**/*.test.ts\" \"!frontend/e2e/**\" \"!**/openapi.yaml\""
+          command: "uv run --no-project python \"$CLAUDE_PROJECT_DIR/.claude/hooks/limiter_ecriture.py\" \"services/*/src/**\" \"services/*/alembic/**\" \"services/*/alembic.ini\" \"services/*/pyproject.toml\" \"services/*/Dockerfile\" \"services/*/README.md\" \"libs/**\" \"infra/**\" \"frontend/src/**\" \"frontend/package.json\" \"frontend/package-lock.json\" \"frontend/*.ts\" \"frontend/*.js\" \"frontend/*.json\" \"frontend/index.html\" \"frontend/Dockerfile\" \"frontend/nginx.conf\" \"frontend/.dockerignore\" \"frontend/public/**\" \".env.example\" \"README.md\" \"compose.yaml\" \"compose.prod.yaml\" \"pyproject.toml\" \"uv.lock\" \".github/workflows/ci.yml\" \".github/workflows/deploiement.yml\" \"!**/tests/**\" \"!**/*.test.tsx\" \"!**/*.test.ts\" \"!frontend/e2e/**\" \"!**/openapi.yaml\""
     - matcher: "Bash|PowerShell"
       hooks:
         - type: command

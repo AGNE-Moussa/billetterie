@@ -1,0 +1,205 @@
+name: Déploiement
+
+# Déploiement de la démo (BIL-F29), lancé à la main depuis l'onglet Actions, branche main.
+# Sans entrée : construit et publie les images du commit (sha-<commit>), puis les déploie.
+# Avec l'entrée tag (un ancien sha-<commit>) : aucune construction, ce tag est redéployé
+# (retour arrière).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag déjà publié à redéployer (sha-<commit>) ; vide : construire le commit"
+        required: false
+        default: ""
+        type: string
+
+# Un seul déploiement à la fois, jamais annulé en cours de route.
+concurrency:
+  group: deploiement-demo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: images (${{ matrix.image }})
+    if: github.ref == 'refs/heads/main' && inputs.tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: echo
+            context: .
+            dockerfile: services/echo/Dockerfile
+          - image: verificateur
+            context: .
+            dockerfile: infra/verificateur/Dockerfile
+          - image: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Le front garde /api et /auth relatifs : même origine que l'API (aucune variable VITE_).
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/agne-moussa/billetterie-${{ matrix.image }}:sha-${{ github.sha }}
+            ghcr.io/agne-moussa/billetterie-${{ matrix.image }}:demo
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  deployer:
+    needs: images
+    # Toujours après images, même sautée (entrée tag fournie), jamais si elle a échoué.
+    if: >-
+      always() && github.ref == 'refs/heads/main'
+      && (needs.images.result == 'success' || needs.images.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Secrets du VPS, de Neon et du realm portés par l'environnement GitHub « demo ».
+    environment: demo
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Entrée tag validée avant tout usage (lue par env:, jamais interpolée dans le script) :
+      # seul un sha-<commit> est accepté, ce qui écarte toute injection dans .env.prod.
+      - name: Tag à déployer
+        id: tag
+        shell: bash
+        env:
+          TAG_FOURNI: ${{ inputs.tag }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          if [[ -n "$TAG_FOURNI" ]]; then
+            tag="$TAG_FOURNI"
+          else
+            tag="sha-$COMMIT"
+          fi
+          if ! [[ "$tag" =~ ^sha-[0-9a-f]{7,40}$ ]]; then
+            printf '::error::Tag refusé : attendu sha-<commit> (7 à 40 caractères hexadécimaux).\n'
+            exit 1
+          fi
+          printf 'valeur=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      # Clé privée dans un fichier aux droits 600 ; clé d'hôte du VPS vérifiée (known_hosts).
+      - name: Configurer SSH
+        env:
+          CLE_SSH: ${{ secrets.VPS_CLE_SSH }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOTE: ${{ secrets.VPS_HOTE }}
+          UTILISATEUR: ${{ secrets.VPS_UTILISATEUR }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CLE_SSH" > ~/.ssh/id_deploiement
+          chmod 600 ~/.ssh/id_deploiement
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          {
+            printf 'Host vps\n'
+            printf '  HostName %s\n' "$HOTE"
+            printf '  User %s\n' "$UTILISATEUR"
+            printf '  IdentityFile ~/.ssh/id_deploiement\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  StrictHostKeyChecking=yes\n'
+            printf '  UserKnownHostsFile ~/.ssh/known_hosts\n'
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      # Liste fixe de fichiers, sans clone du dépôt sur le VPS.
+      - name: Copier les fichiers sur le VPS
+        run: |
+          ssh vps 'mkdir -p /opt/billetterie/infra/traefik /opt/billetterie/infra/consul /opt/billetterie/infra/keycloak'
+          scp compose.prod.yaml vps:/opt/billetterie/compose.prod.yaml
+          scp infra/traefik/traefik.prod.yml infra/traefik/demarrer-prod.sh infra/traefik/dynamique.yml vps:/opt/billetterie/infra/traefik/
+          scp -r infra/traefik/plugins-local vps:/opt/billetterie/infra/traefik/
+          scp -r infra/consul/prod vps:/opt/billetterie/infra/consul/
+          scp infra/keycloak/realm-billetterie.json vps:/opt/billetterie/infra/keycloak/
+
+      # .env.prod écrit sur le VPS par l'entrée standard de ssh : aucune valeur en argument de
+      # commande, aucune dans les journaux (les secrets sont masqués par GitHub).
+      - name: Écrire .env.prod sur le VPS
+        env:
+          DOMAINE: ${{ vars.DOMAINE }}
+          IMAGE_TAG: ${{ steps.tag.outputs.valeur }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          ACME_CA_SERVER: ${{ vars.ACME_CA_SERVER }}
+          ECHO_DATABASE_URL: ${{ secrets.ECHO_DATABASE_URL }}
+          KEYCLOAK_DB_URL: ${{ secrets.KEYCLOAK_DB_URL }}
+          KEYCLOAK_DB_USERNAME: ${{ secrets.KEYCLOAK_DB_USERNAME }}
+          KEYCLOAK_DB_PASSWORD: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+          KEYCLOAK_ADMIN: ${{ secrets.KEYCLOAK_ADMIN }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_SERVICES_SECRET: ${{ secrets.KEYCLOAK_SERVICES_SECRET }}
+          KEYCLOAK_MDP_CLIENT: ${{ secrets.KEYCLOAK_MDP_CLIENT }}
+          KEYCLOAK_MDP_PARTENAIRE: ${{ secrets.KEYCLOAK_MDP_PARTENAIRE }}
+          KEYCLOAK_MDP_ADMIN: ${{ secrets.KEYCLOAK_MDP_ADMIN }}
+          RABBITMQ_DEFAULT_USER: ${{ secrets.RABBITMQ_DEFAULT_USER }}
+          RABBITMQ_DEFAULT_PASS: ${{ secrets.RABBITMQ_DEFAULT_PASS }}
+          GHCR_UTILISATEUR: ${{ secrets.GHCR_UTILISATEUR }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        # Chaque ligne en NOM='valeur' : Compose lit la valeur telle quelle (aucune interpolation
+        # de $). Une valeur qui contient une apostrophe est refusée (elle fermerait la chaîne).
+        run: |
+          set -e
+          ligne() {
+            case "$2" in
+              *"'"*)
+                printf '::error::%s contient une apostrophe : valeur refusée.\n' "$1" >&2
+                exit 1
+                ;;
+            esac
+            printf "%s='%s'\n" "$1" "$2"
+          }
+          contenu=$(
+            ligne DOMAINE "$DOMAINE"
+            ligne IMAGE_TAG "$IMAGE_TAG"
+            ligne ACME_EMAIL "$ACME_EMAIL"
+            ligne ACME_CA_SERVER "$ACME_CA_SERVER"
+            ligne ECHO_DATABASE_URL "$ECHO_DATABASE_URL"
+            ligne KEYCLOAK_DB_URL "$KEYCLOAK_DB_URL"
+            ligne KEYCLOAK_DB_USERNAME "$KEYCLOAK_DB_USERNAME"
+            ligne KEYCLOAK_DB_PASSWORD "$KEYCLOAK_DB_PASSWORD"
+            ligne KEYCLOAK_ADMIN "$KEYCLOAK_ADMIN"
+            ligne KEYCLOAK_ADMIN_PASSWORD "$KEYCLOAK_ADMIN_PASSWORD"
+            ligne KEYCLOAK_REALM billetterie
+            ligne KEYCLOAK_SERVICES_SECRET "$KEYCLOAK_SERVICES_SECRET"
+            ligne KEYCLOAK_MDP_CLIENT "$KEYCLOAK_MDP_CLIENT"
+            ligne KEYCLOAK_MDP_PARTENAIRE "$KEYCLOAK_MDP_PARTENAIRE"
+            ligne KEYCLOAK_MDP_ADMIN "$KEYCLOAK_MDP_ADMIN"
+            ligne RABBITMQ_DEFAULT_USER "$RABBITMQ_DEFAULT_USER"
+            ligne RABBITMQ_DEFAULT_PASS "$RABBITMQ_DEFAULT_PASS"
+            ligne ROUTES_PUBLIQUES ""
+          )
+          printf '%s\n' "$contenu" | ssh vps 'umask 077 && cat > /opt/billetterie/.env.prod && chmod 600 /opt/billetterie/.env.prod'
+          # Jeton GHCR read:packages (paquets privés), lu par docker login sur son entrée standard.
+          printf '%s' "$GHCR_TOKEN" | ssh vps "docker login ghcr.io -u \"$GHCR_UTILISATEUR\" --password-stdin"
+
+      # Migrations Alembic sur le VPS (accès Neon depuis le VPS seulement), puis relance.
+      # COMPOSE_ENV_FILES : Compose interpole compose.prod.yaml avec .env.prod.
+      - name: Migrer et relancer la plateforme
+        run: |
+          ssh vps 'cd /opt/billetterie && export COMPOSE_ENV_FILES=.env.prod && docker compose -f compose.prod.yaml pull'
+          ssh vps 'cd /opt/billetterie && export COMPOSE_ENV_FILES=.env.prod && docker compose -f compose.prod.yaml run --rm echo-migrations'
+          ssh vps 'cd /opt/billetterie && export COMPOSE_ENV_FILES=.env.prod && docker compose -f compose.prod.yaml up -d --wait --remove-orphans'
+
+      - name: Nettoyer la clé SSH
+        if: always()
+        run: rm -f ~/.ssh/id_deploiement
