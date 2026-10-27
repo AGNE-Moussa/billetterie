@@ -83,6 +83,27 @@ def test_sans_database_url_la_configuration_de_prod_est_refusee(
     assert "ECHO_DATABASE_URL" in resultat.stderr
 
 
+def test_compose_prod_exige_le_secret_du_revendeur(
+    compose_prod: Any, valeurs_env_prod: dict[str, str]
+) -> None:
+    """BIL-003, C1 : le secret du client revendeur-test vient de .env.prod, jamais du dépôt."""
+    sans_secret = {
+        nom: v for nom, v in valeurs_env_prod.items() if nom != "KEYCLOAK_REVENDEUR_SECRET"
+    }
+
+    refuse = compose_prod(sans_secret, ["--quiet"])
+    accepte = compose_prod(valeurs_env_prod, ["--format", "json"])
+
+    assert refuse.returncode != 0, "La configuration est acceptée sans KEYCLOAK_REVENDEUR_SECRET"
+    assert "KEYCLOAK_REVENDEUR_SECRET" in refuse.stderr, refuse.stderr
+    assert accepte.returncode == 0, accepte.stderr
+    environnement = _environnement(json.loads(accepte.stdout), "keycloak")
+    assert (
+        environnement.get("KEYCLOAK_REVENDEUR_SECRET")
+        == valeurs_env_prod["KEYCLOAK_REVENDEUR_SECRET"]
+    )
+
+
 def test_la_prod_ne_contient_aucun_service_postgres(config_prod: Any) -> None:
     services = _services(config_prod)
 

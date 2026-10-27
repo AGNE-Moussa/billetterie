@@ -19,8 +19,9 @@ connexion, achat complet d'un billet, parcours revendeur. Sinon, dis-le et ne fa
 - Contre la plateforme réelle : `make up` (ou `make observabilite`), gateway sur
   `http://localhost`. Si la gateway ne répond pas, le test est **ignoré** (`pytest.skip`) avec
   un message clair, il n'échoue pas.
-- Jetons réels du realm : client `services` (Client Credentials) ou utilisateurs de test
-  (`client.test`, `partenaire.test`), secrets lus dans `.env`, jamais écrits dans le test.
+- Jetons réels du realm : clients `services` et `revendeur-test` (Client Credentials) ou
+  utilisateurs de test (`client.test`, `admin.test`), secrets lus dans `.env`, jamais écrits
+  dans le test.
 - Un test par parcours, qui enchaîne les appels comme un vrai client et vérifie chaque étape
   (statuts, corps Problem Details, événements arrivés quand c'est observable).
 - Données synthétiques, créées par le test lui-même ; rejouable plusieurs fois de suite.

@@ -43,8 +43,10 @@ domaine, `http://localhost`, pour l'API, l'authentification et le front :
 | Prometheus (`make observabilite`) | http://127.0.0.1:9090 |
 | PostgreSQL / Redis | `127.0.0.1:5432` / `127.0.0.1:6379` |
 
-Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`),
-`partenaire.test` (`partner`), `admin.test` (`admin`).
+Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`)
+et `admin.test` (`admin`, organisateur). Le revendeur de test est le client confidentiel
+`revendeur-test` (rôle `partner`), en Client Credentials seulement, avec le secret
+`KEYCLOAK_REVENDEUR_SECRET` du `.env`.
 
 L'API exige un jeton Keycloak (`Authorization: Bearer ...`) : sans jeton valide, la gateway
 répond 401 sans appeler le service. Les routes ouvertes sans jeton se déclarent dans
