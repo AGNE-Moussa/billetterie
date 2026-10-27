@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://billetterie.exemple.test/evenements/ticketing.show.cancelled.json",
+  "title": "ticketing.show.cancelled",
+  "description": "Une séance est annulée ; ses billets sont annulés et ses commandes remboursées. Émetteur : Catalogue. Consommateurs : Billets, Commandes, Paiements, Notifications. Enveloppe commun.evenements.Evenement, publiée par l'outbox.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifiant unique du message (idempotence des consommateurs)."
+    },
+    "type": {
+      "const": "ticketing.show.cancelled"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "seance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evenement_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "seance_id",
+        "evenement_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "version",
+    "occurred_at",
+    "correlation_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

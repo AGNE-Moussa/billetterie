@@ -61,7 +61,11 @@ def _motifs_du_hook(nom: str) -> list[str]:
         (
             "contract-writer",
             "Read, Grep, Glob, Write, Edit",
-            ["services/*/openapi.yaml", "docs/conventions.md"],  # BIL-F25 : formes communes
+            [
+                "services/*/openapi.yaml",
+                "docs/conventions.md",  # BIL-F25 : formes communes
+                "docs/contrats/*.yaml",  # BIL-002 : contrats cibles
+            ],
         ),
     ],
 )

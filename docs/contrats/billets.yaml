@@ -1,0 +1,492 @@
+# Contrat OpenAPI 3.1 cible du service billets (BIL-002) : la référence des tickets US.
+# Chaque ticket US recopie ses routes dans services/billets/openapi.yaml avec le code ;
+# ce fichier-ci est seulement validé (openapi-spec-validator), pas comparé au code.
+# Sans route, par des consommateurs idempotents : création des places d'une séance
+# (ticketing.show.scheduled), émission des billets (ticketing.order.confirmed), libération des
+# places (ticketing.order.expired), annulation des billets d'une séance (ticketing.show.cancelled).
+# GET /api/v1/seats est public : à déclarer dans ROUTES_PUBLIQUES du vérificateur. Un préfixe
+# public rend aussi public GET /api/v1/<ressource>/health (à traiter au ticket US).
+openapi: 3.1.0
+info:
+  title: Service billets
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      tags:
+      - santé
+      summary: État de l'instance, appelé par Consul toutes les 10 s
+      operationId: sante
+      responses:
+        '200':
+          description: L'instance et sa base répondent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sante'
+        '503':
+          description: La base de données ne répond pas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/seats:
+    get:
+      tags:
+      - places
+      summary: Disponibilité des places d'une séance, page par page (route publique)
+      description: Ordre stable par rang, puis numéro. Une séance inconnue ou sans place répond
+        200 avec elements vide.
+      operationId: listerPlaces
+      parameters:
+      - name: seance_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de places de la séance, avec leur disponibilité.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacePage'
+        '422':
+          description: Séance absente ou invalide, ou pagination invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/seats/{place_id}/lock:
+    put:
+      tags:
+      - places
+      summary: Verrouiller une place pour une commande (scope seats:lock ; client services
+        seulement)
+      description: >-
+        Verrou Redis SET NX PX dont le propriétaire (valeur de la clé) est la commande
+        (règles métier 1 et 2). confirmation à false : durée de réservation (10 min par
+        défaut, configurable) ; idempotent, un nouvel appel pour la même commande répond 200
+        et prolonge le verrou. confirmation à true : durée de confirmation (1 h par défaut,
+        configurable), accordée seulement à la commande qui détient déjà le verrou, sinon 409
+        SEAT_ALREADY_TAKEN ; Commandes l'appelle juste avant Paiements. Billets supprime le
+        verrou une fois le billet émis ; ticketing.order.expired ne libère la place que si la
+        valeur de la clé est cette commande.
+      operationId: verrouillerPlace
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Place Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerrouCreation'
+      responses:
+        '200':
+          description: Place verrouillée au profit de la commande (verrou posé ou prolongé).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Verrou'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune place avec cet identifiant dans cette séance (SEAT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: Place verrouillée par une autre commande ou vendue, ou confirmation demandée
+            sans détenir le verrou (SEAT_ALREADY_TAKEN).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant ou corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/tickets:
+    get:
+      tags:
+      - billets
+      summary: Lister mes billets, page par page (scope tickets:read ; client et revendeur)
+      description: Filtré par l'appelant du jeton, jamais par un paramètre. Ordre stable par date
+        d'émission décroissante, puis identifiant.
+      operationId: listerBillets
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page des billets de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BilletPage'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Paramètres de pagination invalides (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/tickets/{billet_id}:
+    get:
+      tags:
+      - billets
+      summary: Lire un de mes billets, avec son QR code (scope tickets:read ; client et
+        revendeur)
+      operationId: lireBillet
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: billet_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Billet Id
+      responses:
+        '200':
+          description: Billet de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Billet'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucun billet de l'appelant avec cet identifiant (TICKET_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+components:
+  schemas:
+    Place:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        rang:
+          type: string
+          title: Rang
+        numero:
+          type: integer
+          title: Numero
+        categorie_id:
+          type: string
+          format: uuid
+          title: Categorie Id
+          description: Catégorie de places tarifée de la séance (Catalogue).
+        disponible:
+          type: boolean
+          title: Disponible
+          description: Faux si la place est verrouillée ou vendue.
+      type: object
+      required:
+      - id
+      - seance_id
+      - rang
+      - numero
+      - categorie_id
+      - disponible
+      title: Place
+    PlacePage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Place'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de places de la séance.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: PlacePage
+    VerrouCreation:
+      properties:
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+          description: Séance de la commande ; une place d'une autre séance répond SEAT_NOT_FOUND.
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+          description: Commande propriétaire du verrou.
+        confirmation:
+          type: boolean
+          title: Confirmation
+          description: Faux, durée de réservation (10 min par défaut) ; vrai, durée de
+            confirmation (1 h par défaut), seulement pour la commande qui détient le verrou.
+          default: false
+      type: object
+      required:
+      - seance_id
+      - commande_id
+      title: VerrouCreation
+    Verrou:
+      properties:
+        place_id:
+          type: string
+          format: uuid
+          title: Place Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        categorie_id:
+          type: string
+          format: uuid
+          title: Categorie Id
+          description: Catégorie de places tarifée de la séance (Catalogue), pour le prix de la
+            ligne.
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        expire_le:
+          type: string
+          format: date-time
+          title: Expire Le
+          description: Fin du verrou (réservation ou confirmation) ; la place est libérée ensuite
+            si la commande n'est pas payée.
+      type: object
+      required:
+      - place_id
+      - seance_id
+      - categorie_id
+      - commande_id
+      - expire_le
+      title: Verrou
+    StatutBillet:
+      type: string
+      enum:
+      - EMIS
+      - ANNULE
+      title: StatutBillet
+      description: ANNULE quand la séance est annulée (consommateur de ticketing.show.cancelled).
+    Billet:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        place_id:
+          type: string
+          format: uuid
+          title: Place Id
+        statut:
+          $ref: '#/components/schemas/StatutBillet'
+        qr_code:
+          type: string
+          title: Qr Code
+          description: Identifiant du billet signé (HMAC), jamais de donnée lisible.
+        emis_le:
+          type: string
+          format: date-time
+          title: Emis Le
+      type: object
+      required:
+      - id
+      - commande_id
+      - seance_id
+      - place_id
+      - statut
+      - qr_code
+      - emis_le
+      title: Billet
+    BilletPage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Billet'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de billets de l'appelant.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: BilletPage
+    Probleme:
+      properties:
+        type:
+          type: string
+          title: Type
+          default: about:blank
+        title:
+          type: string
+          title: Title
+        status:
+          type: integer
+          title: Status
+        detail:
+          type: string
+          title: Detail
+        code:
+          type: string
+          title: Code
+          description: Code métier stable, par exemple ECHO_INTROUVABLE.
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+          description: Identifiant de corrélation de la requête (X-Correlation-Id).
+        erreurs:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Erreurs
+          description: Détail des champs invalides (code REQUETE_INVALIDE).
+      type: object
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Probleme
+    Sante:
+      properties:
+        statut:
+          type: string
+          title: Statut
+          examples:
+          - ok
+      type: object
+      required:
+      - statut
+      title: Sante
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie.
+      scheme: bearer

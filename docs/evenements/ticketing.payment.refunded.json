@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://billetterie.exemple.test/evenements/ticketing.payment.refunded.json",
+  "title": "ticketing.payment.refunded",
+  "description": "Le paiement d'une commande est remboursé (séance annulée). Émetteur : Paiements. Consommateurs : Commandes, Notifications. Enveloppe commun.evenements.Evenement, publiée par l'outbox.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifiant unique du message (idempotence des consommateurs)."
+    },
+    "type": {
+      "const": "ticketing.payment.refunded"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "paiement_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "commande_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "seance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "montant": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Montant en centimes."
+        }
+      },
+      "required": [
+        "paiement_id",
+        "commande_id",
+        "seance_id",
+        "montant"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "version",
+    "occurred_at",
+    "correlation_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

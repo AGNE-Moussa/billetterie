@@ -12,7 +12,7 @@ LIGNES_MAX = 30
 ATTENDUES: dict[str, list[str] | None] = {
     "python.md": ["services/**/*.py", "libs/**/*.py", "infra/**/*.py"],
     "tests.md": ["**/tests/**", "frontend/**/*.test.tsx", "frontend/e2e/**"],
-    "contrats-api.md": ["**/openapi.yaml", "services/*/src/**/api/**"],
+    "contrats-api.md": ["**/openapi.yaml", "docs/contrats/*.yaml", "services/*/src/**/api/**"],
     "evenements.md": [
         "services/*/src/**/infra/**",
         "services/*/src/**/evenements/**",

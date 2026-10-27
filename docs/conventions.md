@@ -14,7 +14,14 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
   défaut) ; hors bornes : `422 REQUETE_INVALIDE`. Une page au-delà de la fin répond 200 avec
   `elements` vide. L'ordre des éléments est stable et documenté pour chaque ressource.
 - **Erreurs** : Problem Details (RFC 9457) avec un code métier stable, par exemple
-  `SEAT_ALREADY_TAKEN`.
+  `SEAT_ALREADY_TAKEN`. Codes métier des services en anglais (`SEAT_ALREADY_TAKEN`,
+  `ORDER_NOT_FOUND`) ; codes techniques de `commun` en français (`REQUETE_INVALIDE`, `JETON_*`,
+  `ROLE_MANQUANT`, `SCOPE_MANQUANT`, `BASE_INDISPONIBLE`, `SERVICE_INDISPONIBLE`).
+- **Énumérations** : statuts et autres valeurs énumérées en MAJUSCULES sans accent, mots séparés
+  par `_` (`EN_ATTENTE`, `CONFIRMEE`).
+- **Ressource d'un autre appelant** : une ressource qui existe mais n'appartient pas à l'appelant
+  (commande, billet) répond `404 <RESSOURCE>_NOT_FOUND`, comme une ressource inexistante, jamais
+  `403` : la réponse ne révèle pas son existence.
 - **Données** : une base par service, aucune jointure entre services ; on référence un objet d'un
   autre service par son UUID ; montants en centimes.
 - **Événements** : nom au passé `ticketing.<entité>.<fait>` ; charge utile versionnée ;

@@ -1,20 +1,20 @@
 ---
 paths:
   - "**/openapi.yaml"
+  - "docs/contrats/*.yaml"
   - "services/*/src/**/api/**"
 ---
 # Contrats d'API
 
 - Contrat d'abord : `services/<nom>/openapi.yaml` (OpenAPI 3.1) est la référence. Le test
   `pytest -m contract` compare le schéma généré par FastAPI au contrat.
-- Routes : `/api/v1/<ressource>` au pluriel, verbes HTTP standards. Pagination `?page=&size=`
-  (1 et 20 par défaut, `size` ≤ 100, sinon 422) ; réponse `Page[T]` de commun.pagination,
-  sous-classée par ressource : `{elements, page, size, total}`, ordre stable (`docs/conventions.md`).
-- Chaque route déclare un `operation_id` en camelCase et ses réponses d'erreur.
-- Erreurs : Problem Details `application/problem+json` (`reponse_probleme(...)`) avec un code
-  métier stable en MAJUSCULES (`SEAT_ALREADY_TAKEN`), jamais un message seul.
-- Route protégée : `REPONSE_NON_AUTHENTIFIE` ou `REPONSES_AUTH` (401, 403) dans `responses`.
-- Montants en centimes (entiers), identifiants en UUID, dates en ISO 8601 avec fuseau.
+- Routes : `/api/v1/<ressource>` au pluriel, verbes standards ; pagination `?page=&size=` (1 et
+  20, `size` ≤ 100, sinon 422) en `Page[T]` sous-classée, `{elements, page, size, total}`.
+- Chaque route déclare son `operation_id` (camelCase) et ses erreurs ; route protégée :
+  `REPONSES_AUTH` ou `REPONSE_NON_AUTHENTIFIE` ; ressource d'un autre appelant : 404, jamais 403.
+- Erreurs : Problem Details (`reponse_probleme(...)`) avec un code stable en MAJUSCULES, métier
+  en anglais (`SEAT_ALREADY_TAKEN`), technique de commun en français (`REQUETE_INVALIDE`).
+- Centimes (entiers), UUID, dates ISO 8601 avec fuseau, énumérations MAJUSCULES sans accent.
 
 ```python
 # Bon
