@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://billetterie.exemple.test/evenements/ticketing.order.confirmed.json",
+  "title": "ticketing.order.confirmed",
+  "description": "Le paiement d'une commande est accepté ; Billets émet les billets. Émetteur : Commandes. Consommateurs : Billets, Notifications. Enveloppe commun.evenements.Evenement, publiée par l'outbox.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifiant unique du message (idempotence des consommateurs)."
+    },
+    "type": {
+      "const": "ticketing.order.confirmed"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "commande_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client": {
+          "type": "string",
+          "minLength": 1,
+          "description": "sub Keycloak de l'acheteur."
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "email",
+          "description": "Adresse de l'acheteur ; null pour un revendeur (aucun e-mail)."
+        },
+        "seance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "lignes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "place_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "montant": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "description": "Montant en centimes."
+              }
+            },
+            "required": [
+              "place_id",
+              "montant"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "montant_total": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Montant en centimes."
+        }
+      },
+      "required": [
+        "commande_id",
+        "client",
+        "email",
+        "seance_id",
+        "lignes",
+        "montant_total"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "version",
+    "occurred_at",
+    "correlation_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

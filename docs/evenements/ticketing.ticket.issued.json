@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://billetterie.exemple.test/evenements/ticketing.ticket.issued.json",
+  "title": "ticketing.ticket.issued",
+  "description": "Un billet est émis pour une place d'une commande confirmée. Émetteur : Billets. Consommateurs : Notifications. Enveloppe commun.evenements.Evenement, publiée par l'outbox.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifiant unique du message (idempotence des consommateurs)."
+    },
+    "type": {
+      "const": "ticketing.ticket.issued"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "billet_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "commande_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "seance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "place_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "qr_code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Contenu signé du QR code, joint à l'e-mail."
+        },
+        "emis_le": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "billet_id",
+        "commande_id",
+        "seance_id",
+        "place_id",
+        "qr_code",
+        "emis_le"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "version",
+    "occurred_at",
+    "correlation_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

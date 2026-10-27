@@ -19,12 +19,12 @@ paths:
 # Bon
 class SeanceComplete(ErreurMetier):
     def __init__(self, seance: UUID) -> None:
-        super().__init__("SEANCE_COMPLETE", 409, f"La séance {seance} est complète.")
+        super().__init__("SHOW_SOLD_OUT", 409, f"La séance {seance} est complète.")
 
 
-reponse = await catalogue.get(f"/api/v1/seances/{seance}")  # ClientService
+reponse = await catalogue.get(f"/api/v1/shows/{seance}")  # ClientService
 
 # Mauvais
 raise HTTPException(409, "complet")
-reponse = httpx.get(f"http://catalogue:8000/seances/{seance}")
+reponse = httpx.get(f"http://catalogue:8000/shows/{seance}")
 ```

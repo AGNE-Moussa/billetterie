@@ -44,13 +44,21 @@ Utilisateurs dédié n'est nécessaire au MVP.
 
 ## Flux critique et événements
 
+Préalable : à la création d'une séance, Catalogue publie `ticketing.show.scheduled` ; Billets crée
+alors les places de la séance (asynchrone).
+
 Parcours d'achat d'un billet :
 
-1. Le client choisit une place ; Commandes demande à Billets de la verrouiller (synchrone).
-2. Billets pose le verrou Redis et répond ; refus immédiat si la place est déjà prise.
-3. Commandes crée la commande en attente et appelle Paiements (synchrone).
+1. Le client choisit ses places ; Commandes crée la commande en attente, puis demande à Billets
+   de verrouiller chaque place pour 10 minutes (synchrone).
+2. Billets pose le verrou Redis et répond ; refus immédiat si la place est déjà prise (la
+   commande expire et libère les places déjà verrouillées).
+3. Juste avant de payer, Commandes reverrouille ses places pour 1 heure (une place perdue :
+   commande expirée, aucun débit), puis appelle Paiements (synchrone).
 4. Paiement accepté : Commandes publie `ticketing.order.confirmed`.
-5. Billets émet le billet ; Notifications envoie l'e-mail (asynchrone).
+5. Billets émet le billet ; Notifications envoie l'e-mail (asynchrone). Si la place a quand même
+   été vendue entre-temps (ou la séance annulée), Billets n'émet aucun billet et publie
+   `ticketing.ticket.rejected` : la commande est remboursée.
 6. Paiement refusé ou délai dépassé : `ticketing.order.expired`, la place est libérée.
 
 | Événement | Émetteur | Consommateurs |
@@ -58,7 +66,9 @@ Parcours d'achat d'un billet :
 | `ticketing.order.confirmed` | Commandes | Billets, Notifications |
 | `ticketing.order.expired` | Commandes | Billets |
 | `ticketing.ticket.issued` | Billets | Notifications |
-| `ticketing.show.cancelled` | Catalogue | Commandes, Paiements, Notifications |
+| `ticketing.ticket.rejected` | Billets | Paiements, Notifications |
+| `ticketing.show.scheduled` | Catalogue | Billets, Notifications |
+| `ticketing.show.cancelled` | Catalogue | Billets, Commandes, Paiements, Notifications |
 | `ticketing.payment.refunded` | Paiements | Commandes, Notifications |
 
 ## Gestion des pannes
@@ -78,8 +88,9 @@ au redémarrage.
 ## API partenaires et lots
 
 Les revendeurs partenaires utilisent le flux Client Credentials avec les scopes `events:read`,
-`orders:read` et `orders:write`. Routes exposées : liste et détail des événements, disponibilité
-des places, création et suivi de commandes pour leur propre compte.
+`orders:read`, `orders:write` et `tickets:read`. Routes exposées : liste et détail des
+événements, disponibilité des places, création et suivi de commandes et lecture des billets pour
+leur propre compte.
 
 - **MVP** : Catalogue, Billets, Commandes, Paiements simulés, Notifications, verrou des places,
   scénario de panne
