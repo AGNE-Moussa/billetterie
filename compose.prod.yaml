@@ -123,8 +123,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?à définir dans .env.prod}
       # Remplacent les ${...} de infra/keycloak/realm-billetterie.json à l'import.
       KEYCLOAK_SERVICES_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env.prod}
+      KEYCLOAK_REVENDEUR_SECRET: ${KEYCLOAK_REVENDEUR_SECRET:?à définir dans .env.prod}
       KEYCLOAK_MDP_CLIENT: ${KEYCLOAK_MDP_CLIENT:?à définir dans .env.prod}
-      KEYCLOAK_MDP_PARTENAIRE: ${KEYCLOAK_MDP_PARTENAIRE:?à définir dans .env.prod}
       KEYCLOAK_MDP_ADMIN: ${KEYCLOAK_MDP_ADMIN:?à définir dans .env.prod}
       KEYCLOAK_URL_FRONT: https://${DOMAINE:?à définir dans .env.prod}
     volumes:

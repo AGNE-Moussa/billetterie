@@ -623,7 +623,77 @@
         "include.in.token.scope": "true",
         "display.on.consent.screen": "false"
       }
+    },
+    {
+      "name": "events:read",
+      "description": "Lire le catalogue (événements, séances)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "events:write",
+      "description": "Gérer les événements et les séances (organisateur)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "orders:read",
+      "description": "Lire ses commandes",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "orders:write",
+      "description": "Passer et annuler ses commandes",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "tickets:read",
+      "description": "Lire ses billets",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "seats:lock",
+      "description": "Verrouiller et libérer des places (appels entre services)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "payments:write",
+      "description": "Demander un paiement (appels entre services)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
     }
+  ],
+  "scopeMappings": [
+    { "clientScope": "events:read", "roles": ["customer", "partner", "admin"] },
+    { "clientScope": "events:write", "roles": ["admin"] },
+    { "clientScope": "orders:read", "roles": ["customer", "partner"] },
+    { "clientScope": "orders:write", "roles": ["customer", "partner"] },
+    { "clientScope": "tickets:read", "roles": ["customer", "partner"] }
   ],
   "defaultDefaultClientScopes": ["profile", "email", "roles", "web-origins", "acr", "basic"],
   "defaultOptionalClientScopes": ["offline_access", "address", "phone", "microprofile-jwt", "organization"],
@@ -638,6 +708,20 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr",
+        "basic",
+        "events:read",
+        "events:write",
+        "orders:read",
+        "orders:write",
+        "tickets:read"
+      ],
+      "optionalClientScopes": ["offline_access", "address", "phone", "microprofile-jwt", "organization"],
       "protocolMappers": [
         {
           "name": "audience-billetterie-api",
@@ -670,8 +754,58 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["profile", "email", "roles", "web-origins", "acr", "basic", "echos:write", "echos:read"],
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr",
+        "basic",
+        "echos:write",
+        "echos:read",
+        "seats:lock",
+        "payments:write"
+      ],
       "optionalClientScopes": ["offline_access", "address", "phone", "microprofile-jwt", "organization"],
+      "protocolMappers": [
+        {
+          "name": "audience-billetterie-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "billetterie-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "revendeur-test",
+      "name": "Revendeur de test (API partenaires)",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_REVENDEUR_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr",
+        "basic",
+        "events:read",
+        "orders:read",
+        "orders:write",
+        "tickets:read"
+      ],
+      "optionalClientScopes": [],
       "protocolMappers": [
         {
           "name": "audience-billetterie-api",
@@ -699,16 +833,6 @@
       "realmRoles": ["customer"]
     },
     {
-      "username": "partenaire.test",
-      "email": "partenaire.test@exemple.test",
-      "firstName": "Partenaire",
-      "lastName": "Test",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "${KEYCLOAK_MDP_PARTENAIRE}", "temporary": false }],
-      "realmRoles": ["partner"]
-    },
-    {
       "username": "admin.test",
       "email": "admin.test@exemple.test",
       "firstName": "Admin",
@@ -723,6 +847,12 @@
       "enabled": true,
       "serviceAccountClientId": "services",
       "realmRoles": ["default-roles-billetterie"]
+    },
+    {
+      "username": "service-account-revendeur-test",
+      "enabled": true,
+      "serviceAccountClientId": "revendeur-test",
+      "realmRoles": ["default-roles-billetterie", "partner"]
     }
   ]
 }

@@ -8,20 +8,18 @@ export interface UtilisateurDeTest {
   /** `preferred_username` du realm. */
   nom: string;
   /** Variable du `.env` qui porte son mot de passe. */
-  variable: "KEYCLOAK_MDP_CLIENT" | "KEYCLOAK_MDP_PARTENAIRE" | "KEYCLOAK_MDP_ADMIN";
+  variable: "KEYCLOAK_MDP_CLIENT" | "KEYCLOAK_MDP_ADMIN";
 }
 
+// Le revendeur (rôle partner) est un client Client Credentials `revendeur-test` (BIL-003) :
+// il ne se connecte pas par le navigateur, il n'a donc pas sa place ici.
 export const CLIENT_TEST: UtilisateurDeTest = {
   nom: "client.test",
   variable: "KEYCLOAK_MDP_CLIENT",
 };
-export const PARTENAIRE_TEST: UtilisateurDeTest = {
-  nom: "partenaire.test",
-  variable: "KEYCLOAK_MDP_PARTENAIRE",
-};
 export const ADMIN_TEST: UtilisateurDeTest = { nom: "admin.test", variable: "KEYCLOAK_MDP_ADMIN" };
 
-export const UTILISATEURS_DE_TEST = [CLIENT_TEST, PARTENAIRE_TEST, ADMIN_TEST] as const;
+export const UTILISATEURS_DE_TEST = [CLIENT_TEST, ADMIN_TEST] as const;
 
 let envCharge = false;
 

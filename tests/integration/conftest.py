@@ -190,8 +190,8 @@ def secrets_realm() -> dict[str, str]:
     """Valeurs des variables ${...} du realm, tirées au hasard pour chaque module de tests."""
     return {
         "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_REVENDEUR_SECRET": secrets.token_urlsafe(24),
         "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
-        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
         "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
         "KEYCLOAK_URL_FRONT": "http://localhost",
     }
@@ -214,8 +214,8 @@ def valeurs_env_prod() -> dict[str, str]:
         "KEYCLOAK_ADMIN_PASSWORD": secrets.token_urlsafe(16),
         "KEYCLOAK_REALM": "billetterie",
         "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_REVENDEUR_SECRET": secrets.token_urlsafe(24),
         "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
-        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
         "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
         "RABBITMQ_DEFAULT_USER": "billetterie",
         "RABBITMQ_DEFAULT_PASS": secrets.token_urlsafe(16),
@@ -283,8 +283,8 @@ def valeurs_env_locale() -> dict[str, str]:
         "KEYCLOAK_ADMIN_PASSWORD": secrets.token_urlsafe(16),
         "KEYCLOAK_REALM": "billetterie",
         "KEYCLOAK_SERVICES_SECRET": secrets.token_urlsafe(24),
+        "KEYCLOAK_REVENDEUR_SECRET": secrets.token_urlsafe(24),
         "KEYCLOAK_MDP_CLIENT": secrets.token_urlsafe(16),
-        "KEYCLOAK_MDP_PARTENAIRE": secrets.token_urlsafe(16),
         "KEYCLOAK_MDP_ADMIN": secrets.token_urlsafe(16),
         "KEYCLOAK_URL_FRONT": "http://localhost",
         "CORS_ORIGINS": "http://localhost",
