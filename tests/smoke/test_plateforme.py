@@ -1,5 +1,9 @@
 """Plateforme locale (BIL-001) : les cinq services métier sont sains dans Consul et via Traefik.
 
+Les lectures du catalogue (BIL-004) sont publiques à la gateway : ses listes, et sa santé, qui
+est sous le préfixe public `/api/v1/events`, répondent sans jeton ; ses écritures restent
+refusées sans jeton.
+
 Joués contre `make up` (et `make observabilite` pour Prometheus) par `make test-smoke`, jamais
 par la CI. Chaque test est ignoré si le composant qu'il interroge ne répond pas. Le jeton du
 client `services` est demandé à Keycloak avec le secret lu dans `.env`, jamais écrit ici.
@@ -26,6 +30,9 @@ SERVICES = [
     ("notifications", "notifications", 1),
 ]
 IDS = [service for service, _, _ in SERVICES]
+# Services dont la santé exige un jeton à la gateway : tous sauf catalogue (préfixe public).
+PROTEGES = [ligne for ligne in SERVICES if ligne[0] != "catalogue"]
+IDS_PROTEGES = [service for service, _, _ in PROTEGES]
 
 
 def _lire_env() -> dict[str, str]:
@@ -114,13 +121,44 @@ def test_la_sante_de_chaque_service_repond_via_traefik(
     assert reponse.headers.get("x-correlation-id")
 
 
-@pytest.mark.parametrize(("service", "ressource", "instances"), SERVICES, ids=IDS)
+@pytest.mark.parametrize(("service", "ressource", "instances"), PROTEGES, ids=IDS_PROTEGES)
 def test_sans_jeton_la_sante_via_traefik_est_refusee(
     gateway: str, service: str, ressource: str, instances: int
 ) -> None:
     reponse = httpx.get(f"{gateway}/api/v1/{ressource}/health", timeout=10.0)
 
     assert reponse.status_code == 401, f"{service} : {reponse.status_code}"
+    assert reponse.headers["content-type"].startswith("application/problem+json")
+    assert reponse.headers.get("www-authenticate", "").startswith("Bearer")
+
+
+def test_sans_jeton_la_sante_de_catalogue_repond_via_traefik(gateway: str) -> None:
+    reponse = httpx.get(f"{gateway}/api/v1/events/health", timeout=10.0)
+
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json() == {"statut": "ok"}
+
+
+@pytest.mark.parametrize("ressource", ["events", "venues"])
+def test_les_listes_du_catalogue_repondent_sans_jeton_via_traefik(
+    gateway: str, ressource: str
+) -> None:
+    reponse = httpx.get(f"{gateway}/api/v1/{ressource}", timeout=10.0)
+
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.headers["content-type"].startswith("application/json")
+    assert set(reponse.json()) == {"elements", "page", "size", "total"}
+    assert reponse.headers.get("x-correlation-id")
+
+
+def test_sans_jeton_la_creation_d_un_evenement_est_refusee_via_traefik(gateway: str) -> None:
+    reponse = httpx.post(
+        f"{gateway}/api/v1/events",
+        json={"nom": "Concert de test", "description": "Événement synthétique"},
+        timeout=10.0,
+    )
+
+    assert reponse.status_code == 401, reponse.text
     assert reponse.headers["content-type"].startswith("application/problem+json")
     assert reponse.headers.get("www-authenticate", "").startswith("Bearer")
 

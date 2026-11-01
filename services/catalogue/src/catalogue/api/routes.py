@@ -1,14 +1,101 @@
-"""Routes du service : santé seulement."""
+"""Routes du service : santé, événements, séances et lieux.
 
-from fastapi import APIRouter
+Lectures publiques ; créations réservées au scope events:write. Les règles vivent dans
+domaine/catalogue.py : les routes traduisent les corps et les réponses.
+"""
+
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from fastapi.exceptions import RequestValidationError
+from pydantic import AwareDatetime
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from catalogue.api.dependances import SessionDep
-from catalogue.api.schemas import Sante
-from commun.erreurs import ErreurMetier, reponse_probleme
+from catalogue.api.dependances import DepotDep, MaintenantDep, SessionDep
+from catalogue.api.schemas import (
+    Categorie,
+    Evenement,
+    EvenementCreation,
+    EvenementPage,
+    Lieu,
+    LieuCreation,
+    LieuPage,
+    Rang,
+    Sante,
+    Seance,
+    SeanceCreation,
+    SeancePage,
+    TexteRecherche,
+)
+from catalogue.domaine import catalogue as domaine
+from catalogue.infra.base import BaseIndisponible
+from commun.auth import REPONSES_AUTH, Appelant, exige_scopes
+from commun.erreurs import reponse_probleme
+from commun.pagination import (
+    PAGE_MINIMALE,
+    PAGE_PAR_DEFAUT,
+    TAILLE_MAXIMALE,
+    TAILLE_MINIMALE,
+    TAILLE_PAR_DEFAUT,
+)
 
 routeur_sante = APIRouter(tags=["santé"])
+routeur_evenements = APIRouter(prefix="/api/v1/events", tags=["événements"])
+routeur_seances = APIRouter(tags=["séances"])
+routeur_lieux = APIRouter(prefix="/api/v1/venues", tags=["lieux"])
+
+# Écritures réservées au scope events:write seul (décision Q5 du plan BIL-004).
+EcrivainDep = Annotated[Appelant, Depends(exige_scopes("events:write"))]
+PageDep = Annotated[int, Query(ge=PAGE_MINIMALE)]
+TailleDep = Annotated[int, Query(ge=TAILLE_MINIMALE, le=TAILLE_MAXIMALE)]
+
+BASE_INDISPONIBLE_ECRITURE = reponse_probleme("Base injoignable (BASE_INDISPONIBLE).")
+BASE_INDISPONIBLE_LISTE = reponse_probleme(
+    "Base injoignable et données absentes du cache (BASE_INDISPONIBLE)."
+)
+BASE_INDISPONIBLE_LECTURE = reponse_probleme(
+    "Base injoignable et donnée absente du cache (BASE_INDISPONIBLE)."
+)
+IDENTIFIANT_INVALIDE = reponse_probleme("Identifiant invalide (REQUETE_INVALIDE).")
+
+
+def _evenement(evenement: domaine.Evenement) -> Evenement:
+    return Evenement(
+        id=evenement.id,
+        nom=evenement.nom,
+        description=evenement.description,
+        cree_le=evenement.cree_le,
+    )
+
+
+def _lieu(lieu: domaine.Lieu) -> Lieu:
+    return Lieu(
+        id=lieu.id, nom=lieu.nom, adresse=lieu.adresse, ville=lieu.ville, cree_le=lieu.cree_le
+    )
+
+
+def _seance(seance: domaine.Seance) -> Seance:
+    return Seance(
+        id=seance.id,
+        evenement_id=seance.evenement_id,
+        lieu_id=seance.lieu_id,
+        debut=seance.debut,
+        annulee=seance.annulee,
+        categories=[
+            Categorie(
+                id=categorie.id,
+                nom=categorie.nom,
+                prix=categorie.prix,
+                rangs=[
+                    Rang(rang=rang.rang, nombre_places=rang.nombre_places)
+                    for rang in categorie.rangs
+                ],
+            )
+            for categorie in seance.categories
+        ],
+    )
 
 
 @routeur_sante.get(
@@ -23,10 +110,267 @@ async def sante(session: SessionDep) -> Sante:
     try:
         await session.execute(text("SELECT 1"))
     except (SQLAlchemyError, OSError) as erreur:
-        raise ErreurMetier(
-            "BASE_INDISPONIBLE",
-            503,
-            "La base de données ne répond pas.",
-            titre="Service indisponible",
-        ) from erreur
+        raise BaseIndisponible() from erreur
     return Sante(statut="ok")
+
+
+@routeur_evenements.get(
+    "",
+    operation_id="listerEvenements",
+    response_model=EvenementPage,
+    response_description="Page d'événements (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        422: reponse_probleme(
+            "Filtres ou pagination invalides, ou du postérieur à au (REQUETE_INVALIDE)."
+        ),
+        503: BASE_INDISPONIBLE_LISTE,
+    },
+    summary="Rechercher les événements, page par page (route publique)",
+    description=(
+        "Filtres facultatifs et cumulables. q cherche dans le nom et la description ; ville, du"
+        " et au retiennent les événements qui ont au moins une séance dans cette ville et dans"
+        " cet intervalle (bornes incluses). Ordre stable par date de création croissante, puis"
+        " identifiant."
+    ),
+)
+async def lister_evenements(
+    depot: DepotDep,
+    q: Annotated[TexteRecherche | None, Query()] = None,
+    ville: Annotated[TexteRecherche | None, Query()] = None,
+    # Dates avec fuseau obligatoire (décision Q8 du plan) : sinon 422 REQUETE_INVALIDE.
+    du: Annotated[AwareDatetime | None, Query()] = None,
+    au: Annotated[AwareDatetime | None, Query()] = None,
+    page: PageDep = PAGE_PAR_DEFAUT,
+    size: TailleDep = TAILLE_PAR_DEFAUT,
+) -> EvenementPage:
+    if du is not None and au is not None and du > au:
+        # Décision S1 : même réponse qu'une erreur de validation, qui nomme le paramètre fautif.
+        raise RequestValidationError(
+            [
+                {
+                    "type": "value_error",
+                    "loc": ("query", "du"),
+                    "msg": "du doit être antérieur ou égal à au",
+                    "input": du.isoformat(),
+                }
+            ]
+        )
+    filtres = domaine.FiltresEvenements(q=q, ville=ville, du=du, au=au)
+    resultat = await domaine.lister_evenements(depot, filtres, page, size)
+    return EvenementPage(
+        elements=[_evenement(evenement) for evenement in resultat.elements],
+        page=page,
+        size=size,
+        total=resultat.total,
+    )
+
+
+@routeur_evenements.post(
+    "",
+    operation_id="creerEvenement",
+    status_code=201,
+    response_model=Evenement,
+    response_description="Événement créé.",
+    responses={
+        **REPONSES_AUTH,
+        422: reponse_probleme("Corps invalide (REQUETE_INVALIDE)."),
+        503: BASE_INDISPONIBLE_ECRITURE,
+    },
+    summary="Créer un événement (scope events:write ; admin)",
+)
+async def creer_evenement(
+    corps: EvenementCreation, depot: DepotDep, _appelant: EcrivainDep
+) -> Evenement:
+    return _evenement(await domaine.creer_evenement(depot, corps.nom, corps.description))
+
+
+@routeur_evenements.get(
+    "/{evenement_id}",
+    operation_id="lireEvenement",
+    response_model=Evenement,
+    response_description="Détail de l'événement (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        404: reponse_probleme("Aucun événement avec cet identifiant (EVENT_NOT_FOUND)."),
+        422: IDENTIFIANT_INVALIDE,
+        503: BASE_INDISPONIBLE_LECTURE,
+    },
+    summary="Lire le détail d'un événement (route publique)",
+)
+async def lire_evenement(evenement_id: UUID, depot: DepotDep) -> Evenement:
+    return _evenement(await domaine.lire_evenement(depot, evenement_id))
+
+
+@routeur_seances.get(
+    "/api/v1/events/{evenement_id}/shows",
+    operation_id="listerSeances",
+    response_model=SeancePage,
+    response_description="Page de séances (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        404: reponse_probleme("Aucun événement avec cet identifiant (EVENT_NOT_FOUND)."),
+        422: reponse_probleme(
+            "Identifiant ou paramètres de pagination invalides (REQUETE_INVALIDE)."
+        ),
+        503: BASE_INDISPONIBLE_LISTE,
+    },
+    summary=(
+        "Lister les séances d'un événement avec leurs catégories, page par page (route publique)"
+    ),
+    description="Ordre stable par début croissant, puis identifiant.",
+)
+async def lister_seances(
+    evenement_id: UUID,
+    depot: DepotDep,
+    page: PageDep = PAGE_PAR_DEFAUT,
+    size: TailleDep = TAILLE_PAR_DEFAUT,
+) -> SeancePage:
+    resultat = await domaine.lister_seances(depot, evenement_id, page, size)
+    return SeancePage(
+        elements=[_seance(seance) for seance in resultat.elements],
+        page=page,
+        size=size,
+        total=resultat.total,
+    )
+
+
+@routeur_seances.post(
+    "/api/v1/events/{evenement_id}/shows",
+    operation_id="creerSeance",
+    status_code=201,
+    response_model=Seance,
+    response_description="Séance créée.",
+    responses={
+        **REPONSES_AUTH,
+        404: reponse_probleme("Événement ou lieu inconnu (EVENT_NOT_FOUND, VENUE_NOT_FOUND)."),
+        422: reponse_probleme(
+            "Identifiant ou corps invalide (REQUETE_INVALIDE), début dans le passé"
+            " (SHOW_START_IN_PAST) ou même rang deux fois dans la séance, dans une même catégorie"
+            " ou dans deux (ROW_ALREADY_ASSIGNED)."
+        ),
+        503: BASE_INDISPONIBLE_ECRITURE,
+    },
+    summary=(
+        "Programmer une séance dans un lieu, avec ses catégories de places (scope events:write ;"
+        " admin)"
+    ),
+    description=(
+        "Publie ticketing.show.scheduled, qui porte aussi le nom de l'événement, le nom et la"
+        " ville du lieu."
+    ),
+)
+async def creer_seance(
+    evenement_id: UUID,
+    corps: SeanceCreation,
+    depot: DepotDep,
+    maintenant: MaintenantDep,
+    _appelant: EcrivainDep,
+) -> Seance:
+    nouvelle = domaine.NouvelleSeance(
+        lieu_id=corps.lieu_id,
+        debut=corps.debut,
+        categories=[
+            domaine.NouvelleCategorie(
+                nom=categorie.nom,
+                prix=categorie.prix,
+                rangs=[
+                    domaine.Rang(rang=rang.rang, nombre_places=rang.nombre_places)
+                    for rang in categorie.rangs
+                ],
+            )
+            for categorie in corps.categories
+        ],
+    )
+    return _seance(await domaine.programmer_seance(depot, evenement_id, nouvelle, maintenant))
+
+
+@routeur_seances.get(
+    "/api/v1/events/{evenement_id}/shows/{seance_id}",
+    operation_id="lireSeance",
+    response_model=Seance,
+    response_description="Séance (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        404: reponse_probleme("Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND)."),
+        422: IDENTIFIANT_INVALIDE,
+        503: BASE_INDISPONIBLE_LECTURE,
+    },
+    summary="Lire une séance avec ses catégories de places (route publique)",
+)
+async def lire_seance(evenement_id: UUID, seance_id: UUID, depot: DepotDep) -> Seance:
+    return _seance(await domaine.lire_seance(depot, evenement_id, seance_id))
+
+
+@routeur_seances.get(
+    "/api/v1/shows/{seance_id}",
+    operation_id="lireSeanceParId",
+    response_model=Seance,
+    response_description="Séance (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        404: reponse_probleme("Aucune séance avec cet identifiant (SHOW_NOT_FOUND)."),
+        422: IDENTIFIANT_INVALIDE,
+        503: BASE_INDISPONIBLE_LECTURE,
+    },
+    summary=(
+        "Lire une séance par son seul identifiant, avec ses catégories de places (route publique)"
+    ),
+    description="Utilisée notamment par Commandes, qui ne connaît que la séance de la commande.",
+)
+async def lire_seance_par_id(seance_id: UUID, depot: DepotDep) -> Seance:
+    return _seance(await domaine.lire_seance_par_id(depot, seance_id))
+
+
+@routeur_lieux.get(
+    "",
+    operation_id="listerLieux",
+    response_model=LieuPage,
+    response_description="Page de lieux (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        422: reponse_probleme("Paramètres de pagination invalides (REQUETE_INVALIDE)."),
+        503: BASE_INDISPONIBLE_LISTE,
+    },
+    summary="Lister les lieux, page par page (route publique)",
+    description="Ordre stable par date de création croissante, puis identifiant.",
+)
+async def lister_lieux(
+    depot: DepotDep,
+    page: PageDep = PAGE_PAR_DEFAUT,
+    size: TailleDep = TAILLE_PAR_DEFAUT,
+) -> LieuPage:
+    resultat = await domaine.lister_lieux(depot, page, size)
+    return LieuPage(
+        elements=[_lieu(lieu) for lieu in resultat.elements],
+        page=page,
+        size=size,
+        total=resultat.total,
+    )
+
+
+@routeur_lieux.post(
+    "",
+    operation_id="creerLieu",
+    status_code=201,
+    response_model=Lieu,
+    response_description="Lieu créé.",
+    responses={
+        **REPONSES_AUTH,
+        422: reponse_probleme("Corps invalide (REQUETE_INVALIDE)."),
+        503: BASE_INDISPONIBLE_ECRITURE,
+    },
+    summary="Créer un lieu (scope events:write ; admin)",
+)
+async def creer_lieu(corps: LieuCreation, depot: DepotDep, _appelant: EcrivainDep) -> Lieu:
+    return _lieu(await domaine.creer_lieu(depot, corps.nom, corps.adresse, corps.ville))
+
+
+@routeur_lieux.get(
+    "/{lieu_id}",
+    operation_id="lireLieu",
+    response_model=Lieu,
+    response_description="Lieu (depuis le cache Redis si la base ne répond pas).",
+    responses={
+        404: reponse_probleme("Aucun lieu avec cet identifiant (VENUE_NOT_FOUND)."),
+        422: IDENTIFIANT_INVALIDE,
+        503: BASE_INDISPONIBLE_LECTURE,
+    },
+    summary="Lire un lieu (route publique)",
+)
+async def lire_lieu(lieu_id: UUID, depot: DepotDep) -> Lieu:
+    return _lieu(await domaine.lire_lieu(depot, lieu_id))

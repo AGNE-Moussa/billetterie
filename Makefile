@@ -2,7 +2,7 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up observabilite pannes down reset test test-unit test-integration test-smoke lint typecheck
+.PHONY: help init up observabilite pannes down reset demo test test-unit test-integration test-smoke lint typecheck
 
 # Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
 TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
@@ -16,6 +16,7 @@ help:
 	@echo   pannes            rejoue les scenarios de panne (docs/pannes-infra.md), plateforme demarree
 	@echo   down              arrete la plateforme locale (observabilite comprise)
 	@echo   reset             arrete la plateforme et efface ses donnees (volumes)
+	@echo   demo              charge le jeu de demonstration du catalogue, plateforme demarree
 	@echo   test              lance tous les tests (pytest)
 	@echo   test-unit         tests unitaires, rapides, sans Docker
 	@echo   test-integration  tests d'integration (Testcontainers, Docker requis)
@@ -40,6 +41,9 @@ down:
 
 reset:
 	docker compose --profile observabilite down --volumes
+
+demo:
+	docker compose run --rm catalogue-migrations python -m catalogue.demo
 
 test:
 	uv run pytest

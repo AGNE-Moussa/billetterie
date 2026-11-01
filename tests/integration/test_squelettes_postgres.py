@@ -42,6 +42,8 @@ DELAI_OBSERVATION = 10.0
 CONNEXION_BORNEE = {"timeout": 30, "command_timeout": 30}
 
 REQUETE_VERSIONS = "SELECT version_num FROM alembic_version"
+# Ressources routées par Traefik quand elles diffèrent de la seule ressource du squelette.
+PREFIXES_ROUTES = {"catalogue": ("events", "venues", "shows")}
 Observation = Callable[[], Awaitable[str]]
 Alembic = Callable[[str, str], Awaitable[None]]
 
@@ -179,6 +181,13 @@ async def client_sans_consul(squelette: Any, database_url: str) -> AsyncIterator
         await _borne(f"arrêt du lifespan ({squelette.nom}, sans Consul)", pile.aclose())
 
 
+# Décision Q18 du plan BIL-004 : catalogue quitte l'état de squelette (ses tables et sa
+# migration sont couvertes par services/catalogue/tests/integration/) ; il reste dans les cas
+# de santé et de Consul ci-dessous.
+SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue")
+
+
+@SQUELETTES_VIDES
 async def test_la_migration_initiale_s_applique_sur_la_base_du_service(
     database_url: str, alembic: Alembic
 ) -> None:
@@ -188,6 +197,7 @@ async def test_la_migration_initiale_s_applique_sur_la_base_du_service(
     assert await _tables_publiques(database_url) == {"alembic_version"}
 
 
+@SQUELETTES_VIDES
 async def test_la_migration_initiale_se_rejoue_sans_effet(
     database_url: str, alembic: Alembic
 ) -> None:
@@ -199,6 +209,7 @@ async def test_la_migration_initiale_se_rejoue_sans_effet(
     assert await _tables_publiques(database_url) == {"alembic_version"}
 
 
+@SQUELETTES_VIDES
 async def test_la_migration_initiale_se_defait(database_url: str, alembic: Alembic) -> None:
     await alembic("upgrade", "head")
 
@@ -347,10 +358,12 @@ async def test_chaque_service_s_inscrit_dans_consul_avec_ses_tags_son_check_et_s
 
     tags = inscrit["Tags"]
     ressource = squelette.ressource
-    # Route du préfixe (E2).
+    # Route du préfixe (E2) ; catalogue route trois ressources (décision Q2 du plan BIL-004).
+    prefixes = PREFIXES_ROUTES.get(nom, (ressource,))
+    regle = " || ".join(f"PathPrefix(`/api/v1/{prefixe}`)" for prefixe in prefixes)
     assert set(tags) >= {
         "traefik.enable=true",
-        f"traefik.http.routers.{nom}.rule=PathPrefix(`/api/v1/{ressource}`)",
+        f"traefik.http.routers.{nom}.rule={regle}",
         f"traefik.http.routers.{nom}.entrypoints=web",
         f"traefik.http.routers.{nom}.middlewares=standard@file",
     }

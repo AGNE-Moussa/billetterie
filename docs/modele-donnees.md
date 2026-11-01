@@ -47,17 +47,22 @@ erDiagram
     uuid seance_id FK
     varchar_100 nom
     integer prix "CHECK > 0, centimes"
+    integer position "dans la séance, à partir de 0"
   }
   rangs {
     uuid seance_id PK, FK
     varchar_10 rang PK
     uuid categorie_id FK
     integer nombre_places "CHECK >= 1"
+    integer position "dans la catégorie, à partir de 0"
   }
 ```
 
 - `rangs` a pour clé `(seance_id, rang)` : un rang n'appartient qu'à une catégorie de la séance
   (`ROW_ALREADY_ASSIGNED`).
+- `position` (`NOT NULL`) de `categories` et de `rangs` : index de l'élément dans la requête de
+  création de la séance. Les lectures trient sur `position`, jamais sur l'ordre physique des
+  lignes (`ctid`).
 - Recherche (`q`, `ville`, `du`, `au`) : jointure locale `evenements`, `seances`, `lieux`.
 
 ## Billets

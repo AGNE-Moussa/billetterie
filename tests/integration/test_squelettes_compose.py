@@ -10,6 +10,8 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 # Bases de la plateforme locale (infra/postgres/init/01-bases.sh).
 BASES = {"echo", "keycloak", "catalogue", "billets", "commandes", "paiements", "notifications"}
 COMMANDE_MIGRATIONS = ["alembic", "upgrade", "head"]
@@ -111,6 +113,9 @@ def test_aucun_squelette_ne_publie_de_port_sur_l_hote(
             assert not _definition(config_locale, conteneur).get("ports"), conteneur
 
 
+# Décisions Q16 et Q18 du plan BIL-004 : catalogue publie par l'outbox, son relais a besoin de
+# RabbitMQ ; il n'est plus un squelette vide.
+@pytest.mark.sauf_services("catalogue")
 def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelette: Any) -> None:
     for conteneur in _conteneurs(squelette):
         definition = _definition(config_locale, conteneur)

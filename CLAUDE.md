@@ -21,6 +21,7 @@ make up / make down        # démarrer (attend healthy) / arrêter la plateforme
 make observabilite         # démarrer avec Prometheus et Grafana (profil Compose observabilite)
 make pannes                # rejouer les scénarios de panne (docs/pannes-infra.md)
 make reset                 # tout arrêter et effacer les volumes (rejoue l'init des bases)
+make demo                  # charger le jeu de démonstration du catalogue (plateforme démarrée)
 make test                  # tous les tests (uv run pytest)
 make test-unit             # tests unitaires (tests/unit et services/*/tests/unit), sans Docker
 make test-integration      # tests d'intégration (Testcontainers, Docker requis)
