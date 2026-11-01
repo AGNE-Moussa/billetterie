@@ -48,6 +48,15 @@ class Service:
     ressource: str
     base: str
     instances: tuple[str, ...]
+    # Ressources routées en plus de `ressource` (catalogue : venues et shows, décision Q2 de
+    # BIL-004) ; la santé reste sous `ressource`.
+    autres_ressources: tuple[str, ...] = ()
+
+    @property
+    def regle_prefixe(self) -> str:
+        return " || ".join(
+            f"PathPrefix(`/api/v1/{r}`)" for r in (self.ressource, *self.autres_ressources)
+        )
 
     @property
     def dossier(self) -> Path:
@@ -60,13 +69,16 @@ class Service:
 
 # Données communes du plan (docs/test-plans/BIL-001.md), déclarées une seule fois.
 SERVICES = [
-    Service("catalogue", "events", "catalogue", ("catalogue-1",)),
+    Service("catalogue", "events", "catalogue", ("catalogue-1",), ("venues", "shows")),
     Service("billets", "seats", "billets", ("billets-1", "billets-2")),
     Service("commandes", "orders", "commandes", ("commandes-1", "commandes-2")),
     Service("paiements", "payments", "paiements", ("paiements-1",)),
     Service("notifications", "notifications", "notifications", ("notifications-1",)),
 ]
 PAR_SERVICE = pytest.mark.parametrize("service", SERVICES, ids=[s.nom for s in SERVICES])
+# Services encore à l'état de squelette vide : catalogue en sort avec BIL-004 (décision Q18).
+SQUELETTES = [s for s in SERVICES if s.nom != "catalogue"]
+PAR_SQUELETTE = pytest.mark.parametrize("service", SQUELETTES, ids=[s.nom for s in SQUELETTES])
 
 
 def _module(service: Service, chemin: str) -> ModuleType:
@@ -129,7 +141,7 @@ def _lignes_dockerfile(fichier: Path) -> list[str]:
 # --- E1 : contrat, santé, corrélation, métriques, workspace, arborescence -----------------------
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 def test_chaque_contrat_ne_declare_que_get_health(service: Service) -> None:
     contrat = _charger_yaml(service.dossier / "openapi.yaml")
 
@@ -256,7 +268,7 @@ def test_chaque_service_annonce_la_route_de_son_prefixe(
     assert service.nom == principal.NOM_SERVICE
     assert tags == [
         "traefik.enable=true",
-        f"traefik.http.routers.{service.nom}.rule=PathPrefix(`/api/v1/{service.ressource}`)",
+        f"traefik.http.routers.{service.nom}.rule={service.regle_prefixe}",
         f"traefik.http.routers.{service.nom}.entrypoints=web",
         f"traefik.http.routers.{service.nom}.middlewares=standard@file",
     ]
@@ -266,12 +278,11 @@ def test_les_prefixes_des_services_sont_distincts() -> None:
     ressources = [r for s in SERVICES for r in _module(s, "principal").RESSOURCES]
     ressources_echo = list(importlib.import_module("echo.principal").RESSOURCES)
     ressources += ressources_echo
-    # Une ressource par service de la table, plus celle(s) d'echo.
-    attendu = len(SERVICES) + len(ressources_echo)
+    # Les ressources de chaque service de la table, plus celle(s) d'echo.
+    attendu = sum(1 + len(s.autres_ressources) for s in SERVICES) + len(ressources_echo)
 
     assert len(ressources) == attendu
     assert len(set(ressources)) == attendu
-    assert importlib.import_module("catalogue.principal").RESSOURCES == ("events",)
     prefixes = [f"/api/v1/{r}" for r in ressources]
     for prefixe in prefixes:
         for autre in prefixes:
@@ -365,7 +376,7 @@ async def test_les_tags_de_sante_routent_le_prefixe_vers_health(
     locaux = {m.removesuffix("@consulcatalog") for m in middlewares}
     assert locaux & _reecritures_vers_health(tags), "aucun middleware ne réécrit en /health"
     # Le routeur du préfixe reste en place.
-    assert routeurs[service.nom]["rule"] == f"PathPrefix(`/api/v1/{service.ressource}`)"
+    assert routeurs[service.nom]["rule"] == service.regle_prefixe
 
 
 @PAR_SERVICE
@@ -420,7 +431,7 @@ def test_le_routeur_de_sante_refuse_une_ressource_vide() -> None:
 # --- E3 : migration initiale vide, base du service -----------------------------------------------
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 def test_chaque_service_a_une_seule_migration_initiale_vide(service: Service) -> None:
     ini = service.dossier / "alembic.ini"
     assert ini.is_file(), f"{ini} absent"
@@ -435,7 +446,7 @@ def test_chaque_service_a_une_seule_migration_initiale_vide(service: Service) ->
     assert dict(_module(service, "infra.base").Base.metadata.tables) == {}
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 def test_l_environnement_alembic_ne_charge_pas_les_tables_de_messagerie(
     service: Service, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -488,7 +499,7 @@ def _chemins(routes: Sequence[Any], prefixe: str = "") -> list[str]:
     return chemins
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 def test_chaque_service_n_expose_que_la_sante_et_les_metriques(service: Service) -> None:
     app = _creer_app(service, _url_synthetique(service), consul_actif=False)
 
@@ -498,7 +509,7 @@ def test_chaque_service_n_expose_que_la_sante_et_les_metriques(service: Service)
     assert set(app.openapi()["paths"]) == {"/health"}
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 async def test_une_route_sous_le_prefixe_du_service_n_existe_pas_encore(
     service: Service,
 ) -> None:
@@ -527,7 +538,7 @@ async def test_une_route_sous_le_prefixe_du_service_n_existe_pas_encore(
         }
 
 
-@PAR_SERVICE
+@PAR_SQUELETTE
 def test_aucun_service_ne_declare_de_table_ni_d_evenement(service: Service) -> None:
     sources = service.dossier / "src" / service.nom
     usages = [

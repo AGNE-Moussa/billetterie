@@ -1,4 +1,5 @@
-"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, routes.
+"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, relais de
+l'outbox, routes.
 
 Lancement : uvicorn --factory catalogue.principal:creer_app
 """
@@ -7,9 +8,15 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from catalogue.api.routes import routeur_sante
+from catalogue.api.routes import (
+    routeur_evenements,
+    routeur_lieux,
+    routeur_sante,
+    routeur_seances,
+)
 from catalogue.config import Parametres, parametres
 from catalogue.infra.base import creer_moteur
 from commun.auth import installer_auth
@@ -17,10 +24,13 @@ from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
+from commun.outbox import RelaisOutbox
 from commun.registre import inscription, tags_sante_traefik, tags_traefik
 
 NOM_SERVICE = "catalogue"
-RESSOURCES = ("events",)
+# Ressources routées par Traefik vers catalogue (décision Q2 du plan BIL-004) ; la santé reste
+# sous la première.
+RESSOURCES = ("events", "venues", "shows")
 
 
 def creer_app(
@@ -35,7 +45,7 @@ def creer_app(
 
     @asynccontextmanager
     async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
-        moteur = creer_moteur(config.database_url)
+        moteur = creer_moteur(config.database_url, config.delai_base)
         instrumenter_moteur(moteur)
         app.state.sessions = async_sessionmaker(moteur, expire_on_commit=False)
         try:
@@ -54,6 +64,12 @@ def creer_app(
                             ],
                         )
                     )
+                if config.rabbitmq_url:
+                    # Relais de l'outbox : publie ticketing.show.scheduled (décision Q16).
+                    broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
+                    pile.push_async_callback(broker.stop)
+                    relais = RelaisOutbox(app.state.sessions, broker)
+                    await pile.enter_async_context(relais.en_fond())
                 yield
         finally:
             await moteur.dispose()
@@ -66,4 +82,7 @@ def creer_app(
     app.add_middleware(MiddlewareCorrelation)
     installer_observabilite(app, NOM_SERVICE)
     app.include_router(routeur_sante)
+    app.include_router(routeur_evenements)
+    app.include_router(routeur_seances)
+    app.include_router(routeur_lieux)
     return app

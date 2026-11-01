@@ -32,5 +32,9 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
 - **Santé** : `/health` sur chaque service, utilisé par Consul. Les services métier l'exposent
   aussi par la gateway sous `GET /api/v1/<ressource>/health`, avec jeton (chaîne
   `standard@file`), par les tags de `commun.registre.tags_sante_traefik` (réécriture en
-  `/health`) ; cette route reste hors contrat.
+  `/health`) ; cette route reste hors contrat. Exception : un service dont les lectures sont
+  publiques (préfixe déclaré dans `ROUTES_PUBLIQUES` du vérificateur, qui couvre les
+  sous-chemins) expose aussi sa santé sans jeton ; c'est le cas de catalogue
+  (`GET /api/v1/events/health`, décision BIL-004), dont le corps `{"statut": "ok"}` ne révèle
+  rien.
 - **Configuration** : variables d'environnement uniquement, aucun secret dans le dépôt.

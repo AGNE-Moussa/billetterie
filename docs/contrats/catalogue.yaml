@@ -5,8 +5,8 @@
 # réservées à l'admin. Les catégories de places tarifées d'une séance sont créées avec elle et
 # lues dans la séance. À la création d'une séance, Catalogue publie ticketing.show.scheduled
 # (Billets en crée les places) ; à son annulation, ticketing.show.cancelled.
-# Ressources routées par Traefik : events, venues et shows (préfixe shows à ajouter aux tags
-# Traefik et à ROUTES_PUBLIQUES au ticket US).
+# Ressources routées par Traefik : events, venues et shows (tags Traefik et ROUTES_PUBLIQUES
+# posés par BIL-004).
 openapi: 3.1.0
 info:
   title: Service catalogue
@@ -148,6 +148,12 @@ paths:
                 $ref: '#/components/schemas/Probleme'
         '422':
           description: Corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:
@@ -304,6 +310,12 @@ paths:
           description: Identifiant ou corps invalide (REQUETE_INVALIDE), début dans le passé
             (SHOW_START_IN_PAST) ou même rang deux fois dans la séance, dans une même catégorie
             ou dans deux (ROW_ALREADY_ASSIGNED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:
@@ -534,6 +546,12 @@ paths:
                 $ref: '#/components/schemas/Probleme'
         '422':
           description: Corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:

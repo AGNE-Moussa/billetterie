@@ -57,11 +57,25 @@ SERVICES = (
 )
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "sauf_services(*noms): retire ces services de la paramétrisation par squelette (un"
+        " service qui a quitté l'état de squelette, décision Q18 du plan BIL-004)",
+    )
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     # Portée module : les conteneurs d'un service (base, Consul) sont partagés par ses tests.
     if "squelette" in metafunc.fixturenames:
+        exclus = {
+            nom
+            for marque in metafunc.definition.iter_markers("sauf_services")
+            for nom in marque.args
+        }
+        services = [service for service in SERVICES if service.nom not in exclus]
         metafunc.parametrize(
-            "squelette", SERVICES, ids=[service.nom for service in SERVICES], scope="module"
+            "squelette", services, ids=[service.nom for service in services], scope="module"
         )
 
 

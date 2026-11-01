@@ -231,7 +231,12 @@ services:
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWT_AUDIENCE: billetterie-api
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
-      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-}
+      # Routes ouvertes sans jeton : lectures du catalogue (BIL-004, décision Q3). Ce sont des
+      # préfixes : toute route GET, présente ou future, sous /api/v1/events, /api/v1/venues ou
+      # /api/v1/shows est publique à la gateway (santé /api/v1/events/health comprise, Q4).
+      # Une telle route qui doit être protégée le reste par la revérification du jeton dans le
+      # service (AppelantDep, exige_scopes, exige_role) : ne jamais compter sur la gateway seule.
+      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-GET /api/v1/events,GET /api/v1/venues,GET /api/v1/shows}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
     networks: [billetterie]
 
@@ -281,7 +286,8 @@ services:
   # tant qu'un service ne publie ni ne consomme d'événement. Aucun port publié : tout passe
   # par Traefik (routes annoncées dans Consul par chaque instance).
 
-  # Catalogue : /api/v1/events.
+  # Catalogue : /api/v1/events, /api/v1/venues, /api/v1/shows (BIL-004). Publie
+  # ticketing.show.scheduled par l'outbox : son relais a besoin de RabbitMQ.
   catalogue-migrations:
     image: billetterie/catalogue:dev
     build:
@@ -291,6 +297,8 @@ services:
     environment: &catalogue-env
       DATABASE_URL: postgresql+asyncpg://catalogue:${CATALOGUE_DB_PASSWORD:?à définir dans .env}@postgres:5432/catalogue
       CONSUL_URL: http://consul:8500
+      # Relais de l'outbox : publie les événements sur l'exchange ticketing.
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -308,6 +316,8 @@ services:
       catalogue-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks: [billetterie]
 
