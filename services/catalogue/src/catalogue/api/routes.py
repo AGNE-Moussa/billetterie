@@ -4,16 +4,22 @@ Lectures publiques ; créations réservées au scope events:write. Les règles v
 domaine/catalogue.py : les routes traduisent les corps et les réponses.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import AwareDatetime
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from catalogue.api.dependances import DepotDep, MaintenantDep, SessionDep
+from catalogue.api.cache_lectures import (
+    EN_TETE_CACHE_PERIME,
+    FAMILLE_EVENEMENTS,
+    FAMILLE_LIEUX,
+    famille_seances,
+)
+from catalogue.api.dependances import DepotDep, LecturesDep, MaintenantDep, SessionDep
 from catalogue.api.schemas import (
     Categorie,
     Evenement,
@@ -59,6 +65,21 @@ BASE_INDISPONIBLE_LECTURE = reponse_probleme(
     "Base injoignable et donnée absente du cache (BASE_INDISPONIBLE)."
 )
 IDENTIFIANT_INVALIDE = reponse_probleme("Identifiant invalide (REQUETE_INVALIDE).")
+
+# Lectures servies par le cache Redis (BIL-005) : la route renvoie le corps JSON déjà
+# sérialisé (`LecturesEnCache.servir`), identique octet pour octet entre la base et le cache ;
+# `response_model` reste déclaré pour le contrat. En-tête de la copie de secours : D1 à D4.
+REPONSE_LECTURE: dict[str, Any] = {
+    "headers": {
+        EN_TETE_CACHE_PERIME: {
+            "description": (
+                "Présent, valeur true, seulement quand la réponse vient du cache Redis parce que"
+                " la base ne répond pas (mode dégradé) ; absent sinon."
+            ),
+            "schema": {"type": "string", "enum": ["true"]},
+        }
+    }
+}
 
 
 def _evenement(evenement: domaine.Evenement) -> Evenement:
@@ -123,6 +144,7 @@ async def sante(session: SessionDep) -> Sante:
         422: reponse_probleme(
             "Filtres ou pagination invalides, ou du postérieur à au (REQUETE_INVALIDE)."
         ),
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LISTE,
     },
     summary="Rechercher les événements, page par page (route publique)",
@@ -135,6 +157,7 @@ async def sante(session: SessionDep) -> Sante:
 )
 async def lister_evenements(
     depot: DepotDep,
+    lectures: LecturesDep,
     q: Annotated[TexteRecherche | None, Query()] = None,
     ville: Annotated[TexteRecherche | None, Query()] = None,
     # Dates avec fuseau obligatoire (décision Q8 du plan) : sinon 422 REQUETE_INVALIDE.
@@ -142,7 +165,7 @@ async def lister_evenements(
     au: Annotated[AwareDatetime | None, Query()] = None,
     page: PageDep = PAGE_PAR_DEFAUT,
     size: TailleDep = TAILLE_PAR_DEFAUT,
-) -> EvenementPage:
+) -> Response:
     if du is not None and au is not None and du > au:
         # Décision S1 : même réponse qu'une erreur de validation, qui nomme le paramètre fautif.
         raise RequestValidationError(
@@ -156,12 +179,21 @@ async def lister_evenements(
             ]
         )
     filtres = domaine.FiltresEvenements(q=q, ville=ville, du=du, au=au)
-    resultat = await domaine.lister_evenements(depot, filtres, page, size)
-    return EvenementPage(
-        elements=[_evenement(evenement) for evenement in resultat.elements],
-        page=page,
-        size=size,
-        total=resultat.total,
+
+    async def lire() -> EvenementPage:
+        resultat = await domaine.lister_evenements(depot, filtres, page, size)
+        return EvenementPage(
+            elements=[_evenement(evenement) for evenement in resultat.elements],
+            page=page,
+            size=size,
+            total=resultat.total,
+        )
+
+    return await lectures.servir(
+        "listerEvenements",
+        {"q": q, "ville": ville, "du": du, "au": au, "page": page, "size": size},
+        lire,
+        famille=FAMILLE_EVENEMENTS,
     )
 
 
@@ -179,9 +211,12 @@ async def lister_evenements(
     summary="Créer un événement (scope events:write ; admin)",
 )
 async def creer_evenement(
-    corps: EvenementCreation, depot: DepotDep, _appelant: EcrivainDep
+    corps: EvenementCreation, depot: DepotDep, lectures: LecturesDep, _appelant: EcrivainDep
 ) -> Evenement:
-    return _evenement(await domaine.creer_evenement(depot, corps.nom, corps.description))
+    cree = await domaine.creer_evenement(depot, corps.nom, corps.description)
+    # Après le commit seulement (Q15) : une erreur plus haut n'invalide rien.
+    await lectures.invalider(FAMILLE_EVENEMENTS)
+    return _evenement(cree)
 
 
 @routeur_evenements.get(
@@ -192,12 +227,16 @@ async def creer_evenement(
     responses={
         404: reponse_probleme("Aucun événement avec cet identifiant (EVENT_NOT_FOUND)."),
         422: IDENTIFIANT_INVALIDE,
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LECTURE,
     },
     summary="Lire le détail d'un événement (route publique)",
 )
-async def lire_evenement(evenement_id: UUID, depot: DepotDep) -> Evenement:
-    return _evenement(await domaine.lire_evenement(depot, evenement_id))
+async def lire_evenement(evenement_id: UUID, depot: DepotDep, lectures: LecturesDep) -> Response:
+    async def lire() -> Evenement:
+        return _evenement(await domaine.lire_evenement(depot, evenement_id))
+
+    return await lectures.servir("lireEvenement", {"evenement_id": evenement_id}, lire)
 
 
 @routeur_seances.get(
@@ -210,6 +249,7 @@ async def lire_evenement(evenement_id: UUID, depot: DepotDep) -> Evenement:
         422: reponse_probleme(
             "Identifiant ou paramètres de pagination invalides (REQUETE_INVALIDE)."
         ),
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LISTE,
     },
     summary=(
@@ -220,15 +260,24 @@ async def lire_evenement(evenement_id: UUID, depot: DepotDep) -> Evenement:
 async def lister_seances(
     evenement_id: UUID,
     depot: DepotDep,
+    lectures: LecturesDep,
     page: PageDep = PAGE_PAR_DEFAUT,
     size: TailleDep = TAILLE_PAR_DEFAUT,
-) -> SeancePage:
-    resultat = await domaine.lister_seances(depot, evenement_id, page, size)
-    return SeancePage(
-        elements=[_seance(seance) for seance in resultat.elements],
-        page=page,
-        size=size,
-        total=resultat.total,
+) -> Response:
+    async def lire() -> SeancePage:
+        resultat = await domaine.lister_seances(depot, evenement_id, page, size)
+        return SeancePage(
+            elements=[_seance(seance) for seance in resultat.elements],
+            page=page,
+            size=size,
+            total=resultat.total,
+        )
+
+    return await lectures.servir(
+        "listerSeances",
+        {"evenement_id": evenement_id, "page": page, "size": size},
+        lire,
+        famille=famille_seances(evenement_id),
     )
 
 
@@ -262,6 +311,7 @@ async def creer_seance(
     corps: SeanceCreation,
     depot: DepotDep,
     maintenant: MaintenantDep,
+    lectures: LecturesDep,
     _appelant: EcrivainDep,
 ) -> Seance:
     nouvelle = domaine.NouvelleSeance(
@@ -279,7 +329,11 @@ async def creer_seance(
             for categorie in corps.categories
         ],
     )
-    return _seance(await domaine.programmer_seance(depot, evenement_id, nouvelle, maintenant))
+    programmee = await domaine.programmer_seance(depot, evenement_id, nouvelle, maintenant)
+    # Après le commit seulement (Q15). Les listes d'événements dépendent des séances (filtres
+    # ville, du, au) : elles sont invalidées aussi (matrice Q13).
+    await lectures.invalider(famille_seances(evenement_id), FAMILLE_EVENEMENTS)
+    return _seance(programmee)
 
 
 @routeur_seances.get(
@@ -290,12 +344,20 @@ async def creer_seance(
     responses={
         404: reponse_probleme("Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND)."),
         422: IDENTIFIANT_INVALIDE,
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LECTURE,
     },
     summary="Lire une séance avec ses catégories de places (route publique)",
 )
-async def lire_seance(evenement_id: UUID, seance_id: UUID, depot: DepotDep) -> Seance:
-    return _seance(await domaine.lire_seance(depot, evenement_id, seance_id))
+async def lire_seance(
+    evenement_id: UUID, seance_id: UUID, depot: DepotDep, lectures: LecturesDep
+) -> Response:
+    async def lire() -> Seance:
+        return _seance(await domaine.lire_seance(depot, evenement_id, seance_id))
+
+    return await lectures.servir(
+        "lireSeance", {"evenement_id": evenement_id, "seance_id": seance_id}, lire
+    )
 
 
 @routeur_seances.get(
@@ -306,6 +368,7 @@ async def lire_seance(evenement_id: UUID, seance_id: UUID, depot: DepotDep) -> S
     responses={
         404: reponse_probleme("Aucune séance avec cet identifiant (SHOW_NOT_FOUND)."),
         422: IDENTIFIANT_INVALIDE,
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LECTURE,
     },
     summary=(
@@ -313,8 +376,11 @@ async def lire_seance(evenement_id: UUID, seance_id: UUID, depot: DepotDep) -> S
     ),
     description="Utilisée notamment par Commandes, qui ne connaît que la séance de la commande.",
 )
-async def lire_seance_par_id(seance_id: UUID, depot: DepotDep) -> Seance:
-    return _seance(await domaine.lire_seance_par_id(depot, seance_id))
+async def lire_seance_par_id(seance_id: UUID, depot: DepotDep, lectures: LecturesDep) -> Response:
+    async def lire() -> Seance:
+        return _seance(await domaine.lire_seance_par_id(depot, seance_id))
+
+    return await lectures.servir("lireSeanceParId", {"seance_id": seance_id}, lire)
 
 
 @routeur_lieux.get(
@@ -324,6 +390,7 @@ async def lire_seance_par_id(seance_id: UUID, depot: DepotDep) -> Seance:
     response_description="Page de lieux (depuis le cache Redis si la base ne répond pas).",
     responses={
         422: reponse_probleme("Paramètres de pagination invalides (REQUETE_INVALIDE)."),
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LISTE,
     },
     summary="Lister les lieux, page par page (route publique)",
@@ -331,15 +398,21 @@ async def lire_seance_par_id(seance_id: UUID, depot: DepotDep) -> Seance:
 )
 async def lister_lieux(
     depot: DepotDep,
+    lectures: LecturesDep,
     page: PageDep = PAGE_PAR_DEFAUT,
     size: TailleDep = TAILLE_PAR_DEFAUT,
-) -> LieuPage:
-    resultat = await domaine.lister_lieux(depot, page, size)
-    return LieuPage(
-        elements=[_lieu(lieu) for lieu in resultat.elements],
-        page=page,
-        size=size,
-        total=resultat.total,
+) -> Response:
+    async def lire() -> LieuPage:
+        resultat = await domaine.lister_lieux(depot, page, size)
+        return LieuPage(
+            elements=[_lieu(lieu) for lieu in resultat.elements],
+            page=page,
+            size=size,
+            total=resultat.total,
+        )
+
+    return await lectures.servir(
+        "listerLieux", {"page": page, "size": size}, lire, famille=FAMILLE_LIEUX
     )
 
 
@@ -356,8 +429,13 @@ async def lister_lieux(
     },
     summary="Créer un lieu (scope events:write ; admin)",
 )
-async def creer_lieu(corps: LieuCreation, depot: DepotDep, _appelant: EcrivainDep) -> Lieu:
-    return _lieu(await domaine.creer_lieu(depot, corps.nom, corps.adresse, corps.ville))
+async def creer_lieu(
+    corps: LieuCreation, depot: DepotDep, lectures: LecturesDep, _appelant: EcrivainDep
+) -> Lieu:
+    cree = await domaine.creer_lieu(depot, corps.nom, corps.adresse, corps.ville)
+    # Après le commit seulement (Q15).
+    await lectures.invalider(FAMILLE_LIEUX)
+    return _lieu(cree)
 
 
 @routeur_lieux.get(
@@ -368,9 +446,13 @@ async def creer_lieu(corps: LieuCreation, depot: DepotDep, _appelant: EcrivainDe
     responses={
         404: reponse_probleme("Aucun lieu avec cet identifiant (VENUE_NOT_FOUND)."),
         422: IDENTIFIANT_INVALIDE,
+        200: REPONSE_LECTURE,
         503: BASE_INDISPONIBLE_LECTURE,
     },
     summary="Lire un lieu (route publique)",
 )
-async def lire_lieu(lieu_id: UUID, depot: DepotDep) -> Lieu:
-    return _lieu(await domaine.lire_lieu(depot, lieu_id))
+async def lire_lieu(lieu_id: UUID, depot: DepotDep, lectures: LecturesDep) -> Response:
+    async def lire() -> Lieu:
+        return _lieu(await domaine.lire_lieu(depot, lieu_id))
+
+    return await lectures.servir("lireLieu", {"lieu_id": lieu_id}, lire)

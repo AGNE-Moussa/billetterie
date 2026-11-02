@@ -457,6 +457,8 @@ export interface operations {
       /** @description Page d'événements (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -557,6 +559,8 @@ export interface operations {
       /** @description Détail de l'événement (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -609,6 +613,8 @@ export interface operations {
       /** @description Page de séances (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -730,6 +736,8 @@ export interface operations {
       /** @description Séance (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -779,6 +787,8 @@ export interface operations {
       /** @description Séance (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -829,6 +839,8 @@ export interface operations {
       /** @description Page de lieux (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {
@@ -929,6 +941,8 @@ export interface operations {
       /** @description Lieu (depuis le cache Redis si la base ne répond pas). */
       200: {
         headers: {
+          /** @description Présent, valeur true, seulement quand la réponse vient du cache Redis parce que la base ne répond pas (mode dégradé) ; absent sinon. */
+          "X-Cache-Stale"?: "true";
           [name: string]: unknown;
         };
         content: {

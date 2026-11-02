@@ -104,6 +104,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvenementPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '422':
           description: Filtres ou pagination invalides, ou du postérieur à au (REQUETE_INVALIDE).
           content:
@@ -181,6 +189,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Evenement'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
           content:
@@ -239,6 +255,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SeancePage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
           content:
@@ -348,6 +372,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND).
           content:
@@ -452,6 +484,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucune séance avec cet identifiant (SHOW_NOT_FOUND).
           content:
@@ -502,6 +542,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LieuPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '422':
           description: Paramètres de pagination invalides (REQUETE_INVALIDE).
           content:
@@ -579,6 +627,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Lieu'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun lieu avec cet identifiant (VENUE_NOT_FOUND).
           content:

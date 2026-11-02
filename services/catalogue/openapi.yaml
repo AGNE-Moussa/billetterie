@@ -2,6 +2,8 @@
 # Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
 # Routes recopiées du contrat cible docs/contrats/catalogue.yaml (BIL-002) au ticket BIL-004.
 # Lectures publiques (sans jeton) ; écritures réservées à l'admin (scope events:write).
+# BIL-005 : en-tête X-Cache-Stale sur les 200 des lectures servies depuis le cache Redis en mode
+# dégradé (base injoignable).
 openapi: 3.1.0
 info:
   title: Service catalogue
@@ -99,6 +101,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvenementPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '422':
           description: Filtres ou pagination invalides, ou du postérieur à au (REQUETE_INVALIDE).
           content:
@@ -176,6 +186,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Evenement'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
           content:
@@ -234,6 +252,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SeancePage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
           content:
@@ -343,6 +369,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND).
           content:
@@ -384,6 +418,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucune séance avec cet identifiant (SHOW_NOT_FOUND).
           content:
@@ -434,6 +476,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LieuPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '422':
           description: Paramètres de pagination invalides (REQUETE_INVALIDE).
           content:
@@ -511,6 +561,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Lieu'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
         '404':
           description: Aucun lieu avec cet identifiant (VENUE_NOT_FOUND).
           content:

@@ -121,3 +121,13 @@ def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelet
         definition = _definition(config_locale, conteneur)
         assert "RABBITMQ_URL" not in (definition.get("environment") or {}), conteneur
         assert "rabbitmq" not in (definition.get("depends_on") or {}), conteneur
+
+
+# BIL-005 (Q3 du plan) : le catalogue lit son cache dans le Redis de la plateforme.
+def test_catalogue_est_configure_avec_redis(config_locale: Any) -> None:
+    instance = _definition(config_locale, "catalogue-1")
+
+    assert _environnement(config_locale, "catalogue-1").get("REDIS_URL") == ("redis://redis:6379/0")
+    assert (instance.get("depends_on") or {}).get("redis", {}).get("condition") == (
+        "service_healthy"
+    )

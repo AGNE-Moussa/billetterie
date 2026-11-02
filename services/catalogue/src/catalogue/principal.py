@@ -19,6 +19,7 @@ from catalogue.api.routes import (
 )
 from catalogue.config import Parametres, parametres
 from catalogue.infra.base import creer_moteur
+from catalogue.infra.cache import CacheRedis
 from commun.auth import installer_auth
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
@@ -70,6 +71,11 @@ def creer_app(
                     pile.push_async_callback(broker.stop)
                     relais = RelaisOutbox(app.state.sessions, broker)
                     await pile.enter_async_context(relais.en_fond())
+                if config.redis_url:
+                    # Cache des lectures (BIL-005) ; sans URL, app.state.cache reste None.
+                    cache = CacheRedis(config.redis_url, config.delai_redis)
+                    pile.push_async_callback(cache.fermer)
+                    app.state.cache = cache
                 yield
         finally:
             await moteur.dispose()
@@ -77,6 +83,7 @@ def creer_app(
 
     app = FastAPI(title="Service catalogue", version="0.1.0", lifespan=cycle_de_vie)
     app.state.parametres = config
+    app.state.cache = None
     installer_erreurs(app)
     installer_auth(app, verificateur)
     app.add_middleware(MiddlewareCorrelation)

@@ -7,12 +7,18 @@ par `httpx.ASGITransport` sous lifespan, jetons de `commun.faux_jetons.EmetteurD
 Toute lecture ou écriture directe en base passe par la fixture `base`, qui vérifie d'abord la
 présence des tables du ticket : sans la migration, le test échoue par une assertion qui le dit,
 pas par une erreur SQL.
+
+BIL-005 (plan docs/test-plans/BIL-005.md) : conteneur Redis par module (`redis`), observateur
+`cache_redis` (SCAN du seul préfixe `catalogue:cache:`, Redis vidé à chaque cas), fabrique
+`plateforme_cache` (application avec `redis_url` et durées courtes), pause Docker `en_pause`.
 """
 
 import os
 import secrets
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,8 +30,11 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from catalogue.config import Parametres
 from catalogue.principal import creer_app
@@ -315,3 +324,186 @@ async def borne[T](etape: str, attente: Awaitable[T], delai: float = DELAI_APPEL
 @pytest.fixture
 def borner() -> Any:
     return borne
+
+
+# --- Cache Redis (plan docs/test-plans/BIL-005.md) -------------------------------------------
+
+IMAGE_REDIS = "redis:7.4.6-alpine"  # même image que le service redis de compose.yaml
+# Seul nom de clé connu des tests (Q10) : le reste du format est interne au service.
+PREFIXE_CACHE = "catalogue:cache:"
+# Durées de test (Q4, Q8) : fraîcheur 1 s, delai_base 1 s. Le secours dure 20 s par défaut
+# pour qu'une lecture faite pendant la pause (jusqu'à delai_base + 5 s chacune) le trouve
+# encore ; le cas d'expiration du secours règle lui-même 5 s.
+REGLAGES_CACHE_TEST: dict[str, Any] = {
+    "cache_duree_fraiche": 1.0,
+    "cache_duree_secours": 20.0,
+    "delai_base": 1.0,
+}
+# Attente qui dépasse la fraîcheur de test : la copie fraîche a expiré, le secours reste.
+ATTENTE_FRAICHEUR_EXPIREE = 1.5
+
+
+@pytest.fixture(scope="module")
+def redis() -> Iterator[DockerContainer]:
+    """Redis 7 jetable du module, sans mot de passe comme celui de compose.yaml."""
+    conteneur = (
+        DockerContainer(IMAGE_REDIS)
+        .with_exposed_ports(6379)
+        .waiting_for(LogMessageWaitStrategy("Ready to accept connections"))
+    )
+    with conteneur:
+        yield conteneur
+
+
+@pytest.fixture(scope="module")
+def redis_url(redis: DockerContainer) -> str:
+    # Sous Windows, « localhost » passe d'abord par IPv6 et Docker Desktop coupe la connexion.
+    hote = redis.get_container_host_ip().replace("localhost", "127.0.0.1")
+    return f"redis://{hote}:{redis.get_exposed_port(6379)}/0"
+
+
+class ObservateurRedis:
+    """Lecture directe de Redis par les tests : clés du préfixe `catalogue:cache:` (SCAN)."""
+
+    prefixe = PREFIXE_CACHE
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+
+    def _client(self) -> Redis:
+        return Redis.from_url(self.url, decode_responses=True, socket_timeout=10)
+
+    async def vider(self) -> None:
+        """FLUSHDB : copies et compteurs internes repartent de zéro (comme la base vidée)."""
+        async with self._client() as client:
+            await client.flushdb()
+
+    async def cles(self) -> list[str]:
+        async with self._client() as client:
+            return sorted([cle async for cle in client.scan_iter(match=f"{PREFIXE_CACHE}*")])
+
+    async def expirations_ms(self) -> dict[str, int]:
+        """PTTL de chaque clé du préfixe (-1 : sans expiration, -2 : disparue entre-temps)."""
+        async with self._client() as client:
+            cles = [cle async for cle in client.scan_iter(match=f"{PREFIXE_CACHE}*")]
+            return {cle: int(await client.pttl(cle)) for cle in cles}
+
+    async def valeurs(self) -> dict[str, Any]:
+        async with self._client() as client:
+            cles = [cle async for cle in client.scan_iter(match=f"{PREFIXE_CACHE}*")]
+            return {cle: await client.get(cle) for cle in cles}
+
+    async def exiger_rempli(self, etape: str) -> list[str]:
+        """Témoin : le cache a gardé au moins une copie, sinon le test ne prouverait rien."""
+        cles = await self.cles()
+        assert cles, f"{etape} : aucune clé {PREFIXE_CACHE}* dans Redis, le cache n'a rien gardé"
+        return cles
+
+
+@pytest.fixture
+async def cache_redis(redis_url: str) -> ObservateurRedis:
+    """Observateur de Redis ; chaque cas part d'un Redis vide."""
+    observateur = ObservateurRedis(redis_url)
+    await observateur.vider()
+    return observateur
+
+
+@dataclass
+class PlateformeCache:
+    """Application avec cache Redis, lifespan démarré, et ses clients."""
+
+    app: FastAPI
+    public: httpx.AsyncClient
+    admin: httpx.AsyncClient
+    catalogue: Catalogue
+    reglages: dict[str, Any]
+
+    @property
+    def delai_lecture(self) -> float:
+        """Borne d'une réponse pendant une panne : delai_base + 5 s (Q8)."""
+        return float(self.reglages["delai_base"]) + 5.0
+
+    async def semer_lectures(self) -> dict[str, str]:
+        """Un événement, un lieu (Villetest), une séance ; chemin de chacune des 7 lectures."""
+        evenement = str((await self.catalogue.evenement())["id"])
+        lieu = str((await self.catalogue.lieu())["id"])
+        seance = str((await self.catalogue.seance(evenement, lieu))["id"])
+        return {
+            "listerEvenements": "/api/v1/events",
+            "lireEvenement": f"/api/v1/events/{evenement}",
+            "listerSeances": f"/api/v1/events/{evenement}/shows",
+            "lireSeance": f"/api/v1/events/{evenement}/shows/{seance}",
+            "lireSeanceParId": f"/api/v1/shows/{seance}",
+            "listerLieux": "/api/v1/venues",
+            "lireLieu": f"/api/v1/venues/{lieu}",
+        }
+
+
+@pytest.fixture
+def plateforme_cache(
+    database_url: str,
+    redis_url: str,
+    emetteur: EmetteurDeTest,
+    jetons: Jetons,
+    base: Base,
+    cache_redis: ObservateurRedis,
+) -> Callable[..., AbstractAsyncContextManager[PlateformeCache]]:
+    """Fabrique : `async with plateforme_cache(**reglages) as p` (durées de test par défaut)."""
+
+    @asynccontextmanager
+    async def demarrer(**reglages: Any) -> AsyncIterator[PlateformeCache]:
+        complets = {**REGLAGES_CACHE_TEST, "redis_url": redis_url, **reglages}
+        application = creer_app(
+            parametres_catalogue(database_url, **complets),
+            verificateur_jetons=emetteur.verificateur(),
+        )
+        transport = httpx.ASGITransport(app=application)
+        async with (
+            application.router.lifespan_context(application),
+            httpx.AsyncClient(
+                transport=transport, base_url="http://test", timeout=DELAI_APPEL
+            ) as public,
+            httpx.AsyncClient(
+                transport=transport,
+                base_url="http://test",
+                headers=jetons.admin,
+                timeout=DELAI_APPEL,
+            ) as admin,
+        ):
+            yield PlateformeCache(application, public, admin, Catalogue(admin), complets)
+
+    return demarrer
+
+
+@pytest.fixture
+async def plateforme(
+    plateforme_cache: Callable[..., AbstractAsyncContextManager[PlateformeCache]],
+) -> AsyncIterator[PlateformeCache]:
+    """Application avec cache, durées de test par défaut."""
+    async with plateforme_cache() as demarree:
+        yield demarree
+
+
+@contextmanager
+def _en_pause(*conteneurs: DockerContainer) -> Iterator[None]:
+    """`docker pause` des conteneurs, puis `unpause` quoi qu'il arrive."""
+    en_pause: list[Any] = []
+    try:
+        for conteneur in conteneurs:
+            enveloppe = conteneur.get_wrapped_container()
+            enveloppe.pause()
+            en_pause.append(enveloppe)
+        yield
+    finally:
+        for enveloppe in en_pause:
+            enveloppe.unpause()
+
+
+@pytest.fixture
+def en_pause() -> Any:
+    return _en_pause
+
+
+@pytest.fixture
+def attente_fraicheur() -> float:
+    return ATTENTE_FRAICHEUR_EXPIREE
