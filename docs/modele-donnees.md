@@ -64,6 +64,12 @@ erDiagram
   création de la séance. Les lectures trient sur `position`, jamais sur l'ordre physique des
   lignes (`ctid`).
 - Recherche (`q`, `ville`, `du`, `au`) : jointure locale `evenements`, `seances`, `lieux`.
+- Cache des lectures (BIL-005) : dans Redis, pas en base. Copies du corps JSON des 7 lectures
+  publiques sous `catalogue:cache:v1:<fraiche|secours>:<operationId>:[g<génération>:]<sha256
+  des paramètres>`, toujours avec expiration (fraîche 30 s, secours 24 h). Compteurs de
+  génération des listes sous `catalogue:generation:<famille>` (`evenements`, `lieux`,
+  `seances:<evenement_id>`), sans expiration, incrémentés par chaque création réussie. Aucune
+  disponibilité de place n'est mise en cache.
 
 ## Billets
 

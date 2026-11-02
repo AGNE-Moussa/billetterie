@@ -151,6 +151,18 @@ def test_les_listes_du_catalogue_repondent_sans_jeton_via_traefik(
     assert reponse.headers.get("x-correlation-id")
 
 
+@pytest.mark.parametrize("ressource", ["events", "venues"])
+def test_les_lectures_du_catalogue_repondent_via_traefik_sans_x_cache_stale(
+    gateway: str, ressource: str
+) -> None:
+    # BIL-005 : base disponible, deux lectures (base puis cache) sans en-tête de mode dégradé.
+    for _ in range(2):
+        reponse = httpx.get(f"{gateway}/api/v1/{ressource}", timeout=10.0)
+
+        assert reponse.status_code == 200, reponse.text
+        assert "x-cache-stale" not in reponse.headers
+
+
 def test_sans_jeton_la_creation_d_un_evenement_est_refusee_via_traefik(gateway: str) -> None:
     reponse = httpx.post(
         f"{gateway}/api/v1/events",

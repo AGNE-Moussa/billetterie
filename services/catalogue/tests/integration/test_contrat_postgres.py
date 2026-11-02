@@ -1,11 +1,13 @@
 """CA1 (BIL-004) : chaque réponse des 10 opérations métier respecte son schéma du contrat.
 
+Depuis BIL-005 (E8), l'application est créée avec `redis_url` sur un vrai Redis (cache actif).
+
 Base migrée, application sous lifespan ; les corps sont validés par `jsonschema` (Draft
 2020-12) contre `components.schemas` de services/catalogue/openapi.yaml. Succès en
 `application/json`, erreurs en `application/problem+json`, dates avec fuseau.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -15,9 +17,18 @@ from uuid import uuid4
 import httpx
 import pytest
 import yaml
+from fastapi import FastAPI
 from jsonschema import Draft202012Validator
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture
+async def app(plateforme_cache: Any) -> AsyncIterator[FastAPI]:
+    """BIL-005 (E8) : les 26 cas tournent sur l'application avec `redis_url` et un vrai Redis."""
+    async with plateforme_cache() as plateforme:
+        yield plateforme.app
+
 
 CONTRAT = Path(__file__).resolve().parents[2] / "openapi.yaml"
 CHAMPS_DATE = {"cree_le", "debut"}

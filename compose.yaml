@@ -299,6 +299,8 @@ services:
       CONSUL_URL: http://consul:8500
       # Relais de l'outbox : publie les événements sur l'exchange ticketing.
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # Cache des lectures (BIL-005) ; Redis local sans mot de passe, donc aucun secret ici.
+      REDIS_URL: redis://redis:6379/0
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -318,6 +320,8 @@ services:
       consul:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [billetterie]
 

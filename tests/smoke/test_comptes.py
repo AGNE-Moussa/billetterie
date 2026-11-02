@@ -169,3 +169,33 @@ def test_les_utilisateurs_de_test_obtiennent_leurs_scopes_sur_la_plateforme_loca
 
     assert _scopes_metier(charge) == scopes
     assert _roles_metier(charge) == {role}
+
+
+def test_un_evenement_cree_par_l_admin_est_visible_aussitot_via_traefik(
+    oidc: str, env: dict[str, str]
+) -> None:
+    """BIL-005, CA1 de bout en bout : la page déjà en cache montre aussitôt la création."""
+    mot_de_passe = env.get("KEYCLOAK_MDP_ADMIN")
+    if not mot_de_passe:
+        pytest.skip("KEYCLOAK_MDP_ADMIN absent de .env")
+    jeton = _jeton_pkce(oidc, "admin.test", mot_de_passe)
+    taille = 100
+    # Liste triée par date de création croissante : le nouvel événement sera le dernier, sur
+    # la page qui suit les `total` événements actuels.
+    total = httpx.get(f"{GATEWAY}/api/v1/events", params={"size": 1}, timeout=10.0).json()["total"]
+    page = {"page": total // taille + 1, "size": taille}
+    for _ in range(2):  # la seconde lecture est servie par le cache
+        avant = httpx.get(f"{GATEWAY}/api/v1/events", params=page, timeout=10.0)
+        assert avant.status_code == 200, avant.text
+
+    creation = httpx.post(
+        f"{GATEWAY}/api/v1/events",
+        json={"nom": f"Smoke cache {secrets.token_hex(4)}", "description": "Événement synthétique"},
+        headers={"Authorization": f"Bearer {jeton}"},
+        timeout=10.0,
+    )
+    assert creation.status_code == 201, creation.text
+    apres = httpx.get(f"{GATEWAY}/api/v1/events", params=page, timeout=10.0)
+
+    assert apres.status_code == 200, apres.text
+    assert creation.json()["id"] in {e["id"] for e in apres.json()["elements"]}

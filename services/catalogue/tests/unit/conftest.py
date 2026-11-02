@@ -2,18 +2,23 @@
 
 Sans base ni Keycloak ni Consul : l'application est assemblée par `creer_app`, le dépôt SQL est
 remplacé par `DepotEnMemoire` (dependency_overrides) et le lifespan n'est pas démarré.
+
+BIL-005 : `CacheEnMemoire` réalise le port `CacheCatalogue` avec une horloge pilotable
+(`avancer`), et peut être rendu `injoignable` ou `lent` ; il remplace `obtenir_cache`.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+import anyio
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from catalogue.api.dependances import obtenir_depot, obtenir_maintenant
+from catalogue.api.dependances import obtenir_cache, obtenir_depot, obtenir_maintenant
 from catalogue.config import Parametres
 from catalogue.domaine.catalogue import (
     Categorie,
@@ -25,6 +30,8 @@ from catalogue.domaine.catalogue import (
     Rang,
     Seance,
 )
+from catalogue.infra.base import BaseIndisponible, ErreurBase
+from catalogue.infra.cache import CacheIndisponible
 from catalogue.principal import creer_app
 from commun.faux_jetons import EmetteurDeTest
 
@@ -42,6 +49,29 @@ class DepotEnMemoire:
         self.lieux: dict[UUID, Lieu] = {}
         self.seances: dict[UUID, Seance] = {}
         self._horloge = ORIGINE
+        # BIL-005 : pannes simulées, compteur de lectures et blocage de lister_evenements.
+        self.injoignable = False
+        self.erreur_imprevue = False
+        self.lectures = 0
+        # Posés par le test (un anyio.Event se crée dans la boucle) : lister_evenements signale
+        # `liste_commencee`, puis attend `bloquer_listes`.
+        self.bloquer_listes: anyio.Event | None = None
+        self.liste_commencee: anyio.Event | None = None
+
+    def _verifier(self) -> None:
+        if self.injoignable:
+            raise BaseIndisponible()
+        if self.erreur_imprevue:
+            raise ErreurBase()
+
+    def _lire(self) -> None:
+        # Compte chaque tentative de lecture, même quand la base est coupée.
+        self.lectures += 1
+        self._verifier()
+
+    def renommer_evenement(self, evenement_id: UUID, nom: str) -> None:
+        """Modification directe, sans passer par les routes (donc sans invalidation)."""
+        self.evenements[evenement_id] = replace(self.evenements[evenement_id], nom=nom)
 
     def _tic(self) -> datetime:
         self._horloge += timedelta(minutes=1)
@@ -53,9 +83,15 @@ class DepotEnMemoire:
     # --- semis directs ---------------------------------------------------------------------
 
     def semer_evenement(
-        self, nom: str = "Concert de test", description: str = "Description synthétique"
+        self,
+        nom: str = "Concert de test",
+        description: str = "Description synthétique",
+        *,
+        identifiant: UUID | None = None,
     ) -> Evenement:
-        evenement = Evenement(id=uuid4(), nom=nom, description=description, cree_le=self._tic())
+        evenement = Evenement(
+            id=identifiant or uuid4(), nom=nom, description=description, cree_le=self._tic()
+        )
         self.evenements[evenement.id] = evenement
         return evenement
 
@@ -64,16 +100,25 @@ class DepotEnMemoire:
         nom: str = "Salle de test",
         adresse: str = "1 rue de l'Exemple",
         ville: str = "Villetest",
+        *,
+        identifiant: UUID | None = None,
     ) -> Lieu:
-        lieu = Lieu(id=uuid4(), nom=nom, adresse=adresse, ville=ville, cree_le=self._tic())
+        lieu = Lieu(
+            id=identifiant or uuid4(), nom=nom, adresse=adresse, ville=ville, cree_le=self._tic()
+        )
         self.lieux[lieu.id] = lieu
         return lieu
 
     def semer_seance(
-        self, evenement: Evenement, lieu: Lieu, debut: datetime | None = None
+        self,
+        evenement: Evenement,
+        lieu: Lieu,
+        debut: datetime | None = None,
+        *,
+        identifiant: UUID | None = None,
     ) -> Seance:
         seance = Seance(
-            id=uuid4(),
+            id=identifiant or uuid4(),
             evenement_id=evenement.id,
             lieu_id=lieu.id,
             debut=debut or MAINTENANT + timedelta(days=30),
@@ -93,9 +138,11 @@ class DepotEnMemoire:
     # --- DepotCatalogue --------------------------------------------------------------------
 
     async def ajouter_evenement(self, nom: str, description: str) -> Evenement:
+        self._verifier()
         return self.semer_evenement(nom, description)
 
     async def trouver_evenement(self, evenement_id: UUID) -> Evenement | None:
+        self._lire()
         return self.evenements.get(evenement_id)
 
     def _filtrer(self, filtres: FiltresEvenements) -> list[Evenement]:
@@ -125,27 +172,40 @@ class DepotEnMemoire:
     async def lister_evenements(
         self, filtres: FiltresEvenements, decalage: int, limite: int
     ) -> list[Evenement]:
-        return self._filtrer(filtres)[decalage : decalage + limite]
+        self._lire()
+        # Liste lue avant le blocage : la lecture garde l'ancienne liste (course de Q14).
+        retenus = self._filtrer(filtres)[decalage : decalage + limite]
+        if self.bloquer_listes is not None:
+            if self.liste_commencee is not None:
+                self.liste_commencee.set()
+            await self.bloquer_listes.wait()
+        return retenus
 
     async def compter_evenements(self, filtres: FiltresEvenements) -> int:
+        self._lire()
         return len(self._filtrer(filtres))
 
     async def ajouter_lieu(self, nom: str, adresse: str, ville: str) -> Lieu:
+        self._verifier()
         return self.semer_lieu(nom, adresse, ville)
 
     async def trouver_lieu(self, lieu_id: UUID) -> Lieu | None:
+        self._lire()
         return self.lieux.get(lieu_id)
 
     async def lister_lieux(self, decalage: int, limite: int) -> list[Lieu]:
+        self._lire()
         ordonnes = sorted(self.lieux.values(), key=lambda lieu: (lieu.cree_le, lieu.id))
         return ordonnes[decalage : decalage + limite]
 
     async def compter_lieux(self) -> int:
+        self._lire()
         return len(self.lieux)
 
     async def ajouter_seance(
         self, evenement: Evenement, lieu: Lieu, nouvelle: NouvelleSeance
     ) -> Seance:
+        self._verifier()
         seance = Seance(
             id=uuid4(),
             evenement_id=evenement.id,
@@ -161,6 +221,7 @@ class DepotEnMemoire:
         return seance
 
     async def trouver_seance(self, seance_id: UUID) -> Seance | None:
+        self._lire()
         return self.seances.get(seance_id)
 
     def _seances_de(self, evenement_id: UUID) -> list[Seance]:
@@ -170,10 +231,89 @@ class DepotEnMemoire:
         )
 
     async def lister_seances(self, evenement_id: UUID, decalage: int, limite: int) -> list[Seance]:
+        self._lire()
         return self._seances_de(evenement_id)[decalage : decalage + limite]
 
     async def compter_seances(self, evenement_id: UUID) -> int:
+        self._lire()
         return len(self._seances_de(evenement_id))
+
+
+class CacheEnMemoire:
+    """Double du port `CacheCatalogue` : expiration sur une horloge pilotée par `avancer`.
+
+    `injoignable` : chaque appel lève `CacheIndisponible`. `lent` : chaque appel attend sans
+    fin (Redis qui ne répond plus). `appels` compte les appels reçus, pannes comprises.
+    """
+
+    def __init__(self) -> None:
+        self.instant = 0.0
+        self._valeurs: dict[str, tuple[str, float]] = {}
+        self.generations: dict[str, int] = {}
+        self.injoignable = False
+        self.lent = False
+        self.appels = 0
+
+    def avancer(self, secondes: float) -> None:
+        self.instant += secondes
+
+    def valeurs(self) -> dict[str, str]:
+        """Valeurs encore vivantes à l'instant de l'horloge."""
+        return {
+            cle: valeur
+            for cle, (valeur, expire_a) in self._valeurs.items()
+            if self.instant < expire_a
+        }
+
+    async def _entrer(self) -> None:
+        self.appels += 1
+        if self.lent:
+            await anyio.sleep_forever()
+        if self.injoignable:
+            raise CacheIndisponible()
+
+    async def lire(self, cle: str) -> str | None:
+        await self._entrer()
+        return self.valeurs().get(cle)
+
+    async def ecrire(self, cle: str, valeur: str, duree: float) -> None:
+        await self._entrer()
+        self._valeurs[cle] = (valeur, self.instant + duree)
+
+    async def generation(self, famille: str) -> int:
+        await self._entrer()
+        return self.generations.get(famille, 0)
+
+    async def nouvelle_generation(self, famille: str) -> int:
+        await self._entrer()
+        self.generations[famille] = self.generations.get(famille, 0) + 1
+        return self.generations[famille]
+
+
+@dataclass(frozen=True)
+class Semis:
+    """Événement E, lieu L et séance S semés, et les chemins des 7 lectures publiques."""
+
+    evenement: Evenement
+    lieu: Lieu
+    seance: Seance
+    lectures: dict[str, str]
+
+
+def semer_catalogue(depot: DepotEnMemoire) -> Semis:
+    evenement = depot.semer_evenement()
+    lieu = depot.semer_lieu()
+    seance = depot.semer_seance(evenement, lieu)
+    lectures = {
+        "listerEvenements": "/api/v1/events",
+        "lireEvenement": f"/api/v1/events/{evenement.id}",
+        "listerSeances": f"/api/v1/events/{evenement.id}/shows",
+        "lireSeance": f"/api/v1/events/{evenement.id}/shows/{seance.id}",
+        "lireSeanceParId": f"/api/v1/shows/{seance.id}",
+        "listerLieux": "/api/v1/venues",
+        "lireLieu": f"/api/v1/venues/{lieu.id}",
+    }
+    return Semis(evenement=evenement, lieu=lieu, seance=seance, lectures=lectures)
 
 
 def corps_seance(lieu_id: UUID | str, debut: datetime | None = None) -> dict[str, Any]:
@@ -229,21 +369,80 @@ def depot() -> DepotEnMemoire:
     return DepotEnMemoire()
 
 
+FabriqueApp = Callable[..., FastAPI]
+
+
 @pytest.fixture
-def app(emetteur: EmetteurDeTest, depot: DepotEnMemoire) -> FastAPI:
-    config = Parametres(
-        database_url="postgresql+asyncpg://test@localhost/catalogue",
-        instance=INSTANCE,
-        consul_actif=False,
-    )
-    application = creer_app(config, verificateur_jetons=emetteur.verificateur())
+def fabrique_app(emetteur: EmetteurDeTest, depot: DepotEnMemoire) -> FabriqueApp:
+    """Application sur le dépôt en mémoire ; `cache` remplace `obtenir_cache` s'il est donné,
+    les autres arguments nommés vont à `Parametres` (delai_redis, durées du cache…)."""
 
-    def depot_de_test() -> DepotCatalogue:
-        return depot
+    def fabriquer(cache: CacheEnMemoire | None = None, **reglages: Any) -> FastAPI:
+        config = Parametres(
+            database_url="postgresql+asyncpg://test@localhost/catalogue",
+            instance=INSTANCE,
+            consul_actif=False,
+            **reglages,
+        )
+        application = creer_app(config, verificateur_jetons=emetteur.verificateur())
 
-    application.dependency_overrides[obtenir_depot] = depot_de_test
-    application.dependency_overrides[obtenir_maintenant] = lambda: MAINTENANT
-    return application
+        def depot_de_test() -> DepotCatalogue:
+            return depot
+
+        application.dependency_overrides[obtenir_depot] = depot_de_test
+        application.dependency_overrides[obtenir_maintenant] = lambda: MAINTENANT
+        if cache is not None:
+            application.dependency_overrides[obtenir_cache] = lambda: cache
+        return application
+
+    return fabriquer
+
+
+@pytest.fixture
+def app(fabrique_app: FabriqueApp) -> FastAPI:
+    return fabrique_app()
+
+
+@pytest.fixture
+def cache() -> CacheEnMemoire:
+    return CacheEnMemoire()
+
+
+@pytest.fixture
+def semis(depot: DepotEnMemoire) -> Semis:
+    return semer_catalogue(depot)
+
+
+@pytest.fixture
+async def client(
+    fabrique_app: FabriqueApp, cache: CacheEnMemoire
+) -> AsyncIterator[httpx.AsyncClient]:
+    """Client sans jeton sur l'application dont le cache est `CacheEnMemoire` (BIL-005)."""
+    transport = httpx.ASGITransport(app=fabrique_app(cache))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+MiseEnCache = Callable[[str], Awaitable[httpx.Response]]
+
+
+@pytest.fixture
+def en_cache(client: httpx.AsyncClient, depot: DepotEnMemoire) -> MiseEnCache:
+    """Lit `chemin` deux fois et vérifie que la seconde lecture vient du cache (pas du dépôt).
+
+    Rend la seconde réponse, celle servie depuis le cache.
+    """
+
+    async def mettre_en_cache(chemin: str) -> httpx.Response:
+        premiere = await client.get(chemin)
+        assert premiere.status_code == 200, premiere.text
+        avant = depot.lectures
+        seconde = await client.get(chemin)
+        assert seconde.status_code == 200, seconde.text
+        assert depot.lectures == avant, f"{chemin} : la seconde lecture n'est pas servie du cache"
+        return seconde
+
+    return mettre_en_cache
 
 
 @pytest.fixture
