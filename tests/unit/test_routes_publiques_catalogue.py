@@ -2,6 +2,8 @@
 
 Décision Q3 : valeur par défaut de ROUTES_PUBLIQUES dans compose.yaml (local) ; décision Q4 :
 la santé sous un préfixe public est publique aussi (option a).
+
+BIL-006 (décision Q6) : GET /api/v1/seats rejoint la valeur par défaut, sa santé avec.
 """
 
 import re
@@ -55,3 +57,27 @@ def test_la_sante_du_catalogue_suit_la_regle_retenue_pour_les_prefixes_publics()
     routes = _routes_publiques_locales()
 
     assert est_publique(routes, "GET", "/api/v1/events/health") is True
+
+
+# --- BIL-006, E8 : disponibilité des places publique (décision Q6) ------------------------------
+
+PLACES_PUBLIQUES = [
+    ("GET", f"/api/v1/seats?seance_id={uuid4()}"),
+    ("GET", "/api/v1/seats/health"),
+]
+PLACES_NON_PUBLIQUES = [
+    ("PUT", f"/api/v1/seats/{uuid4()}/lock"),
+    ("GET", "/api/v1/seatsX"),
+]
+
+
+@pytest.mark.parametrize(("methode", "uri"), PLACES_PUBLIQUES + PLACES_NON_PUBLIQUES)
+def test_la_disponibilite_des_places_est_publique_pour_le_verificateur(
+    methode: str, uri: str
+) -> None:
+    routes = _routes_publiques_locales()
+
+    assert est_publique(routes, methode, uri) is ((methode, uri) in PLACES_PUBLIQUES)
+    # Les préfixes du catalogue restent publics.
+    for methode_catalogue, uri_catalogue in PUBLIQUES:
+        assert est_publique(routes, methode_catalogue, uri_catalogue) is True

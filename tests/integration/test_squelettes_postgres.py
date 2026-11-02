@@ -156,11 +156,20 @@ def alembic(
     return executer
 
 
+# Réglages exigés par un service en plus de la base. BIL-006 (décision Q20) : REDIS_URL est
+# obligatoire pour billets ; la connexion est paresseuse et /health ne lit pas Redis (Q21),
+# l'hôte n'a donc pas besoin d'exister.
+REGLAGES_PROPRES: dict[str, dict[str, Any]] = {
+    "billets": {"redis_url": "redis://redis-absent.exemple.test:6379/0"},
+}
+
+
 def _creer_app(squelette: Any, database_url: str, **reglages: Any) -> Any:
     principal = importlib.import_module(f"{squelette.nom}.principal")
     config = importlib.import_module(f"{squelette.nom}.config")
+    complets = {**REGLAGES_PROPRES.get(squelette.nom, {}), **reglages}
     return principal.creer_app(
-        config.Parametres(database_url=database_url, **reglages),
+        config.Parametres(database_url=database_url, **complets),
         verificateur_jetons=EmetteurDeTest().verificateur(),
     )
 
@@ -183,8 +192,9 @@ async def client_sans_consul(squelette: Any, database_url: str) -> AsyncIterator
 
 # Décision Q18 du plan BIL-004 : catalogue quitte l'état de squelette (ses tables et sa
 # migration sont couvertes par services/catalogue/tests/integration/) ; il reste dans les cas
-# de santé et de Consul ci-dessous.
-SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue")
+# de santé et de Consul ci-dessous. BIL-006 (décisions du squelette) : billets aussi, ses
+# migrations sont couvertes par services/billets/tests/integration/.
+SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue", "billets")
 
 
 @SQUELETTES_VIDES

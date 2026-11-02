@@ -16,7 +16,8 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
 - **Erreurs** : Problem Details (RFC 9457) avec un code métier stable, par exemple
   `SEAT_ALREADY_TAKEN`. Codes métier des services en anglais (`SEAT_ALREADY_TAKEN`,
   `ORDER_NOT_FOUND`) ; codes techniques de `commun` en français (`REQUETE_INVALIDE`, `JETON_*`,
-  `ROLE_MANQUANT`, `SCOPE_MANQUANT`, `BASE_INDISPONIBLE`, `SERVICE_INDISPONIBLE`).
+  `ROLE_MANQUANT`, `SCOPE_MANQUANT`, `BASE_INDISPONIBLE`, `SERVICE_INDISPONIBLE`), et codes
+  techniques propres à un service aussi en français (`VERROU_INDISPONIBLE`, billets).
 - **Énumérations** : statuts et autres valeurs énumérées en MAJUSCULES sans accent, mots séparés
   par `_` (`EN_ATTENTE`, `CONFIRMEE`).
 - **Ressource d'un autre appelant** : une ressource qui existe mais n'appartient pas à l'appelant
@@ -35,6 +36,6 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
   `/health`) ; cette route reste hors contrat. Exception : un service dont les lectures sont
   publiques (préfixe déclaré dans `ROUTES_PUBLIQUES` du vérificateur, qui couvre les
   sous-chemins) expose aussi sa santé sans jeton ; c'est le cas de catalogue
-  (`GET /api/v1/events/health`, décision BIL-004), dont le corps `{"statut": "ok"}` ne révèle
-  rien.
+  (`GET /api/v1/events/health`, décision BIL-004) et de billets (`GET /api/v1/seats/health`,
+  décision BIL-006), dont le corps `{"statut": "ok"}` ne révèle rien.
 - **Configuration** : variables d'environnement uniquement, aucun secret dans le dépôt.

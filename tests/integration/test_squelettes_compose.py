@@ -114,8 +114,9 @@ def test_aucun_squelette_ne_publie_de_port_sur_l_hote(
 
 
 # Décisions Q16 et Q18 du plan BIL-004 : catalogue publie par l'outbox, son relais a besoin de
-# RabbitMQ ; il n'est plus un squelette vide.
-@pytest.mark.sauf_services("catalogue")
+# RabbitMQ ; il n'est plus un squelette vide. BIL-006 (décision Q5) : billets consomme
+# ticketing.show.scheduled, il n'en est plus un non plus.
+@pytest.mark.sauf_services("catalogue", "billets")
 def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelette: Any) -> None:
     for conteneur in _conteneurs(squelette):
         definition = _definition(config_locale, conteneur)
@@ -131,3 +132,19 @@ def test_catalogue_est_configure_avec_redis(config_locale: Any) -> None:
     assert (instance.get("depends_on") or {}).get("redis", {}).get("condition") == (
         "service_healthy"
     )
+
+
+# BIL-006 (décision Q20) : billets pose ses verrous dans le Redis de la plateforme et consomme
+# ticketing.show.scheduled sur RabbitMQ ; l'ancre billets-env sert la migration et les instances.
+def test_billets_est_configure_avec_redis_et_rabbitmq(
+    config_locale: Any, services_metier: Any
+) -> None:
+    (billets,) = [squelette for squelette in services_metier if squelette.nom == "billets"]
+
+    for conteneur in _conteneurs(billets):
+        environnement = _environnement(config_locale, conteneur)
+        assert str(environnement.get("REDIS_URL", "")).startswith("redis://redis:6379"), conteneur
+        assert "@rabbitmq:5672" in str(environnement.get("RABBITMQ_URL", "")), conteneur
+    for instance in billets.instances:
+        dependances = _definition(config_locale, instance).get("depends_on") or {}
+        assert {"redis", "rabbitmq"} <= set(dependances), (instance, sorted(dependances))

@@ -51,6 +51,9 @@ class Service:
     # Ressources routées en plus de `ressource` (catalogue : venues et shows, décision Q2 de
     # BIL-004) ; la santé reste sous `ressource`.
     autres_ressources: tuple[str, ...] = ()
+    # Réglages obligatoires en plus de la base (billets : REDIS_URL, décision Q20 de BIL-006).
+    # Redis n'est pas contacté au démarrage (connexion paresseuse).
+    options: tuple[tuple[str, str], ...] = ()
 
     @property
     def regle_prefixe(self) -> str:
@@ -70,14 +73,21 @@ class Service:
 # Données communes du plan (docs/test-plans/BIL-001.md), déclarées une seule fois.
 SERVICES = [
     Service("catalogue", "events", "catalogue", ("catalogue-1",), ("venues", "shows")),
-    Service("billets", "seats", "billets", ("billets-1", "billets-2")),
+    Service(
+        "billets",
+        "seats",
+        "billets",
+        ("billets-1", "billets-2"),
+        options=(("redis_url", "redis://127.0.0.1:6379/0"),),
+    ),
     Service("commandes", "orders", "commandes", ("commandes-1", "commandes-2")),
     Service("paiements", "payments", "paiements", ("paiements-1",)),
     Service("notifications", "notifications", "notifications", ("notifications-1",)),
 ]
 PAR_SERVICE = pytest.mark.parametrize("service", SERVICES, ids=[s.nom for s in SERVICES])
-# Services encore à l'état de squelette vide : catalogue en sort avec BIL-004 (décision Q18).
-SQUELETTES = [s for s in SERVICES if s.nom != "catalogue"]
+# Services encore à l'état de squelette vide : catalogue en sort avec BIL-004 (décision Q18),
+# billets avec BIL-006 (décisions du squelette).
+SQUELETTES = [s for s in SERVICES if s.nom not in {"catalogue", "billets"}]
 PAR_SQUELETTE = pytest.mark.parametrize("service", SQUELETTES, ids=[s.nom for s in SQUELETTES])
 
 
@@ -98,7 +108,9 @@ def _creer_app(
 ) -> FastAPI:
     """Application du service ; jetons vérifiés avec la clé de `emetteur` (pas de Keycloak)."""
     config = _module(service, "config").Parametres(
-        database_url=database_url, instance=f"{service.nom}-test", **options
+        database_url=database_url,
+        instance=f"{service.nom}-test",
+        **{**dict(service.options), **options},
     )
     app: FastAPI = _module(service, "principal").creer_app(
         config, verificateur_jetons=(emetteur or EmetteurDeTest()).verificateur()

@@ -5,8 +5,13 @@ vérificateur du conftest (accepte tout jeton), PostgreSQL 16 (base `billets`), 
 lancée une fois, puis `billets-1` et `billets-2` démarrés ensemble (plan, Q11 et Q12 : seul
 billets est construit en image, les quatre autres sont couverts sans image).
 
-Cas de concurrence adapté (Q11) : il n'existe pas encore de place ; les requêtes simultanées
-portent sur la route de santé, routée par la gateway vers les deux instances.
+Cas de concurrence adapté (Q11) : les requêtes simultanées portent sur la route de santé,
+routée par la gateway vers les deux instances (le verrou concurrent d'une place est couvert
+par services/billets/tests/integration/, décision Q24 du plan BIL-006).
+
+BIL-006 (décision Q20) : un Redis 7 (alias `redis`) rejoint le réseau et les instances
+reçoivent seulement `REDIS_URL` (la santé ne lit pas Redis, Q21) ; la base migrée est à la
+tête des révisions de services/billets/alembic.
 
 Chaque attente a une échéance mesurée (time.monotonic) et échoue par une assertion qui nomme
 l'étape et le dernier état observé (statut, check Consul, journaux) : pytest-timeout n'est pas
@@ -27,17 +32,23 @@ import anyio
 import httpx
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.image import DockerImage
 from testcontainers.core.network import Network
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 pytestmark = pytest.mark.anyio
 
 RACINE = Path(__file__).resolve().parents[2]
 DOCKERFILE = "services/billets/Dockerfile"
+ALEMBIC_INI = RACINE / "services" / "billets" / "alembic.ini"
 IMAGE_POSTGRES = "postgres:16.10-alpine"
+IMAGE_REDIS = "redis:7.4.6-alpine"  # même image que le service redis de compose.yaml
+URL_REDIS_RESEAU = "redis://redis:6379/0"
 INSTANCES = ("billets-1", "billets-2")
 ROUTE_SANTE = "/api/v1/seats/health"
 # Le faux vérificateur accepte tout jeton : la chaîne standard@file en exige un.
@@ -106,6 +117,22 @@ def base_billets(reseau: Network, borne: Any, journal: Any) -> Iterator[tuple[st
         )
     finally:
         borne("arrêt de PostgreSQL (billets)", DELAI_ETAPE, pg.stop, lambda: journal(pg))
+
+
+@pytest.fixture(scope="module")
+def redis_billets(reseau: Network, borne: Any, journal: Any) -> Iterator[None]:
+    """Redis 7 sur le réseau (alias redis), sans mot de passe comme celui du compose."""
+    conteneur = (
+        DockerContainer(IMAGE_REDIS)
+        .with_network(reseau)
+        .with_network_aliases("redis")
+        .waiting_for(LogMessageWaitStrategy("Ready to accept connections"))
+    )
+    borne("démarrage de Redis", DELAI_ETAPE, conteneur.start, lambda: journal(conteneur))
+    try:
+        yield
+    finally:
+        borne("arrêt de Redis", DELAI_ETAPE, conteneur.stop, lambda: journal(conteneur))
 
 
 def _migrer_une_fois(
@@ -190,6 +217,7 @@ def plateforme(
     consul_url: str,
     gateway_url: str,
     base_billets: tuple[str, str],
+    redis_billets: None,
     borne: Any,
     journal: Any,
 ) -> Iterator[Plateforme | None]:
@@ -217,6 +245,7 @@ def plateforme(
             nom: DockerContainer(str(image))
             .with_env("DATABASE_URL", url_reseau)
             .with_env("CONSUL_URL", "http://consul:8500")
+            .with_env("REDIS_URL", URL_REDIS_RESEAU)
             .with_env("INSTANCE", nom)
             .with_network(reseau)
             .with_network_aliases(nom)
@@ -373,7 +402,7 @@ async def _checks_billets(consul: httpx.AsyncClient) -> list[dict[str, Any]]:
     ]
 
 
-async def test_les_deux_instances_de_billets_demarrent_ensemble_apres_une_seule_migration(
+async def test_les_deux_instances_de_billets_demarrent_avec_redis(
     consul_url: str, plateforme: Plateforme | None, journal: Any
 ) -> None:
     prete = _image_construite(plateforme)
@@ -427,4 +456,5 @@ async def test_les_deux_instances_de_billets_demarrent_ensemble_apres_une_seule_
             await moteur.dispose()
 
     versions = await _borne("lecture de alembic_version (billets)", lire_versions())
-    assert versions == ["0001"]
+    # Une seule migration, jusqu'à la tête des révisions du service.
+    assert versions == list(ScriptDirectory.from_config(Config(str(ALEMBIC_INI))).get_heads())
