@@ -237,6 +237,7 @@ dependencies = [
     { name = "billetterie-commun" },
     { name = "fastapi" },
     { name = "pydantic-settings" },
+    { name = "redis" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn" },
 ]
@@ -248,6 +249,7 @@ requires-dist = [
     { name = "billetterie-commun", editable = "libs" },
     { name = "fastapi", specifier = ">=0.149.0" },
     { name = "pydantic-settings", specifier = ">=2.16.0" },
+    { name = "redis", specifier = ">=8.1.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.5" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]

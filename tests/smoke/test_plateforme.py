@@ -30,8 +30,9 @@ SERVICES = [
     ("notifications", "notifications", 1),
 ]
 IDS = [service for service, _, _ in SERVICES]
-# Services dont la santé exige un jeton à la gateway : tous sauf catalogue (préfixe public).
-PROTEGES = [ligne for ligne in SERVICES if ligne[0] != "catalogue"]
+# Services dont la santé exige un jeton à la gateway : tous sauf catalogue et billets (préfixes
+# publics, BIL-004 et BIL-006).
+PROTEGES = [ligne for ligne in SERVICES if ligne[0] not in {"catalogue", "billets"}]
 IDS_PROTEGES = [service for service, _, _ in PROTEGES]
 
 
@@ -134,6 +135,13 @@ def test_sans_jeton_la_sante_via_traefik_est_refusee(
 
 def test_sans_jeton_la_sante_de_catalogue_repond_via_traefik(gateway: str) -> None:
     reponse = httpx.get(f"{gateway}/api/v1/events/health", timeout=10.0)
+
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json() == {"statut": "ok"}
+
+
+def test_sans_jeton_la_sante_de_billets_repond_via_traefik(gateway: str) -> None:
+    reponse = httpx.get(f"{gateway}/api/v1/seats/health", timeout=10.0)
 
     assert reponse.status_code == 200, reponse.text
     assert reponse.json() == {"statut": "ok"}

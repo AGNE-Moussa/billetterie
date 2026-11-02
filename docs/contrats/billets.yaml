@@ -76,6 +76,13 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent,
+            verrou ni posé ni lu (VERROU_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/seats/{place_id}/lock:
     put:
       tags:
@@ -142,6 +149,13 @@ paths:
                 $ref: '#/components/schemas/Probleme'
         '422':
           description: Identifiant ou corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent,
+            verrou ni posé ni lu (VERROU_INDISPONIBLE).
           content:
             application/problem+json:
               schema:

@@ -231,12 +231,14 @@ services:
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWT_AUDIENCE: billetterie-api
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
-      # Routes ouvertes sans jeton : lectures du catalogue (BIL-004, décision Q3). Ce sont des
-      # préfixes : toute route GET, présente ou future, sous /api/v1/events, /api/v1/venues ou
-      # /api/v1/shows est publique à la gateway (santé /api/v1/events/health comprise, Q4).
-      # Une telle route qui doit être protégée le reste par la revérification du jeton dans le
-      # service (AppelantDep, exige_scopes, exige_role) : ne jamais compter sur la gateway seule.
-      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-GET /api/v1/events,GET /api/v1/venues,GET /api/v1/shows}
+      # Routes ouvertes sans jeton : lectures du catalogue (BIL-004, décision Q3) et
+      # disponibilité des places (BIL-006, décision Q6). Ce sont des préfixes : toute route GET,
+      # présente ou future, sous /api/v1/events, /api/v1/venues, /api/v1/shows ou /api/v1/seats
+      # est publique à la gateway (santés /api/v1/events/health et /api/v1/seats/health
+      # comprises). Une telle route qui doit être protégée le reste par la revérification du
+      # jeton dans le service (AppelantDep, exige_scopes, exige_role) : ne jamais compter sur la
+      # gateway seule.
+      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-GET /api/v1/events,GET /api/v1/venues,GET /api/v1/shows,GET /api/v1/seats}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
     networks: [billetterie]
 
@@ -325,7 +327,8 @@ services:
         condition: service_healthy
     networks: [billetterie]
 
-  # Billets : /api/v1/seats, deux instances.
+  # Billets : /api/v1/seats, deux instances (BIL-006). Verrous des places dans Redis ; consomme
+  # ticketing.show.scheduled sur RabbitMQ pour créer les places.
   billets-migrations:
     image: billetterie/billets:dev
     build:
@@ -335,6 +338,10 @@ services:
     environment: &billets-env
       DATABASE_URL: postgresql+asyncpg://billets:${BILLETS_DB_PASSWORD:?à définir dans .env}@postgres:5432/billets
       CONSUL_URL: http://consul:8500
+      # Consommateur ticketing.show.scheduled (décision Q5 de BIL-006).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # Verrous des places (BIL-006, obligatoire) ; Redis local sans mot de passe, aucun secret.
+      REDIS_URL: redis://redis:6379/0
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -352,6 +359,10 @@ services:
       billets-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [billetterie]
 

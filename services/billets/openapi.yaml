@@ -1,5 +1,8 @@
 # Contrat OpenAPI 3.1 du service billets : la référence que le code doit respecter.
 # Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
+# Routes recopiées du contrat cible docs/contrats/billets.yaml (BIL-002) au ticket BIL-006 :
+# disponibilité des places (publique) et verrou d'une place (scope seats:lock).
+# GET /api/v1/seats est public : à déclarer dans ROUTES_PUBLIQUES du vérificateur.
 openapi: 3.1.0
 info:
   title: Service billets
@@ -24,8 +27,253 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+  /api/v1/seats:
+    get:
+      tags:
+      - places
+      summary: Disponibilité des places d'une séance, page par page (route publique)
+      description: Ordre stable par rang, puis numéro. Une séance inconnue ou sans place répond
+        200 avec elements vide.
+      operationId: listerPlaces
+      parameters:
+      - name: seance_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de places de la séance, avec leur disponibilité.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacePage'
+        '422':
+          description: Séance absente ou invalide, ou pagination invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent,
+            verrou ni posé ni lu (VERROU_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/seats/{place_id}/lock:
+    put:
+      tags:
+      - places
+      summary: Verrouiller une place pour une commande (scope seats:lock ; client services
+        seulement)
+      description: >-
+        Verrou Redis SET NX PX dont le propriétaire (valeur de la clé) est la commande
+        (règles métier 1 et 2). confirmation à false : durée de réservation (10 min par
+        défaut, configurable) ; idempotent, un nouvel appel pour la même commande répond 200
+        et prolonge le verrou. confirmation à true : durée de confirmation (1 h par défaut,
+        configurable), accordée seulement à la commande qui détient déjà le verrou, sinon 409
+        SEAT_ALREADY_TAKEN ; Commandes l'appelle juste avant Paiements. Billets supprime le
+        verrou une fois le billet émis ; ticketing.order.expired ne libère la place que si la
+        valeur de la clé est cette commande.
+      operationId: verrouillerPlace
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Place Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerrouCreation'
+      responses:
+        '200':
+          description: Place verrouillée au profit de la commande (verrou posé ou prolongé).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Verrou'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune place avec cet identifiant dans cette séance (SEAT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: Place verrouillée par une autre commande ou vendue, ou confirmation demandée
+            sans détenir le verrou (SEAT_ALREADY_TAKEN).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant ou corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent,
+            verrou ni posé ni lu (VERROU_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
 components:
   schemas:
+    Place:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        rang:
+          type: string
+          title: Rang
+        numero:
+          type: integer
+          title: Numero
+        categorie_id:
+          type: string
+          format: uuid
+          title: Categorie Id
+          description: Catégorie de places tarifée de la séance (Catalogue).
+        disponible:
+          type: boolean
+          title: Disponible
+          description: Faux si la place est verrouillée ou vendue.
+      type: object
+      required:
+      - id
+      - seance_id
+      - rang
+      - numero
+      - categorie_id
+      - disponible
+      title: Place
+    PlacePage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Place'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de places de la séance.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: PlacePage
+    VerrouCreation:
+      properties:
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+          description: Séance de la commande ; une place d'une autre séance répond SEAT_NOT_FOUND.
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+          description: Commande propriétaire du verrou.
+        confirmation:
+          type: boolean
+          title: Confirmation
+          description: Faux, durée de réservation (10 min par défaut) ; vrai, durée de
+            confirmation (1 h par défaut), seulement pour la commande qui détient le verrou.
+          default: false
+      type: object
+      required:
+      - seance_id
+      - commande_id
+      title: VerrouCreation
+    Verrou:
+      properties:
+        place_id:
+          type: string
+          format: uuid
+          title: Place Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        categorie_id:
+          type: string
+          format: uuid
+          title: Categorie Id
+          description: Catégorie de places tarifée de la séance (Catalogue), pour le prix de la
+            ligne.
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        expire_le:
+          type: string
+          format: date-time
+          title: Expire Le
+          description: Fin du verrou (réservation ou confirmation) ; la place est libérée ensuite
+            si la commande n'est pas payée.
+      type: object
+      required:
+      - place_id
+      - seance_id
+      - categorie_id
+      - commande_id
+      - expire_le
+      title: Verrou
     Probleme:
       properties:
         type:
@@ -78,3 +326,8 @@ components:
       required:
       - statut
       title: Sante
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie.
+      scheme: bearer

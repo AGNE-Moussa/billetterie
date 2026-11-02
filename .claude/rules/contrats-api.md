@@ -12,8 +12,8 @@ paths:
   20, `size` ≤ 100, sinon 422) en `Page[T]` sous-classée, `{elements, page, size, total}`.
 - Chaque route déclare son `operation_id` (camelCase) et ses erreurs ; route protégée :
   `REPONSES_AUTH` ou `REPONSE_NON_AUTHENTIFIE` ; ressource d'un autre appelant : 404, jamais 403.
-- Erreurs : Problem Details (`reponse_probleme(...)`) avec un code stable en MAJUSCULES, métier
-  en anglais (`SEAT_ALREADY_TAKEN`), technique de commun en français (`REQUETE_INVALIDE`).
+- Erreurs : Problem Details (`reponse_probleme(...)`), code stable en MAJUSCULES, métier en
+  anglais (`SEAT_ALREADY_TAKEN`), technique en français (`REQUETE_INVALIDE`, `*_INDISPONIBLE`).
 - Centimes (entiers), UUID, dates ISO 8601 avec fuseau, énumérations MAJUSCULES sans accent.
 
 ```python

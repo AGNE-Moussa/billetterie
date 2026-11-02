@@ -97,7 +97,7 @@ erDiagram
     uuid commande_id "réf. Commandes"
     varchar client "sub Keycloak de l'acheteur"
     uuid seance_id "réf. Catalogue"
-    uuid place_id FK "UNIQUE"
+    uuid place_id FK "FK (seance_id, place_id) vers places (seance_id, id)"
     varchar statut "EMIS, ANNULE"
     text qr_code
     timestamptz emis_le
@@ -106,6 +106,11 @@ erDiagram
 
 - `places` : `UNIQUE (seance_id, rang, numero)` ; lignes créées à la réception de
   `ticketing.show.scheduled` (numéros de 1 à `nombre_places` dans chaque rang).
+- `places` : `uq_places_seance_id`, `UNIQUE (seance_id, id)`, cible de la clé étrangère
+  composite des billets.
+- Clé étrangère `fk_billets_place` : `(seance_id, place_id)` vers `places (seance_id, id)` ; un
+  billet porte la séance de sa place. Avec `uq_billets_place`, une place n'a jamais deux
+  billets, même sous deux séances différentes.
 - Contrainte `uq_billets_place` : `UNIQUE (seance_id, place_id)` sur `billets` ; la base garantit
   qu'une place n'est jamais vendue deux fois, même si le verrou Redis échoue (règle métier 2).
 - Verrou d'une place : dans Redis, pas en base. Clé `place:<seance_id>:<place_id>`, valeur
