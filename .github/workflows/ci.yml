@@ -79,8 +79,12 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       # Docker est disponible sur ubuntu-latest : Testcontainers lance ses conteneurs.
-      # tests/integration et services/*/tests/integration (voir le Makefile).
+      # tests/integration et services/*/tests/integration (voir le Makefile), hors concurrence.
       - run: make test-integration
+      # Garantie centrale (BIL-007) : 100 verrous simultanés, puis la base seule ; échoue si aucun
+      # test n'est collecté ; la cible affiche les durées (--durations=10).
+      - name: Concurrence des places (BIL-007)
+        run: make test-concurrence
 
   contract:
     runs-on: ubuntu-latest

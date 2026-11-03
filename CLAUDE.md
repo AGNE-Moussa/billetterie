@@ -24,7 +24,8 @@ make reset                 # tout arrêter et effacer les volumes (rejoue l'init
 make demo                  # charger le jeu de démonstration du catalogue (plateforme démarrée)
 make test                  # tous les tests (uv run pytest)
 make test-unit             # tests unitaires (tests/unit et services/*/tests/unit), sans Docker
-make test-integration      # tests d'intégration (Testcontainers, Docker requis)
+make test-integration      # tests d'intégration (Testcontainers, Docker requis), hors concurrence
+make test-concurrence      # même place disputée en parallèle, vraie base et vrai Redis (BIL-007)
 make test-smoke            # smoke tests contre la plateforme démarrée (skill /smoke-tests)
 make lint                  # ruff check + ruff format --check
 make typecheck             # mypy strict

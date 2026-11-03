@@ -1,10 +1,12 @@
 """CA1 et E4 (BIL-006) : contraintes uniques de la base, sans passer par l'application.
 
+Les insertions simultanées pour la même place sont prouvées à N = 50 × 10 par
+test_concurrence_ventes.py (BIL-007, décision Q7).
+
 `uq_billets_place` garantit qu'une place n'est vendue qu'une fois même si le verrou Redis
 échoue ; `uq_places_seance_rang_numero` interdit deux places identiques dans une séance.
 """
 
-import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -35,49 +37,6 @@ def _place(seance_id: uuid.UUID, rang: str = "A", numero: int = 1) -> dict[str, 
         "numero": numero,
         "categorie_id": uuid.uuid4(),
     }
-
-
-async def test_deux_billets_simultanes_sur_la_meme_place_sont_refuses_par_la_base(
-    database_url: str, base: Any, seance: Any
-) -> None:
-    place = seance.places["A1"]
-    moteur = create_async_engine(database_url, connect_args=CONNEXION_BORNEE)
-    depart = asyncio.Event()
-
-    async def inserer() -> BaseException | None:
-        async with moteur.connect() as connexion:
-            await depart.wait()
-            try:
-                async with connexion.begin():
-                    billet = uuid.uuid4()
-                    await connexion.execute(
-                        INSERER_BILLET,
-                        {
-                            "id": billet,
-                            "commande_id": uuid.uuid4(),
-                            "client": "client.test@exemple.test",
-                            "seance_id": seance.id,
-                            "place_id": place,
-                            "qr_code": f"qr-de-test-{billet}",
-                            "emis_le": datetime.now(UTC),
-                        },
-                    )
-            except IntegrityError as erreur:
-                return erreur
-        return None
-
-    try:
-        taches = [asyncio.create_task(inserer()) for _ in range(2)]
-        await asyncio.sleep(0.2)
-        depart.set()
-        resultats = await asyncio.gather(*taches)
-    finally:
-        await moteur.dispose()
-
-    erreurs = [r for r in resultats if r is not None]
-    assert len(erreurs) == 1, resultats
-    assert "uq_billets_place" in str(erreurs[0])
-    assert await base.compter("billets", "place_id = :place", place=place) == 1
 
 
 async def test_deux_places_de_meme_rang_et_numero_dans_une_seance_sont_refusees_par_la_base(
