@@ -92,6 +92,7 @@ addopts = "--import-mode=importlib -m 'not smoke'"
 markers = [
     "contract: compare le schéma OpenAPI généré par FastAPI au contrat validé",
     "smoke: parcours de bout en bout contre la plateforme démarrée (make test-smoke)",
+    "concurrence: même place disputée en parallèle, vraie base et vrai Redis (make test-concurrence)",
 ]
 
 [dependency-groups]

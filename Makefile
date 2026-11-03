@@ -2,7 +2,7 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up observabilite pannes down reset demo test test-unit test-integration test-smoke lint typecheck
+.PHONY: help init up observabilite pannes down reset demo test test-unit test-integration test-concurrence test-smoke lint typecheck
 
 # Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
 TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
@@ -19,7 +19,8 @@ help:
 	@echo   demo              charge le jeu de demonstration du catalogue, plateforme demarree
 	@echo   test              lance tous les tests (pytest)
 	@echo   test-unit         tests unitaires, rapides, sans Docker
-	@echo   test-integration  tests d'integration (Testcontainers, Docker requis)
+	@echo   test-integration  tests d'integration (Testcontainers, Docker requis), hors concurrence
+	@echo   test-concurrence  meme place disputee en parallele, vraie base et vrai Redis (BIL-007)
 	@echo   test-smoke        smoke tests contre la plateforme demarree (make up)
 	@echo   lint              verifie le style et le formatage (ruff)
 	@echo   typecheck         verifie le typage strict (mypy)
@@ -52,7 +53,11 @@ test-unit:
 	uv run pytest $(TESTS_UNITAIRES)
 
 test-integration:
-	uv run pytest $(TESTS_INTEGRATION)
+	uv run pytest $(TESTS_INTEGRATION) -m "not smoke and not concurrence"
+
+# Sans test collecté, pytest sort en code 5 : la cible échoue (le test ne disparaît pas en silence).
+test-concurrence:
+	uv run pytest $(TESTS_INTEGRATION) -m concurrence --durations=10
 
 test-smoke:
 	uv run pytest tests/smoke -m smoke

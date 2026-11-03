@@ -3,6 +3,9 @@
 Deux instances de l'application (`instance_1`, `instance_2`) partagent la base et le Redis du
 module, comme `billets-1` et `billets-2`. Les appels simultanés partent par `asyncio.gather`
 (décision Q24 : 50 PUT, 50 commandes différentes, répartis sur les deux instances).
+
+Les verrouillages simultanés de la même place avec un seul gagnant sont prouvés à 100 × 10 par
+test_concurrence_ventes.py (BIL-007, décision Q7).
 """
 
 import asyncio
@@ -69,27 +72,6 @@ async def _verrouillages_simultanes(
             )
         )
     )
-
-
-async def test_cinquante_verrouillages_simultanes_de_la_meme_place_n_ont_qu_un_gagnant(
-    plateforme: Any, seance: Any, observateur: Any, outils: Any
-) -> None:
-    place = seance.places["A1"]
-    commandes = [uuid.uuid4() for _ in range(VERROUILLAGES_SIMULTANES)]
-
-    reponses = await outils.borne(
-        f"{VERROUILLAGES_SIMULTANES} PUT simultanés",
-        _verrouillages_simultanes(plateforme, seance.id, place, commandes),
-    )
-
-    statuts = Counter(reponse.status_code for reponse in reponses)
-    assert statuts == {200: 1, 409: VERROUILLAGES_SIMULTANES - 1}, statuts
-    refus = [r for r in reponses if r.status_code == 409]
-    assert {r.json()["code"] for r in refus} == {"SEAT_ALREADY_TAKEN"}
-    (gagnant,) = [
-        commande for commande, r in zip(commandes, reponses, strict=True) if r.status_code == 200
-    ]
-    assert await observateur.valeur(outils.cle_verrou(seance.id, place)) == str(gagnant)
 
 
 async def test_des_verrouillages_simultanes_de_places_differentes_reussissent_tous(
