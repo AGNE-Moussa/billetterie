@@ -116,7 +116,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '503':
-          description: Billets, Catalogue ou Paiements indisponible (SERVICE_INDISPONIBLE). Si
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements
+            indisponible (SERVICE_INDISPONIBLE). Si
             Paiements ne répond pas, la commande reste EN_ATTENTE, ses places verrouillées
             jusqu'à expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande.
           content:
@@ -177,6 +178,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/orders/{commande_id}:
     get:
       tags:
@@ -220,6 +227,12 @@ paths:
                 $ref: '#/components/schemas/Probleme'
         '422':
           description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:
@@ -280,15 +293,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '404':
-          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND).
+          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND), ou
+            séance de la commande inconnue de Catalogue (SHOW_NOT_FOUND).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '409':
-          description: La commande n'est pas EN_ATTENTE (ORDER_NOT_PENDING), une place est perdue
-            (SEAT_ALREADY_TAKEN ; la commande passe EXPIREE, sans débit), ou sa séance est annulée
-            (SHOW_CANCELLED) ou déjà commencée (SHOW_ALREADY_STARTED).
+          description: La commande n'est pas EN_ATTENTE (ORDER_NOT_PENDING), sa réservation est
+            encore en cours (REQUEST_IN_PROGRESS), une place est perdue (SEAT_ALREADY_TAKEN ; la
+            commande passe EXPIREE), ou sa séance est annulée (SHOW_CANCELLED) ou déjà commencée
+            (SHOW_ALREADY_STARTED ; la commande passe EXPIREE). Un paiement déjà accepté est
+            signalé à rembourser (ticketing.order.expired, remboursement_du).
           content:
             application/problem+json:
               schema:
@@ -300,8 +316,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '503':
-          description: Catalogue (lecture de la séance) ou Paiements indisponible ; la commande
-            reste EN_ATTENTE jusqu'à expire_le (SERVICE_INDISPONIBLE).
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets (reverrouillage), Catalogue (lecture de la séance)
+            ou Paiements indisponible, la commande restant EN_ATTENTE jusqu'à expire_le
+            (SERVICE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:
