@@ -86,8 +86,11 @@ SERVICES = [
 ]
 PAR_SERVICE = pytest.mark.parametrize("service", SERVICES, ids=[s.nom for s in SERVICES])
 # Services encore à l'état de squelette vide : catalogue en sort avec BIL-004 (décision Q18),
-# billets avec BIL-006 (décisions du squelette).
-SQUELETTES = [s for s in SERVICES if s.nom not in {"catalogue", "billets"}]
+# billets avec BIL-006 (décisions du squelette), commandes et paiements avec BIL-008 (décisions
+# du plan et du squelette).
+SQUELETTES = [
+    s for s in SERVICES if s.nom not in {"catalogue", "billets", "commandes", "paiements"}
+]
 PAR_SQUELETTE = pytest.mark.parametrize("service", SQUELETTES, ids=[s.nom for s in SQUELETTES])
 
 

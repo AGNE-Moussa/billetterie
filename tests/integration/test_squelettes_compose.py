@@ -115,8 +115,9 @@ def test_aucun_squelette_ne_publie_de_port_sur_l_hote(
 
 # Décisions Q16 et Q18 du plan BIL-004 : catalogue publie par l'outbox, son relais a besoin de
 # RabbitMQ ; il n'est plus un squelette vide. BIL-006 (décision Q5) : billets consomme
-# ticketing.show.scheduled, il n'en est plus un non plus.
-@pytest.mark.sauf_services("catalogue", "billets")
+# ticketing.show.scheduled, il n'en est plus un non plus. BIL-008 (décisions du squelette) :
+# commandes publie ticketing.order.confirmed et ticketing.order.expired par l'outbox.
+@pytest.mark.sauf_services("catalogue", "billets", "commandes")
 def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelette: Any) -> None:
     for conteneur in _conteneurs(squelette):
         definition = _definition(config_locale, conteneur)
@@ -148,3 +149,27 @@ def test_billets_est_configure_avec_redis_et_rabbitmq(
     for instance in billets.instances:
         dependances = _definition(config_locale, instance).get("depends_on") or {}
         assert {"redis", "rabbitmq"} <= set(dependances), (instance, sorted(dependances))
+
+
+# BIL-008 (décision Q23, décisions du squelette) : commandes appelle Billets, Catalogue et
+# Paiements par la gateway avec le jeton du client Keycloak `services`, et relaie son outbox
+# sur RabbitMQ ; ancre commandes-env.
+def test_commandes_est_configure_avec_la_gateway_keycloak_et_rabbitmq(
+    config_locale: Any, services_metier: Any, valeurs_env_locale: dict[str, str]
+) -> None:
+    (commandes,) = [squelette for squelette in services_metier if squelette.nom == "commandes"]
+    realm = valeurs_env_locale["KEYCLOAK_REALM"]
+
+    for instance in commandes.instances:
+        environnement = _environnement(config_locale, instance)
+        assert (
+            environnement.get("SERVICES_CLIENT_SECRET")
+            == (valeurs_env_locale["KEYCLOAK_SERVICES_SECRET"])
+        ), instance
+        assert environnement.get("URL_GATEWAY") == "http://traefik", instance
+        assert environnement.get("URL_JETON") == (
+            f"http://keycloak:8080/auth/realms/{realm}/protocol/openid-connect/token"
+        ), instance
+        assert "@rabbitmq:5672" in str(environnement.get("RABBITMQ_URL", "")), instance
+        dependances = _definition(config_locale, instance).get("depends_on") or {}
+        assert "rabbitmq" in dependances, (instance, sorted(dependances))
