@@ -193,8 +193,10 @@ async def client_sans_consul(squelette: Any, database_url: str) -> AsyncIterator
 # Décision Q18 du plan BIL-004 : catalogue quitte l'état de squelette (ses tables et sa
 # migration sont couvertes par services/catalogue/tests/integration/) ; il reste dans les cas
 # de santé et de Consul ci-dessous. BIL-006 (décisions du squelette) : billets aussi, ses
-# migrations sont couvertes par services/billets/tests/integration/.
-SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue", "billets")
+# migrations sont couvertes par services/billets/tests/integration/. BIL-008 (décisions du
+# squelette) : commandes et paiements aussi, leurs migrations sont couvertes par
+# services/commandes/tests/integration/ et services/paiements/tests/integration/.
+SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue", "billets", "commandes", "paiements")
 
 
 @SQUELETTES_VIDES

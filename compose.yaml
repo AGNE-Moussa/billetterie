@@ -382,6 +382,13 @@ services:
     environment: &commandes-env
       DATABASE_URL: postgresql+asyncpg://commandes:${COMMANDES_DB_PASSWORD:?à définir dans .env}@postgres:5432/commandes
       CONSUL_URL: http://consul:8500
+      # Relais de l'outbox : ticketing.order.confirmed et ticketing.order.expired (BIL-008).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # Appels à Billets, Catalogue et Paiements par la gateway, avec le jeton du client
+      # Keycloak services (Client Credentials, décision Q23 de BIL-008).
+      URL_GATEWAY: http://traefik
+      URL_JETON: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/token
+      SERVICES_CLIENT_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -399,6 +406,8 @@ services:
       commandes-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks: [billetterie]
 

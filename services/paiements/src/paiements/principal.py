@@ -15,7 +15,7 @@ from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
 from commun.registre import inscription, tags_sante_traefik, tags_traefik
-from paiements.api.routes import routeur_sante
+from paiements.api.routes import routeur_paiements, routeur_sante
 from paiements.config import Parametres, parametres
 from paiements.infra.base import creer_moteur
 
@@ -35,7 +35,7 @@ def creer_app(
 
     @asynccontextmanager
     async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
-        moteur = creer_moteur(config.database_url)
+        moteur = creer_moteur(config.database_url, config.delai_base)
         instrumenter_moteur(moteur)
         app.state.sessions = async_sessionmaker(moteur, expire_on_commit=False)
         try:
@@ -66,4 +66,5 @@ def creer_app(
     app.add_middleware(MiddlewareCorrelation)
     installer_observabilite(app, NOM_SERVICE)
     app.include_router(routeur_sante)
+    app.include_router(routeur_paiements)
     return app
