@@ -35,11 +35,12 @@ passer commande et payer.
   (`GET /api/v1/payments/{commande_id}`, `lirePaiement`, jamais de `POST`) ; `REFUSE`,
   `REMBOURSE` ou 404 : pas de champ. Paiements injoignable à cette lecture : 503
   `SERVICE_INDISPONIBLE`, commande `EN_ATTENTE`.
-- **Limite connue** : si une requête expire la commande pendant le `POST` de paiement d'une
-  autre requête, le débit accepté juste après n'a ni `remboursement_du` ni remboursement
-  automatique ; il est seulement journalisé au niveau erreur (`commande_id` seulement). Le
-  ticket de remboursement rapprochera les paiements `ACCEPTE` des commandes `EXPIREE` (ticket de
-  suivi).
+- **Limite connue, non traitée par BIL-008** : si une requête expire la commande pendant le
+  `POST` de paiement d'une autre requête, le client est **débité sans billet et sans
+  remboursement automatique**. Aucun `ticketing.order.expired` ne porte `remboursement_du` pour
+  ce débit (l'événement est déjà parti) ; le seul signal est un journal au niveau erreur
+  (`commande_id` seulement). À reprendre dans le ticket de remboursement, qui rapprochera les
+  paiements `ACCEPTE` des commandes `EXPIREE` (ticket pas encore créé).
 - Clés d'idempotence : verrou consultatif tenu pendant la requête sur un moteur dédié (pool de
   5 connexions sans débordement, attente bornée par `DELAI_BASE`, puis 503
   `BASE_INDISPONIBLE`), séparé du pool des sessions qu'il ne peut donc pas affamer.
