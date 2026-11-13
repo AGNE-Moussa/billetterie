@@ -120,11 +120,15 @@ erDiagram
   `GET` puis `PEXPIRE`. Seul le propriétaire le libère : script Lua qui compare puis supprime, à
   la réception de `ticketing.order.expired`, une fois les billets émis ou après un rejet.
 - Émission (`ticketing.order.confirmed`) : tous les billets de la commande dans une transaction
-  (savepoint autour des insertions), puis suppression des verrous. Une séance présente dans
-  `seances_annulees` ou un conflit sur `uq_billets_place` : retour au savepoint, aucun billet
-  pour la commande, `ticketing.ticket.rejected` publié dans la même transaction (outbox), puis
-  suppression des verrous de la commande. `place_ids` : places en conflit, ou toutes les places
-  de la commande pour `SEANCE_ANNULEE`.
+  (`INSERT ... ON CONFLICT ON CONSTRAINT uq_billets_place DO NOTHING`, places triées), puis
+  suppression des verrous après le commit. Une séance présente dans `seances_annulees` ou un
+  conflit sur `uq_billets_place` : les billets de la commande insérés par cette transaction
+  sont supprimés (pas de savepoint, qui changerait la transaction des lignes suivantes), aucun
+  billet pour la commande, `ticketing.ticket.rejected` publié dans la même transaction
+  (outbox), puis suppression des verrous de la commande. `place_ids` : places en conflit, ou
+  toutes les places de la commande pour `SEANCE_ANNULEE`. Une commande dont toutes les places
+  portent déjà ses billets (republication) n'émet rien et ne publie rien, même si la séance a
+  été annulée depuis : ce cas est testé avant la séance annulée.
 - `seances_annulees` : remplie par `ticketing.show.cancelled` (billets de la séance passés
   `ANNULE`) ; consultée à l'émission, car l'ordre des messages n'est pas garanti.
 - `disponible` (contrat) : ni verrou Redis, ni billet sur la place.
@@ -212,7 +216,7 @@ rien.
 
 ```mermaid
 erDiagram
-  infos_seances ||--o{ destinataires_commande : "concerne"
+  infos_seances |o..o{ destinataires_commande : "concerne (sans clé étrangère)"
   destinataires_commande ||--o{ envois : "reçoit"
 
   infos_seances {
@@ -225,7 +229,7 @@ erDiagram
   destinataires_commande {
     uuid commande_id PK "réf. Commandes"
     varchar email "NULL pour un revendeur"
-    uuid seance_id FK
+    uuid seance_id "réf. Catalogue, sans clé étrangère"
   }
   envois {
     uuid id PK
@@ -242,4 +246,7 @@ erDiagram
 - `destinataires_commande` est une projection remplie par `ticketing.order.confirmed`, toutes
   commandes comprises : `email` NULL (revendeur) veut dire « rien à envoyer » ; une ligne
   absente veut dire « pas encore reçu » (exception, nouvel essai).
+- `destinataires_commande.seance_id` n'a pas de clé étrangère vers `infos_seances` (BIL-009) :
+  la projection n'est pas encore remplie, et une clé étrangère enverrait tout
+  `order.confirmed` en DLQ.
 - `envois` est l'historique d'envoi ; `UNIQUE (evenement_id, commande_id)`.

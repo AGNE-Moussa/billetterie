@@ -362,6 +362,8 @@ def entetes_service(emetteur: EmetteurDeTest) -> dict[str, str]:
 def parametres_billets(database_url: str, **reglages: Any) -> Parametres:
     reglages.setdefault("instance", "billets-test")
     reglages.setdefault("consul_actif", False)
+    # Clé QR synthétique, non réaliste (décision Q6 de BIL-009 : au moins 32 caractères).
+    reglages.setdefault("qr_cle_signature", "cle-de-test-" * 3)
     return Parametres(database_url=database_url, **reglages)
 
 

@@ -1,4 +1,5 @@
-"""Dépôt SQL des places et des billets (réalisation de `domaine.places.DepotPlaces`).
+"""Dépôts SQL des places et des billets (réalisations de `domaine.places.DepotPlaces` et de
+`domaine.emission.DepotEmission`).
 
 Toute méthode qui touche la base traduit une base injoignable (connexion refusée, délai
 dépassé, connexion coupée) en `BaseIndisponible` : 503 BASE_INDISPONIBLE, sans détail technique
@@ -11,13 +12,14 @@ import uuid
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
 
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy import exc as sa_exc
-from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from billets.domaine.emission import NouveauBillet
 from billets.domaine.places import NouvellePlace, PageResultat, Place
-from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne
+from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne, SeanceAnnuleeLigne
 
 journal = logging.getLogger(__name__)
 
@@ -136,3 +138,74 @@ class DepotPlacesSql:
                 .on_conflict_do_nothing(constraint="uq_places_seance_rang_numero")
             )
             await self._session.execute(requete)
+
+
+class DepotEmissionSql:
+    """Réalisation de `domaine.emission.DepotEmission`, dans la session du consommateur."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def seance_annulee(self, seance_id: uuid.UUID) -> bool:
+        requete = select(exists().where(SeanceAnnuleeLigne.seance_id == seance_id))
+        return bool(await self._session.scalar(requete))
+
+    @_base_requise
+    async def places_de_la_commande_emises(
+        self, commande_id: uuid.UUID, seance_id: uuid.UUID, place_ids: Sequence[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        if not place_ids:
+            return set()
+        requete = select(BilletLigne.place_id).where(
+            BilletLigne.commande_id == commande_id,
+            BilletLigne.seance_id == seance_id,
+            BilletLigne.place_id.in_(place_ids),
+        )
+        return set((await self._session.scalars(requete)).all())
+
+    @_base_requise
+    async def emettre(self, billets: Sequence[NouveauBillet]) -> set[uuid.UUID]:
+        if not billets:
+            return set()
+        # Ordre stable (par place) : deux commandes simultanées qui se disputent plusieurs
+        # places les prennent dans le même ordre, sans interblocage.
+        ordonnes = sorted(billets, key=lambda b: str(b.place_id))
+        # ON CONFLICT DO NOTHING sur uq_billets_place : une place prise (même par une
+        # transaction concurrente, attendue jusqu'à son commit) n'est pas insérée, sans
+        # exception. Une place inconnue (fk_billets_place) lève IntegrityError : l'exception
+        # remonte (nouvel essai puis DLQ, décision Q5).
+        requete = (
+            insert(BilletLigne)
+            .values(
+                [
+                    {
+                        "id": billet.id,
+                        "commande_id": billet.commande_id,
+                        "client": billet.client,
+                        "seance_id": billet.seance_id,
+                        "place_id": billet.place_id,
+                        "statut": billet.statut,
+                        "qr_code": billet.qr_code,
+                        "emis_le": billet.emis_le,
+                    }
+                    for billet in ordonnes
+                ]
+            )
+            .on_conflict_do_nothing(constraint="uq_billets_place")
+            .returning(BilletLigne.place_id)
+        )
+        inserees = set((await self._session.scalars(requete)).all())
+        conflits = {billet.place_id for billet in billets} - inserees
+        if conflits and inserees:
+            # Tout ou rien pour la commande (décision Q1) : les billets tout juste insérés sont
+            # retirés dans la même transaction. Pas de SAVEPOINT : ses lignes porteraient l'xmin
+            # d'une sous-transaction, et ROLLBACK TO SAVEPOINT en ouvre une nouvelle pour les
+            # écritures suivantes (ticket.rejected) ; billets, outbox et messages_traites
+            # doivent appartenir à une seule et même transaction.
+            await self._session.execute(
+                delete(BilletLigne).where(
+                    BilletLigne.id.in_([b.id for b in billets if b.place_id in inserees])
+                )
+            )
+        return conflits

@@ -1,5 +1,5 @@
 """Assemblage : configuration, journaux, erreurs, authentification, base, Consul, verrous Redis,
-consommateurs RabbitMQ, routes.
+consommateurs RabbitMQ, relais de l'outbox, routes.
 
 Lancement : uvicorn --factory billets.principal:creer_app
 """
@@ -22,6 +22,7 @@ from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
+from commun.outbox import RelaisOutbox
 from commun.registre import inscription, tags_sante_traefik, tags_traefik
 
 NOM_SERVICE = "billets"
@@ -50,10 +51,19 @@ def creer_app(
                 pile.push_async_callback(verrous.fermer)
                 app.state.verrous = verrous
                 if config.rabbitmq_url:
-                    # Consommateur ticketing.show.scheduled (décision Q5) ; sans URL, aucun.
+                    # Consommateurs ticketing.show.scheduled (décision Q5) et
+                    # ticketing.order.confirmed (BIL-009) ; sans URL, aucun.
                     broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
-                    abonner_consommateurs(broker, app.state.sessions)
+                    abonner_consommateurs(
+                        broker,
+                        app.state.sessions,
+                        verrous,
+                        config.qr_cle_signature.get_secret_value(),
+                    )
                     await pile.enter_async_context(messagerie(broker))
+                    # Relais de l'outbox : ticketing.ticket.issued et ticketing.ticket.rejected.
+                    relais = RelaisOutbox(app.state.sessions, broker)
+                    await pile.enter_async_context(relais.en_fond())
                 if config.consul_actif:
                     # Inscription une fois prêt, retrait avant la fermeture des ressources.
                     await pile.enter_async_context(

@@ -2,8 +2,10 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from billets.domaine.qr import LONGUEUR_MIN_CLE
 
 # Délai par défaut d'une connexion et d'une requête à la base, en secondes (comme catalogue).
 DELAI_BASE_PAR_DEFAUT = 5.0
@@ -49,6 +51,17 @@ class Parametres(BaseSettings):
     duree_verrou_reservation: int = Field(default=DUREE_VERROU_RESERVATION_PAR_DEFAUT, gt=0)
     # Durée d'un verrou confirmé (confirmation à true), en secondes.
     duree_verrou_confirmation: int = Field(default=DUREE_VERROU_CONFIRMATION_PAR_DEFAUT, gt=0)
+    # Clé HMAC du contenu des QR codes (décision Q6 de BIL-009), dans .env, jamais dans le dépôt.
+    # Obligatoire, au moins 32 caractères : sans clé, le service ne démarre pas.
+    qr_cle_signature: SecretStr
+
+    @field_validator("qr_cle_signature")
+    @classmethod
+    def _cle_assez_longue(cls, valeur: SecretStr) -> SecretStr:
+        if len(valeur.get_secret_value()) < LONGUEUR_MIN_CLE:
+            raise ValueError(f"au moins {LONGUEUR_MIN_CLE} caractères")
+        return valeur
+
     # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
     jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
     jwt_audience: str = "billetterie-api"

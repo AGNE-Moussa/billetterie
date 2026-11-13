@@ -342,6 +342,8 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       # Verrous des places (BIL-006, obligatoire) ; Redis local sans mot de passe, aucun secret.
       REDIS_URL: redis://redis:6379/0
+      # Clé HMAC des QR codes (décision Q6 de BIL-009), au moins 32 caractères, dans .env.
+      QR_CLE_SIGNATURE: ${QR_CLE_SIGNATURE:?à définir dans .env}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -457,6 +459,11 @@ services:
     environment: &notifications-env
       DATABASE_URL: postgresql+asyncpg://notifications:${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env}@postgres:5432/notifications
       CONSUL_URL: http://consul:8500
+      # Consommateurs ticketing.order.confirmed et ticketing.ticket.issued (BIL-009).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # E-mails des billets : Mailpit (SMTP de test, boîte sur http://127.0.0.1:8025).
+      SMTP_HOTE: mailpit
+      SMTP_PORT: "1025"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -474,6 +481,10 @@ services:
       notifications-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     networks: [billetterie]
 

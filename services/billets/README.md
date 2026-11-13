@@ -50,12 +50,37 @@ conventions). BIL-006 : places des séances et verrou d'une place pendant l'acha
   numéros de 1 à `nombre_places` par rang, par `INSERT ... ON CONFLICT DO NOTHING` (une séance
   republiée ne crée aucun doublon et ne supprime rien), par lots de 1 000 places (limite de
   32 767 paramètres d'asyncpg) dans la même transaction que `messages_traites`.
-- Configuration : `DATABASE_URL`, `REDIS_URL` (obligatoire), `RABBITMQ_URL` (facultatif, sans
+- Consommateur : `ticketing.order.confirmed` (file `billets.order-confirmed`, DLQ
+  `billets.order-confirmed.dlq`, BIL-009) ; émission tout ou rien par commande, dans la
+  transaction de `messages_traites` :
+  - séance présente dans `seances_annulees` : aucun billet, `ticketing.ticket.rejected`
+    `SEANCE_ANNULEE` (toutes les places) ;
+  - sinon un billet `EMIS` par ligne, par `INSERT ... ON CONFLICT ON CONSTRAINT
+    uq_billets_place DO NOTHING RETURNING` (places triées : pas d'interblocage) ; jamais de
+    lecture préalable des places. Une place prise (même par une transaction concurrente,
+    attendue jusqu'à son commit) n'est pas insérée : les billets tout juste insérés de la
+    commande sont supprimés dans la même transaction et `ticketing.ticket.rejected`
+    `PLACE_DEJA_VENDUE` part avec les places en conflit. Pas de SAVEPOINT : ses lignes
+    porteraient l'`xmin` d'une sous-transaction ;
+  - places en conflit qui portent déjà un billet de la même commande (republication sous un
+    autre identifiant) : rien de plus, journal `INFO` ;
+  - place inconnue (`fk_billets_place`) : exception, trois livraisons puis DLQ ;
+  - un `ticketing.ticket.issued` par billet (outbox), sans e-mail (v1) ;
+  - après le commit (point d'accroche `apres_commit` de `commun.consommateurs`, aussi pour un
+    message déjà traité) : suppression des verrous de la commande par le script « comparer
+    puis supprimer » ; Redis injoignable = journal `WARNING`, le message reste traité.
+- QR code (`domaine/qr.py`) : `<billet_id>.<signature>`, HMAC-SHA256 de l'identifiant en
+  base64url sans remplissage ; `verifier_qr(contenu)` recalcule la signature (comparaison à
+  temps constant) et rend l'identifiant, ou lève `QrInvalide`. Elle ne lit pas la base : le
+  refus d'un billet annulé ou déjà scanné relèvera de la route de scan (V3).
+- Configuration : `DATABASE_URL`, `REDIS_URL` (obligatoire), `QR_CLE_SIGNATURE` (obligatoire,
+  au moins 32 caractères, dans `.env`, jamais dans le dépôt), `RABBITMQ_URL` (facultatif, sans
   URL pas de consommateur), `DUREE_VERROU_RESERVATION` (600 s), `DUREE_VERROU_CONFIRMATION`
   (3600 s), entiers strictement positifs, `DELAI_REDIS` (0,5 s), `DELAI_BASE` (5 s).
 - Migrations : `0001` (vide), `0002` (messagerie, commun.outbox), `0003` (places, billets ;
   contraintes `uq_places_seance_rang_numero`, `uq_places_seance_id`, `uq_billets_place`,
   `fk_billets_place` composite (`seance_id`, `place_id`) vers `places (seance_id, id)` : un
-  billet porte la séance de sa place, `ck_billets_statut`), lancées une fois par le conteneur
+  billet porte la séance de sa place, `ck_billets_statut`), `0004` (`seances_annulees`, vide,
+  remplie plus tard par `ticketing.show.cancelled`), lancées une fois par le conteneur
   `billets-migrations` ; Alembic ne lit que `DATABASE_URL`.
 - Contrat : `openapi.yaml`, vérifié par `pytest -m contract`.

@@ -42,6 +42,8 @@ async def test_la_sante_repond_200_quand_redis_est_injoignable(
     config = Parametres(
         database_url="sqlite+aiosqlite://",
         redis_url=URL_REDIS,
+        # Clé QR synthétique, non réaliste (décision Q6 de BIL-009 : au moins 32 caractères).
+        qr_cle_signature="cle-de-test-" * 3,
         instance="billets-test",
         consul_actif=False,
     )
