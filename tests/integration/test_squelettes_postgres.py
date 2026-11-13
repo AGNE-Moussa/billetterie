@@ -165,6 +165,9 @@ REGLAGES_PROPRES: dict[str, dict[str, Any]] = {
         "redis_url": "redis://redis-absent.exemple.test:6379/0",
         "qr_cle_signature": "cle-de-test-" * 3,
     },
+    # BIL-010 (H6) : REDIS_URL obligatoire pour commandes (verrou de la tâche d'expiration) ;
+    # Redis injoignable, le cycle est sauté (décision Q2), le service démarre quand même.
+    "commandes": {"redis_url": "redis://redis-absent.exemple.test:6379/0"},
 }
 
 

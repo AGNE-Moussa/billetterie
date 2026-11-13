@@ -45,6 +45,8 @@ class CommandeLigne(Base):
         CheckConstraint("montant_total >= 0", name="ck_commandes_montant_total"),
         # Comptage du plafond de billets par client et par séance (décision Q3).
         Index("ix_commandes_client_seance_id", "client", "seance_id"),
+        # Sélection de la tâche d'expiration (BIL-010, migration 0004).
+        Index("ix_commandes_statut_expire_le", "statut", "expire_le"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

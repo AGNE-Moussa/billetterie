@@ -391,6 +391,9 @@ services:
       URL_GATEWAY: http://traefik
       URL_JETON: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/token
       SERVICES_CLIENT_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env}
+      # Verrou de la tâche d'expiration (BIL-010) ; Redis local sans mot de passe, aucun secret.
+      # EXPIRATION_PERIODE (30 s) et EXPIRATION_LOT (100) gardent leur valeur par défaut.
+      REDIS_URL: redis://redis:6379/0
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -410,6 +413,8 @@ services:
       consul:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [billetterie]
 

@@ -64,6 +64,7 @@ MAINTENANT = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
 # URL synthétiques : jamais contactées (lifespan non démarré, transports simulés).
 URL_BASE = "postgresql+asyncpg://test@127.0.0.1:5432/commandes"
 URL_GATEWAY = "http://gateway-de-test"
+URL_REDIS = "redis://127.0.0.1:6379/0"
 URL_JETON = "http://keycloak-de-test/token"
 CARTE_REFUSEE = "4000000000000002"
 DUREE_RESERVATION = 600
@@ -372,6 +373,17 @@ class DepotEnMemoire:
         debut = (page - 1) * size
         return PageResultat(elements=ordonnees[debut : debut + size], total=len(ordonnees))
 
+    async def lister_a_expirer(self, maintenant: datetime, limite: int) -> list[Commande]:
+        # Tous clients confondus ; sans échéance (expire_le NULL) : jamais lue (décision Q4).
+        depassees = [
+            c
+            for c in self.commandes.values()
+            if c.statut is StatutCommande.EN_ATTENTE
+            and c.expire_le is not None
+            and c.expire_le <= maintenant
+        ]
+        return sorted(depassees, key=lambda c: (c.expire_le or maintenant, str(c.id)))[:limite]
+
     async def ajouter_commande(self, commande: Commande) -> None:
         self.commandes[commande.id] = commande
 
@@ -575,6 +587,7 @@ def fabrique_app(
 
     def fabriquer(**reglages: Any) -> FastAPI:
         reglages.setdefault("database_url", URL_BASE)
+        reglages.setdefault("redis_url", URL_REDIS)
         config = Parametres(
             instance="commandes-test", consul_actif=False, url_gateway=URL_GATEWAY, **reglages
         )
@@ -666,6 +679,13 @@ def entetes_admin(emetteur: EmetteurDeTest) -> dict[str, str]:
 
 @pytest.fixture
 def environnement_propre(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    for variable in ("LIMITE_BILLETS_PAR_SEANCE", "URL_GATEWAY", "URL_JETON"):
+    for variable in (
+        "LIMITE_BILLETS_PAR_SEANCE",
+        "URL_GATEWAY",
+        "URL_JETON",
+        "REDIS_URL",
+        "EXPIRATION_PERIODE",
+        "EXPIRATION_LOT",
+    ):
         monkeypatch.delenv(variable, raising=False)
     yield

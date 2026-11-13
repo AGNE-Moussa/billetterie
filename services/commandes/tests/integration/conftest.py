@@ -23,6 +23,7 @@ ajouté pour le seul cas où deux clients prennent chacun 10 places de la même 
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import secrets
@@ -46,7 +47,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from jsonschema import Draft202012Validator
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
@@ -55,6 +56,8 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 from billets.config import Parametres as ParametresBillets
 from billets.principal import creer_app as creer_billets
 from commandes.config import Parametres as ParametresCommandes
+from commandes.domaine.expiration import CLE_VERROU_TACHE
+from commandes.domaine.services import ClientPaiements
 from commandes.infra.clients import (
     CIBLE_BILLETS,
     CIBLE_CATALOGUE,
@@ -63,7 +66,9 @@ from commandes.infra.clients import (
     ClientCatalogueHttp,
     ClientPaiementsHttp,
 )
+from commandes.infra.verrou_tache import VerrouTacheRedis
 from commandes.principal import creer_app as creer_commandes
+from commandes.tache import TacheExpiration
 from commun.faux_jetons import EmetteurDeTest
 from commun.http import ClientService, Disjoncteur, JetonService
 from paiements.config import Parametres as ParametresPaiements
@@ -92,6 +97,12 @@ URL_JETON_TEST = "http://keycloak-de-test/realms/billetterie/protocol/openid-con
 CARTE_ACCEPTEE = "4242424242424242"
 CARTE_REFUSEE = "4000000000000002"
 DUREE_CONFIRMATION_MS = 3_600_000
+# Tâche d'expiration (BIL-010, décision Q1) : période des tests 1 s, lot par défaut (Q5),
+# attente maximale d'un appel à Redis comme la configuration (delai_redis).
+PERIODE_TEST = 1.0
+LOT_TEST = 100
+DELAI_REDIS = 0.5
+PRIX_TEST = 4500
 
 # Séance S du plan : (catégorie, prix, [(rang, nombre)]) ; rang B : voir la docstring.
 CATEGORIES = (
@@ -343,6 +354,61 @@ class Bases:
             le=datetime.now(UTC),
         )
 
+    async def ajouter_commande(
+        self,
+        *,
+        expire_le: datetime | None,
+        statut: str = "EN_ATTENTE",
+        paiement_demande: bool = False,
+        places: int = 2,
+        seance_id: uuid.UUID | None = None,
+        place_ids: list[uuid.UUID] | None = None,
+        client: str | None = None,
+        cree_le: datetime | None = None,
+    ) -> "CommandeSemee":
+        """Commande synthétique écrite directement dans la base de Commandes (colonnes de la
+        migration 0003), lignes à 4500 centimes (données communes du plan BIL-010)."""
+        commande = CommandeSemee(
+            id=uuid.uuid4(),
+            seance_id=seance_id or uuid.uuid4(),
+            place_ids=list(place_ids or [uuid.uuid4() for _ in range(places)]),
+            client=client or f"client-test-{uuid.uuid4()}",
+        )
+        await self.commandes.executer(
+            "INSERT INTO commandes (id, client, email, cle_idempotence, seance_id, statut,"
+            " montant_total, cree_le, expire_le, paiement_demande) VALUES (:id, :client,"
+            " :email, NULL, :seance_id, :statut, :total, :cree_le, :expire_le, :paiement)",
+            id=commande.id,
+            client=commande.client,
+            email="client.test@exemple.test",
+            seance_id=commande.seance_id,
+            statut=statut,
+            total=PRIX_TEST * len(commande.place_ids),
+            cree_le=cree_le or datetime.now(UTC) - timedelta(minutes=15),
+            expire_le=expire_le,
+            paiement=paiement_demande,
+        )
+        for place_id in commande.place_ids:
+            await self.commandes.executer(
+                "INSERT INTO lignes_commande (commande_id, place_id, montant)"
+                " VALUES (:commande_id, :place_id, :montant)",
+                commande_id=commande.id,
+                place_id=place_id,
+                montant=PRIX_TEST,
+            )
+        return commande
+
+    async def statut(self, commande_id: uuid.UUID | str) -> str:
+        return str((await self.commande(commande_id))["statut"])
+
+
+@dataclass(frozen=True)
+class CommandeSemee:
+    id: uuid.UUID
+    seance_id: uuid.UUID
+    place_ids: list[uuid.UUID]
+    client: str
+
 
 @pytest.fixture
 async def bases(urls: dict[str, str]) -> Bases:
@@ -394,6 +460,10 @@ class ObservateurRedis:
     async def poser(self, cle: str, valeur: str, px: int) -> None:
         async with self._client() as client:
             await client.set(cle, valeur, px=px)
+
+    async def supprimer(self, cle: str) -> None:
+        async with self._client() as client:
+            await client.delete(cle)
 
 
 @pytest.fixture
@@ -616,6 +686,25 @@ class Plateforme:
     billets: httpx.AsyncClient
     paiements: httpx.AsyncClient
     jetons_emis: list[str] = field(default_factory=list)
+    # Applications Commandes (commandes-1, commandes-2), pour la tâche d'expiration (BIL-010).
+    apps_commandes: list[FastAPI] = field(default_factory=list)
+
+    # Tâche d'expiration (BIL-010) -------------------------------------------------------------
+
+    async def cycle(
+        self, numero: int = 1, *, periode: float = PERIODE_TEST, lot: int = LOT_TEST
+    ) -> bool | BaseException:
+        """Un cycle immédiat de la tâche de l'instance `commandes-<numero>`, avec ses sessions,
+        son client Paiements (gateway de test) et un vrai verrou Redis."""
+        app = self.apps_commandes[numero - 1]
+        return await un_cycle(
+            app.state.sessions,
+            self.redis.url,
+            app.state.paiements,
+            instance=f"commandes-{numero}",
+            periode=periode,
+            lot=lot,
+        )
 
     # Appels par l'API de Commandes -----------------------------------------------------------
 
@@ -804,10 +893,10 @@ def plateforme_commandes(
             ParametresBillets(
                 database_url=urls["billets"],
                 redis_url=redis_url,
-                qr_cle_signature=secrets.token_urlsafe(32),
                 instance="billets-test",
                 consul_actif=False,
-                **(billets or {}),
+                # BIL-009 (décision Q6) : QR_CLE_SIGNATURE obligatoire ; clé synthétique.
+                **{"qr_cle_signature": "cle-de-test-" * 3, **(billets or {})},
             ),
             verificateur_jetons=emetteur.verificateur(),
         )
@@ -834,7 +923,14 @@ def plateforme_commandes(
                     url_gateway=URL_GATEWAY,
                     url_jeton=URL_JETON_TEST,
                     services_client_secret=secret,
-                    **(commandes or {}),
+                    # BIL-010 (H6) : REDIS_URL obligatoire (verrou de la tâche d'expiration).
+                    # Période d'une heure par défaut : la tâche de fond ne prend jamais le
+                    # verrou du cycle pendant un test ; un test qui la veut courte la passe.
+                    **{
+                        "redis_url": redis_url,
+                        "expiration_periode": 3600,
+                        **(commandes or {}),
+                    },
                 ),
                 verificateur_jetons=emetteur.verificateur(),
             )
@@ -894,6 +990,7 @@ def plateforme_commandes(
                 client_paiements,
                 # Jetons des clients et jetons de service émis : aucun ne doit être journalisé.
                 jetons_emis=jetons_service,
+                apps_commandes=apps_commandes,
             )
             yield plateforme
 
@@ -907,6 +1004,157 @@ async def plateforme(
     """Durées de verrou par défaut (réservation 600 s, confirmation 3600 s)."""
     async with plateforme_commandes() as demarree:
         yield demarree
+
+
+# --- Tâche d'expiration (BIL-010) ---------------------------------------------------------------
+
+
+async def un_cycle(
+    sessions: async_sessionmaker[AsyncSession],
+    redis_url: str,
+    paiements: ClientPaiements,
+    *,
+    instance: str = "commandes-1",
+    periode: float = PERIODE_TEST,
+    lot: int = LOT_TEST,
+) -> bool | BaseException:
+    """Un cycle de `TacheExpiration` avec un vrai `VerrouTacheRedis`.
+
+    Rend le résultat de `cycle()` (vrai si l'instance a obtenu le verrou) ou l'exception levée :
+    le test vérifie d'abord l'état (base, Redis), puis ce résultat.
+    """
+    verrou: VerrouTacheRedis | None = None
+    try:
+        verrou = VerrouTacheRedis(redis_url, DELAI_REDIS)
+        tache = TacheExpiration(
+            sessions, verrou, paiements, instance=instance, periode=periode, lot=lot
+        )
+        resultat: bool = await borne(f"cycle de la tâche ({instance})", tache.cycle())
+        return resultat
+    except Exception as erreur:  # noqa: BLE001 : rendue au test, qui vérifie l'état d'abord
+        return erreur
+    finally:
+        if verrou is not None:
+            # Fermeture au mieux : l'issue du cycle est déjà rendue.
+            with contextlib.suppress(Exception):
+                await verrou.fermer()
+
+
+@pytest.fixture
+async def sessions_commandes(
+    urls: dict[str, str],
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """Sessions sur la vraie base de Commandes, comme celles du lifespan."""
+    moteur = create_async_engine(urls["commandes"], connect_args=CONNEXION_BORNEE)
+    try:
+        yield async_sessionmaker(moteur, expire_on_commit=False)
+    finally:
+        await moteur.dispose()
+
+
+class PaiementsDeTest:
+    """Double ASGI de Paiements : `lirePaiement` rend le paiement de `statuts[commande_id]`
+    (schéma `Paiement` du contrat), 404 PAYMENT_NOT_FOUND sinon. `creerPaiement` n'est jamais
+    attendu de la tâche : il répond 500 (et la gateway l'enregistre)."""
+
+    def __init__(self) -> None:
+        self.statuts: dict[str, str] = {}
+        self.app = FastAPI()
+
+        @self.app.get("/api/v1/payments/{commande_id}")
+        async def lire(commande_id: str) -> JSONResponse:
+            statut = self.statuts.get(commande_id)
+            if statut is None:
+                return JSONResponse(
+                    {
+                        "type": "about:blank",
+                        "title": "Paiement introuvable",
+                        "status": 404,
+                        "detail": f"Aucun paiement pour la commande {commande_id}.",
+                        "code": "PAYMENT_NOT_FOUND",
+                    },
+                    status_code=404,
+                    media_type="application/problem+json",
+                )
+            corps = {
+                "id": str(uuid.uuid4()),
+                "commande_id": commande_id,
+                "seance_id": str(uuid.uuid4()),
+                "montant": PRIX_TEST,
+                "statut": statut,
+                "cree_le": datetime.now(UTC).isoformat(),
+            }
+            ecarts = erreurs_schema(corps, "paiements", "Paiement")
+            assert ecarts == [], f"double de Paiements hors contrat : {ecarts}"
+            return JSONResponse(corps)
+
+        @self.app.post("/api/v1/payments")
+        async def creer() -> JSONResponse:
+            return JSONResponse(
+                {
+                    "type": "about:blank",
+                    "title": "Inattendu",
+                    "status": 500,
+                    "detail": "La tâche d'expiration ne doit jamais poster de paiement.",
+                    "code": "ERREUR_INTERNE",
+                },
+                status_code=500,
+                media_type="application/problem+json",
+            )
+
+
+@dataclass
+class PaiementsSimules:
+    """Client Paiements de Commandes (`ClientPaiementsHttp` sur `ClientService`) branché sur
+    le double, à travers une gateway de test qui enregistre les appels."""
+
+    client: ClientPaiementsHttp
+    gateway: Gateway
+    double: PaiementsDeTest
+    jetons: list[str]
+
+    def injoignable(self) -> None:
+        async def panne(
+            requete: httpx.Request, _transport: httpx.AsyncBaseTransport
+        ) -> httpx.Response:
+            raise httpx.ConnectError("Paiements injoignable (test)", request=requete)
+
+        self.gateway.intercepteurs[CIBLE_PAIEMENTS] = panne
+
+    def appels(self, methode: str | None = None) -> list[Appel]:
+        return [
+            appel
+            for appel in self.gateway.appels_vers(CIBLE_PAIEMENTS)
+            if methode is None or appel.methode == methode
+        ]
+
+
+@pytest.fixture
+async def paiements_simules() -> AsyncIterator[PaiementsSimules]:
+    emetteur = EmetteurDeTest()
+    double = PaiementsDeTest()
+    gateway = Gateway({CIBLE_PAIEMENTS: httpx.ASGITransport(app=double.app)})
+    jetons: list[str] = []
+    jeton = JetonService(
+        URL_JETON_TEST,
+        "services",
+        secrets.token_urlsafe(16),
+        transport=keycloak_de_test(emetteur, jetons),
+    )
+    client = ClientService(
+        CIBLE_PAIEMENTS,
+        URL_GATEWAY,
+        jeton=jeton,
+        timeout=DELAI_APPEL,
+        transport=gateway,
+        attente=_sans_attente,
+        disjoncteur_cible=Disjoncteur(CIBLE_PAIEMENTS),
+    )
+    try:
+        yield PaiementsSimules(ClientPaiementsHttp(client), gateway, double, jetons)
+    finally:
+        await client.aclose()
+        await jeton.aclose()
 
 
 # --- Outils -------------------------------------------------------------------------------------
@@ -969,6 +1217,7 @@ class Outils:
 
     route_commandes: str = ROUTE_COMMANDES
     route_paiements: str = ROUTE_PAIEMENTS
+    route_places: str = ROUTE_PLACES
     carte_acceptee: str = CARTE_ACCEPTEE
     carte_refusee: str = CARTE_REFUSEE
     duree_confirmation_ms: int = DUREE_CONFIRMATION_MS
@@ -981,6 +1230,10 @@ class Outils:
     erreurs_schema: Callable[..., list[str]] = erreurs_schema
     erreurs_evenement: Callable[[dict[str, Any]], list[str]] = erreurs_evenement
     cle_verrou: Callable[..., str] = cle_verrou
+    # Tâche d'expiration (BIL-010).
+    cle_tache: str = CLE_VERROU_TACHE
+    periode_test: float = PERIODE_TEST
+    un_cycle: Callable[..., Awaitable[bool | BaseException]] = un_cycle
 
 
 @pytest.fixture(scope="session")

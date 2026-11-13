@@ -71,9 +71,13 @@ async def test_les_migrations_de_commandes_creent_le_modele(
     ], colonnes
 
 
-@pytest.mark.parametrize("service", ["commandes", "paiements"])
+@pytest.mark.parametrize(
+    ("service", "tete"),
+    # BIL-010 : commandes gagne 0004 (index de la tâche d'expiration).
+    [("commandes", "0004"), ("paiements", "0003")],
+)
 async def test_les_migrations_se_defont_et_se_rejouent(
-    service: str, serveur: Any, migration: Callable[..., None]
+    service: str, tete: str, serveur: Any, migration: Callable[..., None]
 ) -> None:
     url = await _base_neuve(serveur)
 
@@ -86,4 +90,4 @@ async def test_les_migrations_se_defont_et_se_rejouent(
 
     assert {t["table_name"] for t in apres_retour} <= {"alembic_version"}, apres_retour
     versions = await _lignes(url, "SELECT version_num FROM alembic_version")
-    assert [v["version_num"] for v in versions] == ["0003"], versions
+    assert [v["version_num"] for v in versions] == [tete], versions

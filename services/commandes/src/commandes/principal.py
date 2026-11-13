@@ -1,11 +1,12 @@
 """Assemblage : configuration, journaux, erreurs, authentification, base, Consul, clients des
-autres services, relais de l'outbox, routes.
+autres services, relais de l'outbox, tâche d'expiration, routes.
 
 Lancement : uvicorn --factory commandes.principal:creer_app
 """
 
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
+from uuid import UUID
 
 from fastapi import FastAPI
 from faststream.rabbit import RabbitBroker
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from commandes.api.routes import routeur_commandes, routeur_sante
 from commandes.config import Parametres, parametres
+from commandes.domaine.services import ClientPaiements, PaiementEnregistre, PaiementLu
 from commandes.infra.base import creer_moteur, creer_moteur_cles
 from commandes.infra.clients import (
     CIBLE_BILLETS,
@@ -22,6 +24,8 @@ from commandes.infra.clients import (
     ClientCatalogueHttp,
     ClientPaiementsHttp,
 )
+from commandes.infra.verrou_tache import VerrouTacheRedis
+from commandes.tache import TacheExpiration
 from commun.auth import installer_auth
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
@@ -33,6 +37,28 @@ from commun.registre import inscription, tags_sante_traefik, tags_traefik
 
 NOM_SERVICE = "commandes"
 RESSOURCES = ("orders",)
+
+
+class PaiementsDeLApplication:
+    """Client Paiements de la tâche d'expiration : relit `app.state.paiements` à chaque appel,
+    comme les routes ; un client remplacé après le lifespan (tests) est donc pris en compte."""
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+
+    def _client(self) -> ClientPaiements:
+        client: ClientPaiements = self._app.state.paiements
+        return client
+
+    async def payer(
+        self, *, commande_id: UUID, seance_id: UUID, montant: int, carte_test: str
+    ) -> PaiementEnregistre:
+        return await self._client().payer(
+            commande_id=commande_id, seance_id=seance_id, montant=montant, carte_test=carte_test
+        )
+
+    async def lire(self, commande_id: UUID) -> PaiementLu | None:
+        return await self._client().lire(commande_id)
 
 
 def creer_app(
@@ -90,6 +116,20 @@ def creer_app(
                     pile.push_async_callback(broker.stop)
                     relais = RelaisOutbox(app.state.sessions, broker)
                     await pile.enter_async_context(relais.en_fond())
+                # Tâche d'expiration des commandes non payées (BIL-010), une exécution par
+                # période grâce au verrou Redis partagé par les instances ; connexion à Redis
+                # au premier cycle seulement.
+                verrou = VerrouTacheRedis(config.redis_url, config.delai_redis)
+                pile.push_async_callback(verrou.fermer)
+                tache = TacheExpiration(
+                    app.state.sessions,
+                    verrou,
+                    PaiementsDeLApplication(app),
+                    instance=config.instance,
+                    periode=config.expiration_periode,
+                    lot=config.expiration_lot,
+                )
+                await pile.enter_async_context(tache.en_fond())
                 yield
         finally:
             await moteur_cles.dispose()
