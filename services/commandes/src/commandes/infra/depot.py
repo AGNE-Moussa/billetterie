@@ -258,6 +258,26 @@ class DepotCommandesSql:
             elements=[_commande(c, lignes[c.id]) for c in commandes], total=int(total or 0)
         )
 
+    @_base_requise
+    async def lister_a_expirer(self, maintenant: datetime, limite: int) -> list[Commande]:
+        # Sélection sans verrou (index ix_commandes_statut_expire_le) : chaque commande est
+        # relue sous FOR UPDATE avant sa transition. expire_le NULL : jamais lue (Q4).
+        requete = (
+            select(CommandeLigne)
+            .where(
+                CommandeLigne.statut == StatutCommande.EN_ATTENTE.value,
+                CommandeLigne.expire_le.is_not(None),
+                CommandeLigne.expire_le <= maintenant,
+            )
+            .order_by(CommandeLigne.expire_le, CommandeLigne.id)
+            .limit(limite)
+            .execution_options(populate_existing=True)
+        )
+        async with self._unite():
+            commandes = list((await self._session.scalars(requete)).all())
+            lignes = await self._lignes([c.id for c in commandes])
+        return [_commande(c, lignes[c.id]) for c in commandes]
+
     # --- écritures ------------------------------------------------------------------------
 
     @_base_requise

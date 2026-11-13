@@ -14,16 +14,17 @@ pytestmark = pytest.mark.anyio
 
 ORDERS = "/api/v1/orders"
 URL_BASE = "postgresql+asyncpg://test@127.0.0.1:5432/commandes"
+URL_REDIS = "redis://127.0.0.1:6379/0"
 
 
 def test_la_limite_par_defaut_est_de_dix_billets(
     monkeypatch: pytest.MonkeyPatch, environnement_propre: None
 ) -> None:
-    assert Parametres(database_url=URL_BASE).limite_billets_par_seance == 10
+    assert Parametres(database_url=URL_BASE, redis_url=URL_REDIS).limite_billets_par_seance == 10
 
     monkeypatch.setenv("LIMITE_BILLETS_PAR_SEANCE", "0")
     with pytest.raises(ValidationError):
-        Parametres(database_url=URL_BASE)
+        Parametres(database_url=URL_BASE, redis_url=URL_REDIS)
 
 
 async def test_atteindre_exactement_la_limite_est_accepte(

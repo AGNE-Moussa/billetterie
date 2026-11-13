@@ -10,6 +10,9 @@ trois tentatives, puis `billets.show-scheduled.dlq`.
 `ticketing.ticket.issued` par billet, ou aucun billet et un `ticketing.ticket.rejected`
 (décision Q1), dans la transaction de `messages_traites` ; puis, après le commit, supprime les
 verrous Redis de la commande (décision Q4). File `billets.order-confirmed`.
+
+`ticketing.order.expired` (BIL-010) : libère, dans le traitement, les verrous des places encore
+détenus par la commande (décision Q3, H5). File `billets.order-expired`.
 """
 
 import functools
@@ -29,6 +32,11 @@ from billets.domaine.emission import (
     donnees_billet_emis,
     donnees_refus,
     emettre_commande,
+)
+from billets.domaine.expiration import (
+    CONSOMMATEUR_COMMANDE_EXPIREE,
+    EVENEMENT_COMMANDE_EXPIREE,
+    liberer_places_expirees,
 )
 from billets.domaine.places import (
     CONSOMMATEUR_SEANCE_PROGRAMMEE,
@@ -137,6 +145,22 @@ async def recevoir_commande_confirmee(
     )
 
 
+async def liberer_places_de_la_commande_expiree(
+    verrous: MagasinVerrous, session: AsyncSession, evenement: Evenement
+) -> None:
+    """Libère, dans le traitement (décision Q3 de BIL-010), les verrous des places détenus par
+    la commande expirée ; aucune écriture en base hors `messages_traites`.
+
+    Données invalides ou Redis injoignable : l'exception remonte (nouvel essai, puis DLQ).
+    """
+    await liberer_places_expirees(verrous, evenement.data)
+    journal.info(
+        "Commande %s expirée : verrous de ses places libérés (message %s)",
+        evenement.data.get("commande_id"),
+        evenement.id,
+    )
+
+
 def abonner_consommateurs(
     broker: RabbitBroker,
     sessions: async_sessionmaker[AsyncSession],
@@ -161,3 +185,11 @@ def abonner_consommateurs(
         type_evenement=EVENEMENT_COMMANDE_CONFIRMEE,
         apres_commit=functools.partial(liberer_verrous_de_la_commande, verrous),
     )(functools.partial(emettre_billets_de_la_commande, cle=cle_qr))
+    # Libération dans le traitement : une panne Redis repart en nouvel essai (décision Q3 de
+    # BIL-010).
+    consommateur_idempotent(
+        broker,
+        sessions,
+        nom=CONSOMMATEUR_COMMANDE_EXPIREE,
+        type_evenement=EVENEMENT_COMMANDE_EXPIREE,
+    )(functools.partial(liberer_places_de_la_commande_expiree, verrous))

@@ -160,7 +160,16 @@ erDiagram
   }
 ```
 
-- Toute lecture filtre par `client` = appelant (règle métier 6).
+- Toute lecture faite pour un appelant filtre par `client` = appelant (règle métier 6). Seule
+  exception : la tâche d'expiration (système, sans appelant) lit les commandes de tous les
+  clients.
+- Expiration (BIL-010) : tâche périodique (`EXPIRATION_PERIODE`), une seule instance par cycle
+  grâce au verrou Redis `commandes:tache:expiration` (`SET NX PX`, durée d'une période, jamais
+  relâché). Sélection des commandes `EN_ATTENTE` dont `expire_le <= maintenant` (index
+  `ix_commandes_statut_expire_le` sur `(statut, expire_le)`), par lots, puis relecture du statut
+  et de `expire_le` sous `FOR UPDATE` avant de passer `EXPIREE` et de publier
+  `ticketing.order.expired` (outbox). Un reverrouillage de paiement qui tombe sur une commande
+  déjà `EXPIREE` republie `ticketing.order.expired` pour libérer les verrous qu'il a reposés.
 - Limite de billets par séance (règle métier 3) : dans la transaction de création,
   `pg_advisory_xact_lock` sur `(client, seance_id)`, puis comptage des lignes des commandes
   `EN_ATTENTE` et `CONFIRMEE` (index `(client, seance_id)`) ; jamais de comptage sans ce verrou.

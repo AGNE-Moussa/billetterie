@@ -12,9 +12,11 @@ from commun.contrat import differences_contrat
 RACINE = Path(__file__).resolve().parents[2]
 CONTRATS = sorted(RACINE.glob("services/*/openapi.yaml"))
 # Réglages exigés par un service en plus de la base. BIL-006 (décision Q20) : REDIS_URL est
-# obligatoire pour billets ; aucun appel Redis pendant la génération du schéma.
+# obligatoire pour billets, puis pour commandes (BIL-010, H6) ; aucun appel Redis pendant la
+# génération du schéma.
 OPTIONS: dict[str, dict[str, str]] = {
-    "billets": {"redis_url": "redis://127.0.0.1:6379/0", "qr_cle_signature": "cle-de-test-" * 3}
+    "billets": {"redis_url": "redis://127.0.0.1:6379/0", "qr_cle_signature": "cle-de-test-" * 3},
+    "commandes": {"redis_url": "redis://127.0.0.1:6379/0"},
 }
 
 

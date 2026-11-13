@@ -85,7 +85,14 @@ SERVICES = [
             ("qr_cle_signature", "cle-de-test-" * 3),
         ),
     ),
-    Service("commandes", "orders", "commandes", ("commandes-1", "commandes-2")),
+    Service(
+        "commandes",
+        "orders",
+        "commandes",
+        ("commandes-1", "commandes-2"),
+        # REDIS_URL obligatoire (H6 de BIL-010) : verrou de la tâche d'expiration.
+        options=(("redis_url", "redis://127.0.0.1:6379/0"),),
+    ),
     Service("paiements", "payments", "paiements", ("paiements-1",)),
     Service("notifications", "notifications", "notifications", ("notifications-1",)),
 ]

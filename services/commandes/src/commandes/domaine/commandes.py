@@ -262,6 +262,12 @@ class DepotCommandes(Protocol):
         """Commandes du client, par création décroissante puis identifiant."""
         ...
 
+    async def lister_a_expirer(self, maintenant: datetime, limite: int) -> list[Commande]:
+        """Au plus `limite` commandes `EN_ATTENTE` de tous les clients dont `expire_le` (non
+        NULL) est `<= maintenant`, par `expire_le` croissant (BIL-010, décisions Q4 et Q5).
+        Lecture sans verrou : la tâche relit chaque commande sous `FOR UPDATE`."""
+        ...
+
     async def ajouter_commande(self, commande: Commande) -> None:
         """Enregistre la commande et ses lignes."""
         ...
@@ -376,6 +382,18 @@ async def payer_commande(
         await _expirer(depot, commande, paiements)
         raise
     return await _confirmer_et_payer(depot, billets, paiements, commande, carte_test)
+
+
+async def expirer_commande_echue(
+    depot: DepotCommandes, commande: Commande, paiements: ClientPaiements, maintenant: datetime
+) -> bool:
+    """Expiration par la tâche périodique (BIL-010) : même logique que les échecs de BIL-008
+    (lecture de Paiements si `paiement_demande`, jamais de `POST`), seulement si la commande,
+    relue sous `FOR UPDATE`, est encore EN_ATTENTE avec `expire_le <= maintenant` (H3).
+
+    Renvoie vrai si cet appel l'a expirée ; lève `ServiceIndisponible` si Paiements ne répond
+    pas (commande laissée EN_ATTENTE)."""
+    return await _expirer(depot, commande, paiements, echue_a=maintenant)
 
 
 async def lire_commande(depot: DepotCommandes, appelant: Appelant, commande_id: UUID) -> Commande:
@@ -503,6 +521,18 @@ async def _confirmer_et_payer(
         actuelle = await _lire_verrouillee(depot, commande)
         if actuelle.statut is StatutCommande.EN_ATTENTE:
             await depot.changer_statut(commande.id, StatutCommande.EN_ATTENTE, expire_le)
+        elif actuelle.statut is StatutCommande.EXPIREE:
+            # Expirée (tâche de BIL-010) entre la lecture sans verrou et cette relecture : le
+            # reverrouillage vient de prolonger ses verrous à la durée de confirmation. Nouvel
+            # ticketing.order.expired (review BIL-010, point 1) : Billets les libère (comparer
+            # puis supprimer), sans attendre leur expiration.
+            journal.info(
+                "Verrous reposés pour la commande %s déjà expirée : expiration republiée",
+                commande.id,
+            )
+            await depot.publier(
+                Evenement.creer(EVENEMENT_COMMANDE_EXPIREE, _donnees_expiration(commande))
+            )
     if actuelle.statut is not StatutCommande.EN_ATTENTE:
         return _deja_traitee(actuelle)
     commande = replace(commande, expire_le=expire_le)
@@ -570,10 +600,29 @@ def _deja_traitee(actuelle: Commande) -> Commande:
     raise CommandeNonEnAttente(actuelle.id)
 
 
+def _donnees_expiration(commande: Commande) -> dict[str, object]:
+    """`data` de ticketing.order.expired sans `remboursement_du` : la commande, sa séance et
+    toutes ses places (Billets ne libère que les verrous qu'elle détient, décision Q19)."""
+    return {
+        "commande_id": str(commande.id),
+        "seance_id": str(commande.seance_id),
+        "place_ids": [str(ligne.place_id) for ligne in commande.lignes],
+    }
+
+
 async def _expirer(
-    depot: DepotCommandes, commande: Commande, paiements: ClientPaiements | None = None
-) -> None:
-    """EXPIREE et ticketing.order.expired dans la même transaction, si elle est EN_ATTENTE.
+    depot: DepotCommandes,
+    commande: Commande,
+    paiements: ClientPaiements | None = None,
+    *,
+    echue_a: datetime | None = None,
+) -> bool:
+    """EXPIREE et ticketing.order.expired dans la même transaction, si elle est EN_ATTENTE ;
+    renvoie vrai si cet appel l'a fait passer EXPIREE.
+
+    `echue_a` (tâche d'expiration, H3 de BIL-010) : la transition n'a lieu que si `expire_le`,
+    relu sous le verrou de ligne, est non NULL et `<= echue_a` ; un `payerCommande` qui vient de
+    repousser l'échéance n'est donc jamais expiré pendant son appel à Paiements.
 
     `place_ids` : toutes les places de la commande ; Billets ne libère que les verrous qu'elle
     détient (décision Q19). Avec `paiements`, une commande déjà envoyée à Paiements voit son
@@ -588,15 +637,14 @@ async def _expirer(
     async with depot.transaction():
         actuelle = await _lire_verrouillee(depot, commande)
         if actuelle.statut is not StatutCommande.EN_ATTENTE:
-            return
+            return False
+        if echue_a is not None and (actuelle.expire_le is None or actuelle.expire_le > echue_a):
+            return False
         await depot.changer_statut(commande.id, StatutCommande.EXPIREE)
-        donnees: dict[str, object] = {
-            "commande_id": str(commande.id),
-            "seance_id": str(commande.seance_id),
-            "place_ids": [str(ligne.place_id) for ligne in commande.lignes],
-        }
+        donnees = _donnees_expiration(commande)
         if remboursement_du:
             # Le remboursement lui-même relève d'un ticket ultérieur.
             journal.error("Commande %s expirée après un paiement accepté", commande.id)
             donnees["remboursement_du"] = True
         await depot.publier(Evenement.creer(EVENEMENT_COMMANDE_EXPIREE, donnees))
+    return True

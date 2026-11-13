@@ -7,12 +7,14 @@ from typing import Any
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from commandes.config import Parametres
 
 RACINE = Path(__file__).resolve().parents[4]
 URL_BASE = "postgresql+asyncpg://test@127.0.0.1:5432/commandes"
-VARIABLES = ("URL_GATEWAY", "URL_JETON", "SERVICES_CLIENT_SECRET", "RABBITMQ_URL")
+URL_REDIS = "redis://127.0.0.1:6379/0"
+VARIABLES = ("URL_GATEWAY", "URL_JETON", "SERVICES_CLIENT_SECRET", "RABBITMQ_URL", "REDIS_URL")
 
 
 def test_la_configuration_de_commandes_se_lit_dans_l_environnement(
@@ -21,7 +23,7 @@ def test_la_configuration_de_commandes_se_lit_dans_l_environnement(
     monkeypatch.setenv("URL_GATEWAY", "http://gateway-de-test")
     monkeypatch.setenv("URL_JETON", "http://keycloak-de-test/token")
     monkeypatch.setenv("LIMITE_BILLETS_PAR_SEANCE", "4")
-    config = Parametres(database_url=URL_BASE)
+    config = Parametres(database_url=URL_BASE, redis_url=URL_REDIS)
     assert (config.url_gateway, config.url_jeton, config.limite_billets_par_seance) == (
         "http://gateway-de-test",
         "http://keycloak-de-test/token",
@@ -42,3 +44,17 @@ def test_la_configuration_de_commandes_se_lit_dans_l_environnement(
     ), environnement.get("SERVICES_CLIENT_SECRET")
     # .env.example : le secret est déclaré, sans valeur.
     assert "KEYCLOAK_SERVICES_SECRET=" in [ligne.strip() for ligne in exemple]
+
+
+def test_la_configuration_lit_la_periode_et_refuse_une_valeur_nulle(
+    monkeypatch: pytest.MonkeyPatch, environnement_propre: None
+) -> None:
+    """Décision Q1 de BIL-010 : EXPIRATION_PERIODE en secondes, défaut 30, strictement positive."""
+    assert Parametres(database_url=URL_BASE, redis_url=URL_REDIS).expiration_periode == 30
+
+    monkeypatch.setenv("EXPIRATION_PERIODE", "1")
+    assert Parametres(database_url=URL_BASE, redis_url=URL_REDIS).expiration_periode == 1
+
+    monkeypatch.setenv("EXPIRATION_PERIODE", "0")
+    with pytest.raises(ValidationError):
+        Parametres(database_url=URL_BASE, redis_url=URL_REDIS)

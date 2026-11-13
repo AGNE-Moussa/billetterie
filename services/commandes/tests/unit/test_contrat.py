@@ -49,7 +49,7 @@ def _operations(contrat: dict[str, Any]) -> dict[str, tuple[str, str, dict[str, 
 def test_le_schema_genere_est_conforme_au_contrat() -> None:
     url = f"postgresql+asyncpg://commandes:{secrets.token_urlsafe(16)}@127.0.0.1:5432/commandes"
     app = creer_app(
-        Parametres(database_url=url, consul_actif=False),
+        Parametres(database_url=url, redis_url="redis://127.0.0.1:6379/0", consul_actif=False),
         verificateur_jetons=EmetteurDeTest().verificateur(),
     )
     contrat = _charger(CONTRAT_SERVICE)
