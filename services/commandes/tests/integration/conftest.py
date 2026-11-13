@@ -893,7 +893,6 @@ def plateforme_commandes(
             ParametresBillets(
                 database_url=urls["billets"],
                 redis_url=redis_url,
-                qr_cle_signature=secrets.token_urlsafe(32),
                 instance="billets-test",
                 consul_actif=False,
                 # BIL-009 (décision Q6) : QR_CLE_SIGNATURE obligatoire ; clé synthétique.
