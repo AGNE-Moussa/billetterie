@@ -160,7 +160,11 @@ def alembic(
 # obligatoire pour billets ; la connexion est paresseuse et /health ne lit pas Redis (Q21),
 # l'hôte n'a donc pas besoin d'exister.
 REGLAGES_PROPRES: dict[str, dict[str, Any]] = {
-    "billets": {"redis_url": "redis://redis-absent.exemple.test:6379/0"},
+    # BIL-009 (décision Q6) : QR_CLE_SIGNATURE obligatoire ; clé synthétique, non réaliste.
+    "billets": {
+        "redis_url": "redis://redis-absent.exemple.test:6379/0",
+        "qr_cle_signature": "cle-de-test-" * 3,
+    },
 }
 
 
@@ -196,7 +200,9 @@ async def client_sans_consul(squelette: Any, database_url: str) -> AsyncIterator
 # migrations sont couvertes par services/billets/tests/integration/. BIL-008 (décisions du
 # squelette) : commandes et paiements aussi, leurs migrations sont couvertes par
 # services/commandes/tests/integration/ et services/paiements/tests/integration/.
-SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue", "billets", "commandes", "paiements")
+SQUELETTES_VIDES = pytest.mark.sauf_services(
+    "catalogue", "billets", "commandes", "paiements", "notifications"
+)
 
 
 @SQUELETTES_VIDES

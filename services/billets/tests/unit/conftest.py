@@ -30,6 +30,8 @@ MAINTENANT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 # URL synthétique : jamais contactée (lifespan non démarré, magasin remplacé).
 URL_BASE = "postgresql+asyncpg://test@127.0.0.1:5432/billets"
 URL_REDIS = "redis://127.0.0.1:6379/0"
+# Clé QR synthétique, non réaliste (décision Q6 de BIL-009 : au moins 32 caractères).
+CLE_QR = "cle-de-test-" * 3
 
 
 class Horloge:
@@ -296,6 +298,7 @@ def fabrique_app(
     def fabriquer(**reglages: Any) -> FastAPI:
         reglages.setdefault("database_url", URL_BASE)
         reglages.setdefault("redis_url", URL_REDIS)
+        reglages.setdefault("qr_cle_signature", CLE_QR)
         config = Parametres(instance=INSTANCE, consul_actif=False, **reglages)
         application = creer_app(config, verificateur_jetons=emetteur.verificateur())
 

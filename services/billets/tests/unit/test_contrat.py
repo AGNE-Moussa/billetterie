@@ -41,7 +41,13 @@ def _operations(contrat: dict[str, Any]) -> dict[str, tuple[str, str, dict[str, 
 @pytest.mark.contract
 def test_le_schema_genere_par_billets_est_conforme_au_contrat() -> None:
     url = f"postgresql+asyncpg://billets:{secrets.token_urlsafe(16)}@127.0.0.1:5432/billets"
-    config = Parametres(database_url=url, redis_url="redis://127.0.0.1:6379/0", consul_actif=False)
+    config = Parametres(
+        database_url=url,
+        redis_url="redis://127.0.0.1:6379/0",
+        # Clé QR synthétique, non réaliste (décision Q6 de BIL-009 : au moins 32 caractères).
+        qr_cle_signature="cle-de-test-" * 3,
+        consul_actif=False,
+    )
     app = creer_app(config, verificateur_jetons=EmetteurDeTest().verificateur())
     contrat = _charger(CONTRAT_SERVICE)
 

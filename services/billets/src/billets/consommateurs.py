@@ -5,21 +5,41 @@ transaction qui inscrit le message dans `messages_traites` (commun.consommateurs
 déjà traité est ignoré ; une séance déjà connue (autre message) ne crée aucun doublon
 (`INSERT ... ON CONFLICT DO NOTHING`, décision Q18). Un `data` invalide lève une exception :
 trois tentatives, puis `billets.show-scheduled.dlq`.
+
+`ticketing.order.confirmed` (BIL-009) : émet les billets de la commande et publie un
+`ticketing.ticket.issued` par billet, ou aucun billet et un `ticketing.ticket.rejected`
+(décision Q1), dans la transaction de `messages_traites` ; puis, après le commit, supprime les
+verrous Redis de la commande (décision Q4). File `billets.order-confirmed`.
 """
 
+import functools
 import logging
+from datetime import UTC, datetime
 
 from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from billets.domaine.emission import (
+    CONSOMMATEUR_COMMANDE_CONFIRMEE,
+    EVENEMENT_BILLET_EMIS,
+    EVENEMENT_BILLETS_REFUSES,
+    EVENEMENT_COMMANDE_CONFIRMEE,
+    DonneesCommandeInvalides,
+    commande_confirmee,
+    donnees_billet_emis,
+    donnees_refus,
+    emettre_commande,
+)
 from billets.domaine.places import (
     CONSOMMATEUR_SEANCE_PROGRAMMEE,
     EVENEMENT_SEANCE_PROGRAMMEE,
     places_de_la_seance,
 )
-from billets.infra.depot import DepotPlacesSql
-from commun.consommateurs import consommateur_idempotent
+from billets.domaine.verrous import MagasinVerrous, VerrouIndisponible
+from billets.infra.depot import DepotEmissionSql, DepotPlacesSql
+from commun.consommateurs import consommateur_idempotent, traiter_une_fois
 from commun.evenements import Evenement
+from commun.outbox import publier_plus_tard
 
 journal = logging.getLogger(__name__)
 
@@ -37,11 +57,107 @@ async def creer_places_de_la_seance(session: AsyncSession, evenement: Evenement)
     )
 
 
-def abonner_consommateurs(broker: RabbitBroker, sessions: async_sessionmaker[AsyncSession]) -> None:
-    """Abonne les traitements du service au broker, avant `commun.consommateurs.messagerie`."""
+async def emettre_billets_de_la_commande(
+    session: AsyncSession, evenement: Evenement, *, cle: str | None = None
+) -> None:
+    """Émet les billets de la commande confirmée (et leurs `ticket.issued`), ou publie un
+    `ticket.rejected`, dans la transaction de la session.
+
+    `cle` : clé de signature des QR ; None la lit dans `QR_CLE_SIGNATURE`.
+    """
+    issue = await emettre_commande(
+        DepotEmissionSql(session), evenement.data, emis_le=datetime.now(UTC), cle=cle
+    )
+    commande_id = evenement.data.get("commande_id")
+    if issue.refus is not None:
+        await publier_plus_tard(
+            session, Evenement.creer(EVENEMENT_BILLETS_REFUSES, donnees_refus(issue.refus))
+        )
+        journal.info(
+            "Commande %s refusée (%s) : aucun billet émis, places %s (message %s)",
+            commande_id,
+            issue.refus.motif.value,
+            [str(p) for p in issue.refus.place_ids],
+            evenement.id,
+        )
+        return
+    if not issue.billets:
+        # Même commande publiée sous un autre identifiant (décision Q2).
+        journal.info(
+            "Billets de la commande %s déjà émis, rien de plus (message %s)",
+            commande_id,
+            evenement.id,
+        )
+        return
+    for billet in issue.billets:
+        await publier_plus_tard(
+            session, Evenement.creer(EVENEMENT_BILLET_EMIS, donnees_billet_emis(billet))
+        )
+    journal.info(
+        "Commande %s : %d billets émis (message %s)", commande_id, len(issue.billets), evenement.id
+    )
+
+
+async def liberer_verrous_de_la_commande(verrous: MagasinVerrous, evenement: Evenement) -> None:
+    """Après le commit : supprime les verrous des places détenus par la commande (comparer puis
+    supprimer). Un échec Redis est journalisé (`WARNING`), sans faire échouer le message."""
+    try:
+        commande = commande_confirmee(evenement.data)
+    except DonneesCommandeInvalides:
+        return
+    for place_id in commande.place_ids:
+        try:
+            await verrous.liberer(commande.seance_id, place_id, commande.commande_id)
+        except VerrouIndisponible:
+            # Les verrous expireront d'eux-mêmes ; les places restent indisponibles par leur
+            # billet. Inutile d'attendre Redis pour chaque place.
+            journal.warning(
+                "Verrous de la commande %s non supprimés : Redis injoignable (message %s)",
+                commande.commande_id,
+                evenement.id,
+            )
+            return
+
+
+async def recevoir_commande_confirmee(
+    sessions: async_sessionmaker[AsyncSession],
+    verrous: MagasinVerrous,
+    evenement: Evenement,
+    *,
+    cle: str | None = None,
+) -> None:
+    """Une livraison de ticketing.order.confirmed : traitement idempotent dans sa transaction
+    (`messages_traites`), puis suppression des verrous de la commande."""
+    await traiter_une_fois(
+        sessions,
+        CONSOMMATEUR_COMMANDE_CONFIRMEE,
+        functools.partial(emettre_billets_de_la_commande, cle=cle),
+        evenement,
+        functools.partial(liberer_verrous_de_la_commande, verrous),
+    )
+
+
+def abonner_consommateurs(
+    broker: RabbitBroker,
+    sessions: async_sessionmaker[AsyncSession],
+    verrous: MagasinVerrous,
+    cle_qr: str | None = None,
+) -> None:
+    """Abonne les traitements du service au broker, avant `commun.consommateurs.messagerie`.
+
+    `cle_qr` : clé de signature des QR (configuration) ; None la lit dans `QR_CLE_SIGNATURE`.
+    """
     consommateur_idempotent(
         broker,
         sessions,
         nom=CONSOMMATEUR_SEANCE_PROGRAMMEE,
         type_evenement=EVENEMENT_SEANCE_PROGRAMMEE,
     )(creer_places_de_la_seance)
+    # Suppression des verrous après le commit (décision Q4).
+    consommateur_idempotent(
+        broker,
+        sessions,
+        nom=CONSOMMATEUR_COMMANDE_CONFIRMEE,
+        type_evenement=EVENEMENT_COMMANDE_CONFIRMEE,
+        apres_commit=functools.partial(liberer_verrous_de_la_commande, verrous),
+    )(functools.partial(emettre_billets_de_la_commande, cle=cle_qr))

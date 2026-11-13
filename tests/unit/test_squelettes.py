@@ -51,8 +51,9 @@ class Service:
     # Ressources routées en plus de `ressource` (catalogue : venues et shows, décision Q2 de
     # BIL-004) ; la santé reste sous `ressource`.
     autres_ressources: tuple[str, ...] = ()
-    # Réglages obligatoires en plus de la base (billets : REDIS_URL, décision Q20 de BIL-006).
-    # Redis n'est pas contacté au démarrage (connexion paresseuse).
+    # Réglages obligatoires en plus de la base (billets : REDIS_URL, décision Q20 de BIL-006 ;
+    # QR_CLE_SIGNATURE, décision Q6 de BIL-009). Redis n'est pas contacté au démarrage
+    # (connexion paresseuse).
     options: tuple[tuple[str, str], ...] = ()
 
     @property
@@ -78,7 +79,11 @@ SERVICES = [
         "seats",
         "billets",
         ("billets-1", "billets-2"),
-        options=(("redis_url", "redis://127.0.0.1:6379/0"),),
+        # Clé QR synthétique, non réaliste (au moins 32 caractères).
+        options=(
+            ("redis_url", "redis://127.0.0.1:6379/0"),
+            ("qr_cle_signature", "cle-de-test-" * 3),
+        ),
     ),
     Service("commandes", "orders", "commandes", ("commandes-1", "commandes-2")),
     Service("paiements", "payments", "paiements", ("paiements-1",)),
@@ -87,9 +92,11 @@ SERVICES = [
 PAR_SERVICE = pytest.mark.parametrize("service", SERVICES, ids=[s.nom for s in SERVICES])
 # Services encore à l'état de squelette vide : catalogue en sort avec BIL-004 (décision Q18),
 # billets avec BIL-006 (décisions du squelette), commandes et paiements avec BIL-008 (décisions
-# du plan et du squelette).
+# du plan et du squelette), notifications avec BIL-009 (tables, consommateurs et messagerie).
 SQUELETTES = [
-    s for s in SERVICES if s.nom not in {"catalogue", "billets", "commandes", "paiements"}
+    s
+    for s in SERVICES
+    if s.nom not in {"catalogue", "billets", "commandes", "paiements", "notifications"}
 ]
 PAR_SQUELETTE = pytest.mark.parametrize("service", SQUELETTES, ids=[s.nom for s in SQUELETTES])
 
