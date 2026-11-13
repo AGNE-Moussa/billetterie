@@ -1,12 +1,20 @@
 # Vérificateur de jetons (ForwardAuth)
 
 Petit service FastAPI appelé par Traefik avant chaque requête routée par les chaînes `standard`
-et `partenaires` (middleware `verification-jeton` de `infra/traefik/dynamique.yml`).
+et `partenaires` de `infra/traefik/dynamique.yml`. Chaque chaîne a sa propre adresse (BIL-012) :
+
+| Chaîne | Middleware | Adresse | Rôles admis |
+|---|---|---|---|
+| `standard@file` | `verification-jeton` | `/verifier` | tout jeton sans le rôle `partner` |
+| `partenaires@file` (hôte `HOTE_PARTENAIRES`) | `verification-jeton-partenaires` | `/verifier/partenaires` | jeton portant le rôle `partner` |
+
+Un revendeur ne contourne donc pas son quota (`limite-partenaires`) en passant par l'hôte
+standard, et l'hôte des partenaires ne sert que les revendeurs. Règle : `verificateur.chaines`.
 
 ```text
-client ──► Traefik ──(en-têtes de la requête)──► verificateur /verifier
+client ──► Traefik ──(en-têtes de la requête)──► verificateur /verifier[/partenaires]
                 │                                   │ 200 + X-User-Id, X-User-Roles, X-Client-Id
-                │◄──────────────────────────────────┘ ou 401 / 503 (Problem Details)
+                │◄──────────────────────────────────┘ ou 401 / 403 / 503 (Problem Details)
                 └──► service (seulement sur 200, avec les en-têtes X-User-*)
 ```
 
@@ -30,6 +38,7 @@ le jeton avec `commun.auth`).
 | Pas de jeton Bearer | 401 | `JETON_ABSENT` |
 | Jeton expiré | 401 | `JETON_EXPIRE` |
 | Signature, émetteur, audience ou clé invalides | 401 | `JETON_INVALIDE` |
+| Jeton `partner` sur `/verifier`, ou jeton sans `partner` sur `/verifier/partenaires` (même sur une route publique) | 403 | `ROLE_MANQUANT` |
 | Clés du realm jamais chargées (Keycloak absent) | 503 | `VERIFICATION_INDISPONIBLE` |
 
 Traefik retire `X-User-Id`, `X-User-Roles` et `X-Client-Id` de la requête du client avant d'y
@@ -54,3 +63,5 @@ démarrage.
 - `infra/verificateur/tests/unit` : jetons signés par une clé de test, JWKS en mémoire.
 - `tests/integration/test_verification_jeton.py` : Traefik, vrai vérificateur, Keycloak et
   whoami de bout en bout.
+- `tests/integration/test_partenaires_gateway.py` : hôte partenaires, quota (429) et refus de
+  rôle par chaîne.

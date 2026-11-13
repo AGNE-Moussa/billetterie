@@ -1,0 +1,190 @@
+{
+  "info": {
+    "name": "Billetterie : parcours d'un revendeur partenaire",
+    "description": "Parcours complet d'un revendeur (BIL-012, CA2), joué par Newman en smoke : jeton Client Credentials, catalogue, places, commande pour son propre compte, suivi. Hôte des revendeurs : {{base_partenaires}} ; secret du client passé à l'exécution (--env-var client_secret=...), jamais écrit ici.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Jeton du revendeur (Client Credentials)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('jeton obtenu', () => pm.response.to.have.status(200));",
+              "const corps = pm.response.json();",
+              "pm.expect(corps.access_token).to.be.a('string');",
+              "pm.collectionVariables.set('jeton', corps.access_token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "grant_type", "value": "client_credentials" },
+            { "key": "client_id", "value": "revendeur-test" },
+            { "key": "client_secret", "value": "{{client_secret}}" }
+          ]
+        },
+        "url": "{{base_url}}/auth/realms/billetterie/protocol/openid-connect/token"
+      }
+    },
+    {
+      "name": "Lister les événements",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('catalogue lisible', () => pm.response.to.have.status(200));",
+              "const elements = pm.response.json().elements;",
+              "pm.expect(elements.length, 'au moins un événement (make demo)').to.be.above(0);",
+              "pm.collectionVariables.set('evenement_id', elements[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{jeton}}" }],
+        "url": "{{base_partenaires}}/api/v1/events"
+      }
+    },
+    {
+      "name": "Lister les séances de l'événement",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('séances lisibles', () => pm.response.to.have.status(200));",
+              "const elements = pm.response.json().elements;",
+              "pm.expect(elements.length).to.be.above(0);",
+              "pm.collectionVariables.set('seance_id', elements[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{jeton}}" }],
+        "url": "{{base_partenaires}}/api/v1/events/{{evenement_id}}/shows"
+      }
+    },
+    {
+      "name": "Lister les places disponibles",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('places lisibles', () => pm.response.to.have.status(200));",
+              "const libres = pm.response.json().elements.filter((p) => p.disponible);",
+              "pm.expect(libres.length, 'au moins une place libre').to.be.above(0);",
+              "pm.collectionVariables.set('place_id', libres[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{jeton}}" }],
+        "url": "{{base_partenaires}}/api/v1/seats?seance_id={{seance_id}}&size=100"
+      }
+    },
+    {
+      "name": "Créer une commande pour son compte",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('cle_idempotence', pm.variables.replaceIn('{{$guid}}'));"]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const code = pm.response.code === 201 ? '' : ' (' + (pm.response.json().code || pm.response.code) + ')';",
+              "pm.test('commande créée' + code, () => pm.response.to.have.status(201));",
+              "const commande = pm.response.json();",
+              "pm.expect(commande).to.not.have.property('canal');",
+              "pm.collectionVariables.set('commande_id', commande.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jeton}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{cle_idempotence}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_id}}\"], \"carte_test\": \"4242424242424242\"}"
+        },
+        "url": "{{base_partenaires}}/api/v1/orders"
+      }
+    },
+    {
+      "name": "Lire sa commande",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('commande lisible par son revendeur', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('commande_id'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{jeton}}" }],
+        "url": "{{base_partenaires}}/api/v1/orders/{{commande_id}}"
+      }
+    },
+    {
+      "name": "Lister ses commandes",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('liste de ses commandes', () => pm.response.to.have.status(200));",
+              "const ids = pm.response.json().elements.map((c) => c.id);",
+              "pm.expect(ids).to.include(pm.collectionVariables.get('commande_id'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{jeton}}" }],
+        "url": "{{base_partenaires}}/api/v1/orders"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost" },
+    { "key": "base_partenaires", "value": "http://partenaires.localhost" },
+    { "key": "client_secret", "value": "" },
+    { "key": "jeton", "value": "" }
+  ]
+}

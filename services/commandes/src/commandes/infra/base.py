@@ -43,6 +43,8 @@ class CommandeLigne(Base):
             name="ck_commandes_statut",
         ),
         CheckConstraint("montant_total >= 0", name="ck_commandes_montant_total"),
+        # Canal de vente (BIL-012, migration 0005).
+        CheckConstraint("canal IN ('DIRECT', 'PARTENAIRE')", name="ck_commandes_canal"),
         # Comptage du plafond de billets par client et par séance (décision Q3).
         Index("ix_commandes_client_seance_id", "client", "seance_id"),
         # Sélection de la tâche d'expiration (BIL-010, migration 0004).
@@ -64,6 +66,9 @@ class CommandeLigne(Base):
     expire_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Vrai dès que la commande a été envoyée à Paiements (review BIL-008, point 3).
     paiement_demande: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # DIRECT ou PARTENAIRE, déduit du rôle du jeton ; jamais exposé (BIL-012, décision Q3). Sans
+    # valeur par défaut : le code le fixe toujours.
+    canal: Mapped[str] = mapped_column(String(10))
 
 
 class LigneCommandeLigne(Base):

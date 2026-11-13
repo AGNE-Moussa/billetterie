@@ -3,7 +3,13 @@
 Service sur le modèle de `services/echo/` (voir son README pour les conventions). BIL-008 :
 passer commande et payer ; BIL-010 : expirer les commandes non payées.
 
-- Préfixe de routes annoncé à Consul et Traefik : `/api/v1/orders`.
+- Préfixe de routes annoncé à Consul et Traefik : `/api/v1/orders`, sur l'hôte standard
+  (`standard@file`) et sur l'hôte des revendeurs `HOTE_PARTENAIRES` (`partenaires@file`, quota
+  par jeton, BIL-012).
+- Revendeurs (BIL-012) : mêmes routes, rôle `partner` (Client Credentials), filtrées par le
+  sujet du jeton comme pour un client. Colonne `canal` (migration 0005) : `PARTENAIRE` dès que
+  le jeton porte `partner`, `DIRECT` sinon ; en base seulement, jamais dans l'API ni dans les
+  événements. Documentation publiée : `docs/contrats/partenaires.yaml`.
 - Base PostgreSQL : `commandes` ; deux instances en local (`commandes-1`, `commandes-2`).
 - Routes : `GET /health` ; `POST /api/v1/orders` (`creerCommande`, scope `orders:write`,
   `Idempotency-Key` facultatif), `GET /api/v1/orders` (`listerCommandes`, `orders:read`),

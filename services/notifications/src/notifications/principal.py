@@ -28,6 +28,16 @@ NOM_SERVICE = "notifications"
 RESSOURCES = ("notifications",)
 
 
+def tags_consul() -> list[str]:
+    """Tags Consul de l'instance : routeur standard et routeur de santé ; aucun routeur des
+    revendeurs (BIL-012, H1)."""
+    return [
+        *tags_traefik(NOM_SERVICE, *RESSOURCES),
+        # GET /api/v1/<ressource>/health réécrit en /health.
+        *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
+    ]
+
+
 def creer_app(
     config: Parametres | None = None, verificateur_jetons: VerificateurJetons | None = None
 ) -> FastAPI:
@@ -61,11 +71,7 @@ def creer_app(
                             NOM_SERVICE,
                             config.instance,
                             config.port,
-                            [
-                                *tags_traefik(NOM_SERVICE, *RESSOURCES),
-                                # GET /api/v1/<ressource>/health réécrit en /health.
-                                *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
-                            ],
+                            tags_consul(),
                         )
                     )
                 yield

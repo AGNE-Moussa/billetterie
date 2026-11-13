@@ -43,9 +43,18 @@ http:
     # Vérification du JWT par infra/verificateur avant le routage (401 sans jeton valide).
     # Traefik retire de la requête les en-têtes listés avant d'y recopier ceux du vérificateur :
     # un client ne peut pas fournir lui-même un X-User-Id.
+    # Chaîne standard : le vérificateur refuse un jeton partner (403 ROLE_MANQUANT), un
+    # revendeur ne contourne pas son quota (BIL-012, décision Q2).
     verification-jeton:
       forwardAuth:
         address: http://verificateur:8000/verifier
+        authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
+
+    # Chaîne partenaires : seul un jeton partner passe (403 ROLE_MANQUANT sinon) ; sans jeton,
+    # une route publique passe comme sur la chaîne standard.
+    verification-jeton-partenaires:
+      forwardAuth:
+        address: http://verificateur:8000/verifier/partenaires
         authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
 
     # Instance injoignable (tuée, pas encore retirée de Consul) : la requête est rejouée vers
@@ -67,7 +76,11 @@ http:
     partenaires:
       chain:
         middlewares:
-          [correlation, cors, verification-jeton, limite-partenaires, nouvelles-tentatives]
+          - correlation
+          - cors
+          - verification-jeton-partenaires
+          - limite-partenaires
+          - nouvelles-tentatives
 
     # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un ; les
     # fichiers du front se chargent avant toute connexion.

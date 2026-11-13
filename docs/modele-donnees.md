@@ -152,6 +152,7 @@ erDiagram
     integer montant_total "centimes"
     timestamptz cree_le
     timestamptz expire_le
+    varchar canal "DIRECT, PARTENAIRE ; déduit du rôle du jeton"
   }
   lignes_commande {
     uuid commande_id PK, FK
@@ -163,6 +164,10 @@ erDiagram
 - Toute lecture faite pour un appelant filtre par `client` = appelant (règle métier 6). Seule
   exception : la tâche d'expiration (système, sans appelant) lit les commandes de tous les
   clients.
+- Canal de vente (BIL-012, migration 0005) : `canal` = `PARTENAIRE` dès que le jeton porte le
+  rôle `partner`, `DIRECT` sinon ; fixé à la création, `NOT NULL` sans valeur par défaut,
+  contrainte `ck_commandes_canal`. En base seulement : ni dans l'API ni dans les événements.
+  Commandes antérieures : `PARTENAIRE` si `email` est NULL, `DIRECT` sinon.
 - Expiration (BIL-010) : tâche périodique (`EXPIRATION_PERIODE`), une seule instance par cycle
   grâce au verrou Redis `commandes:tache:expiration` (`SET NX PX`, durée d'une période, jamais
   relâché). Sélection des commandes `EN_ATTENTE` dont `expire_le <= maintenant` (index

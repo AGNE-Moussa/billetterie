@@ -5,6 +5,10 @@ décrit par `X-Forwarded-Method` et `X-Forwarded-Uri`. Une réponse 2xx laisse p
 avec les en-têtes `X-User-*` et `X-Client-Id` recopiés vers le service (authResponseHeaders) ;
 toute autre réponse est renvoyée telle quelle au client, sans que le service soit appelé.
 
+Deux adresses, une par chaîne Traefik (BIL-012, `verificateur.chaines`) : `/verifier` pour
+`standard@file` refuse le rôle `partner`, `/verifier/partenaires` pour `partenaires@file`
+n'admet que lui (403 ROLE_MANQUANT sinon).
+
 Lancement : uvicorn --factory verificateur.principal:creer_app
 """
 
@@ -24,9 +28,15 @@ from commun.jetons import (
 )
 from commun.observabilite import installer_observabilite
 from verificateur import routes_publiques
+from verificateur.chaines import Chaine, role_admis
 from verificateur.config import Parametres, parametres
 
 TYPE_MEDIA = "application/problem+json"
+METHODES = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
+DETAIL_ROLE_REFUSE = {
+    Chaine.STANDARD: "Un jeton de revendeur passe par l'hôte des partenaires.",
+    Chaine.PARTENAIRES: "L'hôte des partenaires est réservé au rôle partner.",
+}
 
 
 def _probleme(statut: int, titre: str, detail: str, code: str) -> JSONResponse:
@@ -72,9 +82,7 @@ def creer_app(
     async def sante() -> dict[str, str]:
         return {"statut": "ok"}
 
-    # Traefik appelle toujours en GET ; les autres méthodes sont acceptées par prudence.
-    @app.api_route("/verifier", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
-    async def verifier(requete: Request) -> Response:
+    async def verifier_pour(requete: Request, chaine: Chaine) -> Response:
         jeton = jeton_bearer(requete.headers.get("Authorization"))
         if jeton is None:
             methode = requete.headers.get("X-Forwarded-Method", "")
@@ -101,13 +109,29 @@ def creer_app(
                 "VERIFICATION_INDISPONIBLE",
             )
 
+        roles: list[str] = list(claims.get("realm_access", {}).get("roles", []))
+        if not role_admis(chaine, roles):
+            # Un jeton fourni est toujours vérifié, même sur une route publique (H3 du plan).
+            return _probleme(403, "Accès refusé", DETAIL_ROLE_REFUSE[chaine], "ROLE_MANQUANT")
+
         return Response(
             status_code=200,
             headers={
                 "X-User-Id": str(claims["sub"]),
-                "X-User-Roles": ",".join(claims.get("realm_access", {}).get("roles", [])),
+                "X-User-Roles": ",".join(roles),
                 "X-Client-Id": str(claims.get("azp", "")),
             },
         )
+
+    # Traefik appelle toujours en GET ; les autres méthodes sont acceptées par prudence.
+    # Chaîne standard@file.
+    @app.api_route("/verifier", methods=METHODES)
+    async def verifier(requete: Request) -> Response:
+        return await verifier_pour(requete, Chaine.STANDARD)
+
+    # Chaîne partenaires@file (BIL-012).
+    @app.api_route("/verifier/partenaires", methods=METHODES)
+    async def verifier_partenaires(requete: Request) -> Response:
+        return await verifier_pour(requete, Chaine.PARTENAIRES)
 
     return app

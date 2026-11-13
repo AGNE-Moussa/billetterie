@@ -34,6 +34,8 @@ EVENEMENT_COMMANDE_CONFIRMEE = "ticketing.order.confirmed"
 EVENEMENT_COMMANDE_EXPIREE = "ticketing.order.expired"
 # Statut d'un paiement accepté, lu dans Paiements (lirePaiement).
 PAIEMENT_ACCEPTE = "ACCEPTE"
+# Rôle Keycloak des revendeurs (realm billetterie) : leurs commandes sont au canal PARTENAIRE.
+ROLE_PARTENAIRE = "partner"
 
 
 class StatutCommande(StrEnum):
@@ -52,6 +54,25 @@ StatutCommande.__doc__ = (
     " après ticketing.show.cancelled ou ticketing.ticket.rejected (place refusée à l'émission"
     " du billet), reçu par ticketing.payment.refunded."
 )
+
+
+class CanalCommande(StrEnum):
+    """Canal de vente d'une commande, déduit du rôle du jeton ; en base seulement, jamais exposé
+    dans l'API ni dans les événements (BIL-012, décision Q3, H7)."""
+
+    DIRECT = "DIRECT"
+    PARTENAIRE = "PARTENAIRE"
+
+
+def canal_de(appelant: Appelant) -> CanalCommande:
+    """Canal de la commande créée par `appelant` (BIL-012, décision Q3 et question 4 du plan).
+
+    PARTENAIRE dès que le jeton porte le rôle `partner`, même avec `customer` : la gateway traite
+    ce jeton comme celui d'un revendeur ; DIRECT sinon.
+    """
+    if ROLE_PARTENAIRE in appelant.roles:
+        return CanalCommande.PARTENAIRE
+    return CanalCommande.DIRECT
 
 
 @dataclass(frozen=True)
@@ -80,6 +101,9 @@ class Commande:
     # Vrai dès que la commande a été envoyée au moins une fois à Paiements : avant de l'expirer,
     # Commandes lit alors son paiement (review BIL-008, point 3).
     paiement_demande: bool = False
+    # Canal de vente (BIL-012, décision Q3) : fixé à la création par canal_de, en base
+    # seulement. La valeur par défaut ne sert qu'aux commandes construites hors création.
+    canal: CanalCommande = CanalCommande.DIRECT
 
 
 @dataclass(frozen=True)
@@ -450,6 +474,7 @@ async def _creer(
         montant_total=0,
         cree_le=maintenant,
         expire_le=None,
+        canal=canal_de(appelant),
     )
     # Plafond compté et commande créée sous le même verrou consultatif (client, séance) : deux
     # commandes simultanées du même client se comptent l'une l'autre (décisions Q3 et Q15).

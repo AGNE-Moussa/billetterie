@@ -73,8 +73,8 @@ async def test_les_migrations_de_commandes_creent_le_modele(
 
 @pytest.mark.parametrize(
     ("service", "tete"),
-    # BIL-010 : commandes gagne 0004 (index de la tâche d'expiration).
-    [("commandes", "0004"), ("paiements", "0003")],
+    # BIL-010 : commandes gagne 0004 (index de la tâche d'expiration) ; BIL-012 : 0005 (canal).
+    [("commandes", "0005"), ("paiements", "0003")],
 )
 async def test_les_migrations_se_defont_et_se_rejouent(
     service: str, tete: str, serveur: Any, migration: Callable[..., None]

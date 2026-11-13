@@ -175,7 +175,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks: [billetterie]
+    networks:
+      billetterie:
+        # Hôte des revendeurs (BIL-012) : un conteneur du réseau (Newman) joint la chaîne
+        # partenaires@file par ce nom, sans surcharger l'en-tête Host.
+        aliases: ["${HOTE_PARTENAIRES:-partenaires.localhost}"]
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.1
@@ -220,7 +224,8 @@ services:
       start_period: 30s
     networks: [billetterie]
 
-  # Vérificateur de jetons appelé par Traefik (middleware verification-jeton de dynamique.yml).
+  # Vérificateur de jetons appelé par Traefik (middlewares verification-jeton, chaîne standard,
+  # et verification-jeton-partenaires, chaîne partenaires, de dynamique.yml).
   verificateur:
     image: billetterie/verificateur:dev
     build:
@@ -303,6 +308,8 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       # Cache des lectures (BIL-005) ; Redis local sans mot de passe, donc aucun secret ici.
       REDIS_URL: redis://redis:6379/0
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -344,6 +351,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       # Clé HMAC des QR codes (décision Q6 de BIL-009), au moins 32 caractères, dans .env.
       QR_CLE_SIGNATURE: ${QR_CLE_SIGNATURE:?à définir dans .env}
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -394,6 +403,8 @@ services:
       # Verrou de la tâche d'expiration (BIL-010) ; Redis local sans mot de passe, aucun secret.
       # EXPIRATION_PERIODE (30 s) et EXPIRATION_LOT (100) gardent leur valeur par défaut.
       REDIS_URL: redis://redis:6379/0
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
