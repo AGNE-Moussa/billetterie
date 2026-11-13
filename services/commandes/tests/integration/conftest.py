@@ -366,8 +366,8 @@ class Bases:
         client: str | None = None,
         cree_le: datetime | None = None,
     ) -> "CommandeSemee":
-        """Commande synthétique écrite directement dans la base de Commandes (colonnes de la
-        migration 0003), lignes à 4500 centimes (données communes du plan BIL-010)."""
+        """Commande synthétique écrite directement dans la base de Commandes (colonnes jusqu'à
+        la migration 0005, canal `DIRECT`), lignes à 4500 centimes (plan BIL-010)."""
         commande = CommandeSemee(
             id=uuid.uuid4(),
             seance_id=seance_id or uuid.uuid4(),
@@ -376,8 +376,9 @@ class Bases:
         )
         await self.commandes.executer(
             "INSERT INTO commandes (id, client, email, cle_idempotence, seance_id, statut,"
-            " montant_total, cree_le, expire_le, paiement_demande) VALUES (:id, :client,"
-            " :email, NULL, :seance_id, :statut, :total, :cree_le, :expire_le, :paiement)",
+            " montant_total, cree_le, expire_le, paiement_demande, canal) VALUES (:id, :client,"
+            " :email, NULL, :seance_id, :statut, :total, :cree_le, :expire_le, :paiement,"
+            " 'DIRECT')",
             id=commande.id,
             client=commande.client,
             email="client.test@exemple.test",

@@ -5,7 +5,8 @@ les conventions).
 
 - Préfixes de routes annoncés à Consul et Traefik : `/api/v1/events`, `/api/v1/venues`,
   `/api/v1/shows`. Lectures publiques (`ROUTES_PUBLIQUES` du vérificateur dans `compose.yaml`) ;
-  créations réservées au scope `events:write` (admin).
+  créations réservées au scope `events:write` (admin). Mêmes préfixes annoncés sur l'hôte des
+  revendeurs `HOTE_PARTENAIRES` (`partenaires@file`, quota par jeton, BIL-012).
 - Portée de `ROUTES_PUBLIQUES` : ce sont des préfixes. Toute route `GET`, présente ou future,
   sous `/api/v1/events`, `/api/v1/venues` ou `/api/v1/shows` est publique à la gateway. Une
   future lecture réservée (à l'admin par exemple) doit donc être protégée dans le service

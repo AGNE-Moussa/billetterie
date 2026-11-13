@@ -23,10 +23,26 @@ from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
 from commun.outbox import RelaisOutbox
-from commun.registre import inscription, tags_sante_traefik, tags_traefik
+from commun.registre import (
+    inscription,
+    tags_partenaires_traefik,
+    tags_sante_traefik,
+    tags_traefik,
+)
 
 NOM_SERVICE = "billets"
 RESSOURCES = ("seats",)
+
+
+def tags_consul() -> list[str]:
+    """Tags Consul de l'instance : routeur standard, routeur des revendeurs sur l'hôte
+    partenaires (BIL-012, décision Q1) et routeur de santé."""
+    return [
+        *tags_traefik(NOM_SERVICE, *RESSOURCES),
+        *tags_partenaires_traefik(NOM_SERVICE, *RESSOURCES),
+        # GET /api/v1/<ressource>/health réécrit en /health.
+        *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
+    ]
 
 
 def creer_app(
@@ -71,11 +87,7 @@ def creer_app(
                             NOM_SERVICE,
                             config.instance,
                             config.port,
-                            [
-                                *tags_traefik(NOM_SERVICE, *RESSOURCES),
-                                # GET /api/v1/<ressource>/health réécrit en /health.
-                                *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
-                            ],
+                            tags_consul(),
                         )
                     )
                 yield

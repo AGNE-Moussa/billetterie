@@ -46,7 +46,10 @@ domaine, `http://localhost`, pour l'API, l'authentification et le front :
 Utilisateurs de test du realm (mots de passe dans le `.env`) : `client.test` (rôle `customer`)
 et `admin.test` (`admin`, organisateur). Le revendeur de test est le client confidentiel
 `revendeur-test` (rôle `partner`), en Client Credentials seulement, avec le secret
-`KEYCLOAK_REVENDEUR_SECRET` du `.env`.
+`KEYCLOAK_REVENDEUR_SECRET` du `.env`. Il appelle l'API sur l'hôte des partenaires,
+http://partenaires.localhost (`HOTE_PARTENAIRES`, mêmes chemins `/api/v1/...`, quota de 5
+requêtes par seconde par jeton, 429 au-delà) ; son jeton est refusé sur http://localhost
+(403 `ROLE_MANQUANT`). Documentation : `docs/contrats/partenaires.yaml`.
 
 L'API exige un jeton Keycloak (`Authorization: Bearer ...`) : sans jeton valide, la gateway
 répond 401 sans appeler le service. Les routes ouvertes sans jeton se déclarent dans

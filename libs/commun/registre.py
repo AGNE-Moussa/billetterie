@@ -35,6 +35,11 @@ DELAI_APPEL_CONSUL = 5.0
 VARIABLE_POINT_ENTREE = "TRAEFIK_POINT_ENTREE"
 POINT_ENTREE_PAR_DEFAUT = "web"
 
+# Hôte des routes des revendeurs (BIL-012) : partenaires.localhost en local,
+# partenaires.<domaine> en démo.
+VARIABLE_HOTE_PARTENAIRES = "HOTE_PARTENAIRES"
+HOTE_PARTENAIRES_PAR_DEFAUT = "partenaires.localhost"
+
 # Priorité du routeur de santé (tags_sante_traefik) : bien au-dessus de la longueur de toute
 # règle PathPrefix (priorité implicite chez Traefik). Sa règle Path(...) ne vise qu'un chemin
 # exact : elle ne peut capter aucune autre route.
@@ -78,6 +83,33 @@ def tags_traefik(
         f"{routeur}.rule={regle}",
         f"{routeur}.entrypoints={entree}",
         f"{routeur}.middlewares={middlewares}",
+    ]
+
+
+def tags_partenaires_traefik(
+    nom: str,
+    *ressources: str,
+    hote: str | None = None,
+    point_entree: str | None = None,
+) -> list[str]:
+    """Tags Consul d'un second routeur, réservé aux revendeurs (BIL-012, décision Q1).
+
+    Même règle `PathPrefix(/api/v1/<ressource>)` que `tags_traefik`, combinée avec
+    `Host(<hote>)`, sur la chaîne `partenaires@file`. `hote` : None pour la valeur de la variable
+    d'environnement `VARIABLE_HOTE_PARTENAIRES`.
+
+    À ajouter aux tags de `tags_traefik` : `traefik.enable=true` n'est pas répété.
+    """
+    if not ressources:
+        raise ValueError("Au moins une ressource est nécessaire pour router le service.")
+    entree = point_entree or os.environ.get(VARIABLE_POINT_ENTREE) or POINT_ENTREE_PAR_DEFAUT
+    nom_hote = hote or os.environ.get(VARIABLE_HOTE_PARTENAIRES) or HOTE_PARTENAIRES_PAR_DEFAUT
+    chemins = " || ".join(f"PathPrefix(`/api/v1/{ressource}`)" for ressource in ressources)
+    routeur = f"traefik.http.routers.{nom}-partenaires"
+    return [
+        f"{routeur}.rule=Host(`{nom_hote}`) && ({chemins})",
+        f"{routeur}.entrypoints={entree}",
+        f"{routeur}.middlewares=partenaires@file",
     ]
 
 

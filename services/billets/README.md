@@ -3,7 +3,8 @@
 Service créé au ticket BIL-001 sur le modèle de `services/echo/` (voir son README pour les
 conventions). BIL-006 : places des séances et verrou d'une place pendant l'achat.
 
-- Préfixe de routes annoncé à Consul et Traefik : `/api/v1/seats`.
+- Préfixe de routes annoncé à Consul et Traefik : `/api/v1/seats`, aussi sur l'hôte des
+  revendeurs `HOTE_PARTENAIRES` (`partenaires@file`, quota par jeton, BIL-012).
 - Base PostgreSQL : `billets` ; deux instances en local (`billets-1`, `billets-2`), qui
   partagent la base et le Redis.
 - Routes :

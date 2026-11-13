@@ -30,7 +30,13 @@ from sqlalchemy import exc as sa_exc
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
-from commandes.domaine.commandes import Commande, LigneCommande, PageResultat, StatutCommande
+from commandes.domaine.commandes import (
+    CanalCommande,
+    Commande,
+    LigneCommande,
+    PageResultat,
+    StatutCommande,
+)
 from commandes.infra.base import BaseIndisponible, CommandeLigne, LigneCommandeLigne
 from commun.evenements import Evenement
 from commun.outbox import publier_plus_tard
@@ -93,6 +99,7 @@ def _commande(ligne: CommandeLigne, lignes: list[LigneCommandeLigne]) -> Command
         cree_le=ligne.cree_le,
         expire_le=ligne.expire_le,
         paiement_demande=ligne.paiement_demande,
+        canal=CanalCommande(ligne.canal),
     )
 
 
@@ -295,6 +302,7 @@ class DepotCommandesSql:
                     cree_le=commande.cree_le,
                     expire_le=commande.expire_le,
                     paiement_demande=commande.paiement_demande,
+                    canal=commande.canal.value,
                 )
             )
             # La commande avant ses lignes (fk_lignes_commande_commande).

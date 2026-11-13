@@ -1,0 +1,1260 @@
+# Contrat OpenAPI 3.1 de l'API des revendeurs partenaires (BIL-012) : documentation publiée
+# séparément. Aucune route propre : c'est le sous-ensemble des routes de Catalogue, Billets et
+# Commandes ouvert au rôle partner (conception, section « API partenaires et lots »), recopié
+# opération par opération depuis services/<service>/openapi.yaml, plus la réponse 429 de la
+# gateway (chaîne Traefik partenaires@file, quota par jeton). Une opération d'ici doit rester
+# identique à celle du service, 429 en plus.
+# Lecture des billets (listerBillets, lireBillet) : à ajouter quand un ticket codera
+# /api/v1/tickets (contrat cible docs/contrats/billets.yaml).
+openapi: 3.1.0
+info:
+  title: API des revendeurs partenaires
+  version: 0.1.0
+  description: >-
+    API de la billetterie ouverte aux revendeurs partenaires. Authentification par le flux OAuth
+    2.0 Client Credentials uniquement : POST /auth/realms/billetterie/protocol/openid-connect/token
+    avec grant_type=client_credentials, client_id et client_secret du revendeur ; le jeton porte
+    le rôle partner et les scopes events:read, orders:read, orders:write et tickets:read. Le jeton
+    se passe dans l'en-tête Authorization: Bearer. Un revendeur ne voit que ses propres
+    commandes : elles sont filtrées par le client du jeton, jamais par un paramètre. Chaque
+    revendeur a son propre quota de requêtes, compté par jeton ; au-delà, la gateway répond 429.
+paths:
+  /api/v1/events:
+    get:
+      tags:
+      - événements
+      summary: Rechercher les événements, page par page (route publique)
+      description: Filtres facultatifs et cumulables. q cherche dans le nom et la description ;
+        ville, du et au retiennent les événements qui ont au moins une séance dans cette ville et
+        dans cet intervalle (bornes incluses). Ordre stable par date de création croissante, puis
+        identifiant.
+      operationId: listerEvenements
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Q
+      - name: ville
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 1
+          - type: 'null'
+          title: Ville
+      - name: du
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Du
+      - name: au
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Au
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page d'événements (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvenementPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '422':
+          description: Filtres ou pagination invalides, ou du postérieur à au (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et données absentes du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/events/{evenement_id}:
+    get:
+      tags:
+      - événements
+      summary: Lire le détail d'un événement (route publique)
+      operationId: lireEvenement
+      parameters:
+      - name: evenement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evenement Id
+      responses:
+        '200':
+          description: Détail de l'événement (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evenement'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '404':
+          description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et donnée absente du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/events/{evenement_id}/shows:
+    get:
+      tags:
+      - séances
+      summary: Lister les séances d'un événement avec leurs catégories, page par page (route
+        publique)
+      description: Ordre stable par début croissant, puis identifiant.
+      operationId: listerSeances
+      parameters:
+      - name: evenement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evenement Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de séances (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeancePage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '404':
+          description: Aucun événement avec cet identifiant (EVENT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant ou paramètres de pagination invalides (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et données absentes du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/events/{evenement_id}/shows/{seance_id}:
+    get:
+      tags:
+      - séances
+      summary: Lire une séance avec ses catégories de places (route publique)
+      operationId: lireSeance
+      parameters:
+      - name: evenement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evenement Id
+      - name: seance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      responses:
+        '200':
+          description: Séance (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '404':
+          description: Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et donnée absente du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/shows/{seance_id}:
+    get:
+      tags:
+      - séances
+      summary: Lire une séance par son seul identifiant, avec ses catégories de places (route
+        publique)
+      description: Utilisée notamment par Commandes, qui ne connaît que la séance de la commande.
+      operationId: lireSeanceParId
+      parameters:
+      - name: seance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      responses:
+        '200':
+          description: Séance (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seance'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '404':
+          description: Aucune séance avec cet identifiant (SHOW_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et donnée absente du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/venues:
+    get:
+      tags:
+      - lieux
+      summary: Lister les lieux, page par page (route publique)
+      description: Ordre stable par date de création croissante, puis identifiant.
+      operationId: listerLieux
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de lieux (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LieuPage'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '422':
+          description: Paramètres de pagination invalides (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et données absentes du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/venues/{lieu_id}:
+    get:
+      tags:
+      - lieux
+      summary: Lire un lieu (route publique)
+      operationId: lireLieu
+      parameters:
+      - name: lieu_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Lieu Id
+      responses:
+        '200':
+          description: Lieu (depuis le cache Redis si la base ne répond pas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lieu'
+          headers:
+            X-Cache-Stale:
+              description: Présent, valeur true, seulement quand la réponse vient du cache Redis
+                parce que la base ne répond pas (mode dégradé) ; absent sinon.
+              schema:
+                type: string
+                enum:
+                - 'true'
+        '404':
+          description: Aucun lieu avec cet identifiant (VENUE_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable et donnée absente du cache (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/seats:
+    get:
+      tags:
+      - places
+      summary: Disponibilité des places d'une séance, page par page (route publique)
+      description: Ordre stable par rang, puis numéro. Une séance inconnue ou sans place répond
+        200 avec elements vide.
+      operationId: listerPlaces
+      parameters:
+      - name: seance_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page de places de la séance, avec leur disponibilité.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacePage'
+        '422':
+          description: Séance absente ou invalide, ou pagination invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent,
+            verrou ni posé ni lu (VERROU_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/orders:
+    post:
+      tags:
+      - commandes
+      summary: Commander des places d'une séance et payer (scope orders:write ; client et
+        revendeur)
+      description: >-
+        Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets
+        en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un
+        échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère
+        les places déjà verrouillées. Juste avant Paiements, les places sont reverrouillées en
+        durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande
+        passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et
+        ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton.
+      operationId: creerCommande
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Idempotency-Key
+        description: Facultatif ; une requête terminée, rejouée avec la même clé par le même
+          appelant, répond 200 avec la commande déjà créée ; rejouée pendant que la première
+          est en cours, elle répond 409 REQUEST_IN_PROGRESS.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandeCreation'
+        required: true
+      responses:
+        '200':
+          description: Rejeu d'une requête terminée avec la même Idempotency-Key par le même
+            appelant ; commande déjà créée.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Commande'
+        '201':
+          description: Commande créée et payée (statut CONFIRMEE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Commande'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '402':
+          description: Paiement refusé ; la commande expire et ses places sont libérées
+            (PAYMENT_REFUSED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Séance inconnue (SHOW_NOT_FOUND) ou place inconnue dans cette séance
+            (SEAT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: Place déjà prise (SEAT_ALREADY_TAKEN), nombre maximal de billets par séance
+            dépassé pour l'appelant (TICKET_LIMIT_EXCEEDED), séance annulée (SHOW_CANCELLED) ou
+            déjà commencée (SHOW_ALREADY_STARTED), ou requête de même Idempotency-Key encore en
+            cours (REQUEST_IN_PROGRESS).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: En-tête ou corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements
+            indisponible (SERVICE_INDISPONIBLE). Si
+            Paiements ne répond pas, la commande reste EN_ATTENTE, ses places verrouillées
+            jusqu'à expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+      security:
+      - HTTPBearer: []
+    get:
+      tags:
+      - commandes
+      summary: Lister mes commandes, page par page (scope orders:read ; client et revendeur)
+      description: Filtré par l'appelant du jeton, jamais par un paramètre (règle métier 6).
+        Ordre stable par date de création décroissante, puis identifiant.
+      operationId: listerCommandes
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page des commandes de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandePage'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Paramètres de pagination invalides (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/orders/{commande_id}:
+    get:
+      tags:
+      - commandes
+      summary: Suivre une de mes commandes (scope orders:read ; client et revendeur)
+      operationId: lireCommande
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: commande_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Commande Id
+      responses:
+        '200':
+          description: Commande de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Commande'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/orders/{commande_id}/payment:
+    post:
+      tags:
+      - commandes
+      summary: Réessayer le paiement d'une de mes commandes en attente (scope orders:write ;
+        client et revendeur)
+      description: >-
+        Nouvel essai après un 503 de Paiements, tant que la commande est EN_ATTENTE (avant
+        expire_le). Juste avant Paiements, les places sont reverrouillées en durée de
+        confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe
+        EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et
+        ticketing.order.confirmed est publié.
+      operationId: payerCommande
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: commande_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Commande Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaiementCommande'
+      responses:
+        '200':
+          description: Commande payée (statut CONFIRMEE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Commande'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '402':
+          description: Paiement refusé ; la commande expire et ses places sont libérées
+            (PAYMENT_REFUSED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND), ou
+            séance de la commande inconnue de Catalogue (SHOW_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: La commande n'est pas EN_ATTENTE (ORDER_NOT_PENDING), sa réservation est
+            encore en cours (REQUEST_IN_PROGRESS), une place est perdue (SEAT_ALREADY_TAKEN ; la
+            commande passe EXPIREE), ou sa séance est annulée (SHOW_CANCELLED) ou déjà commencée
+            (SHOW_ALREADY_STARTED ; la commande passe EXPIREE). Un paiement déjà accepté est
+            signalé à rembourser (ticketing.order.expired, remboursement_du).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant ou corps invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '429':
+          $ref: '#/components/responses/QuotaDepasse'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets (reverrouillage), Catalogue (lecture de la séance)
+            ou Paiements indisponible, la commande restant EN_ATTENTE jusqu'à expire_le
+            (SERVICE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+components:
+  responses:
+    QuotaDepasse:
+      description: Quota de requêtes du revendeur dépassé, compté par jeton (réponse de la
+        gateway, chaîne partenaires ; corps non normalisé, pas de Problem Details). Réessayer
+        plus tard.
+      headers:
+        Retry-After:
+          description: Délai en secondes avant de réessayer.
+          schema:
+            type: integer
+  schemas:
+    Evenement:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nom:
+          type: string
+          title: Nom
+        description:
+          type: string
+          title: Description
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+      type: object
+      required:
+      - id
+      - nom
+      - description
+      - cree_le
+      title: Evenement
+    EvenementPage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Evenement'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total d'événements qui répondent aux filtres.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: EvenementPage
+    Rang:
+      properties:
+        rang:
+          type: string
+          maxLength: 10
+          minLength: 1
+          title: Rang
+        nombre_places:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          title: Nombre Places
+          description: Places numérotées de 1 à nombre_places dans le rang.
+      type: object
+      required:
+      - rang
+      - nombre_places
+      title: Rang
+    Categorie:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nom:
+          type: string
+          title: Nom
+        prix:
+          type: integer
+          title: Prix
+          description: Prix d'une place de la catégorie, en centimes.
+        rangs:
+          items:
+            $ref: '#/components/schemas/Rang'
+          type: array
+          title: Rangs
+      type: object
+      required:
+      - id
+      - nom
+      - prix
+      - rangs
+      title: Categorie
+    Seance:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        evenement_id:
+          type: string
+          format: uuid
+          title: Evenement Id
+        lieu_id:
+          type: string
+          format: uuid
+          title: Lieu Id
+        debut:
+          type: string
+          format: date-time
+          title: Debut
+        annulee:
+          type: boolean
+          title: Annulee
+          description: Vrai une fois la séance annulée (ticketing.show.cancelled publié).
+        categories:
+          items:
+            $ref: '#/components/schemas/Categorie'
+          type: array
+          title: Categories
+      type: object
+      required:
+      - id
+      - evenement_id
+      - lieu_id
+      - debut
+      - annulee
+      - categories
+      title: Seance
+    SeancePage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Seance'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de séances de l'événement.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: SeancePage
+    Lieu:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nom:
+          type: string
+          title: Nom
+        adresse:
+          type: string
+          title: Adresse
+        ville:
+          type: string
+          title: Ville
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+      type: object
+      required:
+      - id
+      - nom
+      - adresse
+      - ville
+      - cree_le
+      title: Lieu
+    LieuPage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Lieu'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de lieux.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: LieuPage
+    Place:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        rang:
+          type: string
+          title: Rang
+        numero:
+          type: integer
+          title: Numero
+        categorie_id:
+          type: string
+          format: uuid
+          title: Categorie Id
+          description: Catégorie de places tarifée de la séance (Catalogue).
+        disponible:
+          type: boolean
+          title: Disponible
+          description: Faux si la place est verrouillée ou vendue.
+      type: object
+      required:
+      - id
+      - seance_id
+      - rang
+      - numero
+      - categorie_id
+      - disponible
+      title: Place
+    PlacePage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Place'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de places de la séance.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: PlacePage
+    CommandeCreation:
+      properties:
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        place_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 10
+          minItems: 1
+          uniqueItems: true
+          title: Place Ids
+        carte_test:
+          type: string
+          pattern: ^[0-9]{16}$
+          title: Carte Test
+          description: 'Numéro de carte du paiement simulé, transmis à Paiements et jamais
+            journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre
+            numéro de 16 chiffres accepté (par exemple 4242424242424242).'
+      type: object
+      required:
+      - seance_id
+      - place_ids
+      - carte_test
+      title: CommandeCreation
+    PaiementCommande:
+      properties:
+        carte_test:
+          type: string
+          pattern: ^[0-9]{16}$
+          title: Carte Test
+          description: 'Numéro de carte du paiement simulé, transmis à Paiements et jamais
+            journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre
+            numéro de 16 chiffres accepté (par exemple 4242424242424242).'
+      type: object
+      required:
+      - carte_test
+      title: PaiementCommande
+    StatutCommande:
+      type: string
+      enum:
+      - EN_ATTENTE
+      - CONFIRMEE
+      - EXPIREE
+      - REMBOURSEE
+      title: StatutCommande
+      description: >-
+        Transitions autorisées : EN_ATTENTE vers CONFIRMEE ou EXPIREE ; CONFIRMEE vers
+        REMBOURSEE ; EXPIREE et REMBOURSEE sont finales.
+        EXPIREE : non payée avant expire_le, paiement refusé, échec de verrou ou place
+        perdue avant paiement, ou séance annulée alors que la commande était EN_ATTENTE
+        (ticketing.show.cancelled). REMBOURSEE : remboursement après ticketing.show.cancelled
+        ou ticketing.ticket.rejected (place refusée à l'émission du billet), reçu par
+        ticketing.payment.refunded.
+    LigneCommande:
+      properties:
+        place_id:
+          type: string
+          format: uuid
+          title: Place Id
+        montant:
+          type: integer
+          title: Montant
+          description: Prix de la place en centimes (catégorie de la place au moment de la
+            commande).
+      type: object
+      required:
+      - place_id
+      - montant
+      title: LigneCommande
+    Commande:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        lignes:
+          items:
+            $ref: '#/components/schemas/LigneCommande'
+          type: array
+          title: Lignes
+        statut:
+          $ref: '#/components/schemas/StatutCommande'
+        montant_total:
+          type: integer
+          title: Montant Total
+          description: Somme des montants des lignes, en centimes.
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+        expire_le:
+          type: string
+          format: date-time
+          title: Expire Le
+          description: Fin du plus court des verrous de ses places (réservation de 10 minutes par
+            défaut, configurable ; confirmation de 1 h juste avant Paiements) ; une commande
+            encore EN_ATTENTE à cette date devient EXPIREE.
+      type: object
+      required:
+      - id
+      - seance_id
+      - lignes
+      - statut
+      - montant_total
+      - cree_le
+      - expire_le
+      title: Commande
+    CommandePage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Commande'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de commandes de l'appelant.
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: CommandePage
+    Probleme:
+      properties:
+        type:
+          type: string
+          title: Type
+          default: about:blank
+        title:
+          type: string
+          title: Title
+        status:
+          type: integer
+          title: Status
+        detail:
+          type: string
+          title: Detail
+        code:
+          type: string
+          title: Code
+          description: Code métier stable, par exemple ECHO_INTROUVABLE.
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+          description: Identifiant de corrélation de la requête (X-Correlation-Id).
+        erreurs:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Erreurs
+          description: Détail des champs invalides (code REQUETE_INVALIDE).
+      type: object
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Probleme
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie, obtenu par le flux Client
+        Credentials du revendeur.
+      scheme: bearer
