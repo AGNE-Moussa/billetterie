@@ -1,8 +1,16 @@
 // Fonctions d'API du service commandes (client connecté, rôle customer), typées par
 // src/api/genere/commandes.ts.
 import { clientApi } from "./client";
-import type { Commande } from "./genere/commandes";
+import type { Commande, CommandePage } from "./genere/commandes";
 import { lire } from "./lecture";
+
+/** `GET /api/v1/orders` (`listerCommandes`) : une page des commandes de l'appelant (jeton). */
+export async function listerCommandes(page: number, size?: number): Promise<CommandePage> {
+  const { donnees } = await lire(() =>
+    clientApi().GET("/api/v1/orders", { params: { query: { page, size } } }),
+  );
+  return donnees;
+}
 
 /**
  * `POST /api/v1/orders` sans `carte_test` (`creerCommande`) : réserve les places, la commande

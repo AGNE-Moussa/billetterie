@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from billets.domaine.consultation import StatutBillet
 from commun.pagination import Page
 
 
@@ -23,6 +24,28 @@ class Place(BaseModel):
 
 class PlacePage(Page[Place]):
     total: int = Field(description="Nombre total de places de la séance.")
+
+
+class Billet(BaseModel):
+    id: UUID
+    commande_id: UUID
+    seance_id: UUID
+    place_id: UUID
+    rang: str = Field(description="Rang de la place (table places).")
+    numero: int = Field(description="Numéro de la place dans son rang (table places).")
+    statut: StatutBillet
+    qr_code: str = Field(
+        description="Identifiant du billet signé (HMAC), jamais de donnée lisible."
+    )
+    emis_le: datetime
+
+
+class BilletPage(Page[Billet]):
+    total: int = Field(
+        description=(
+            "Nombre total de billets de l'appelant (de la commande si commande_id est fourni)."
+        )
+    )
 
 
 class VerrouCreation(BaseModel):

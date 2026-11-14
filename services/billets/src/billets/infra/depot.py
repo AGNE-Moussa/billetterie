@@ -1,5 +1,6 @@
-"""Dépôts SQL des places et des billets (réalisations de `domaine.places.DepotPlaces` et de
-`domaine.emission.DepotEmission`).
+"""Dépôts SQL des places et des billets (réalisations de `domaine.places.DepotPlaces`, de
+`domaine.emission.DepotEmission`, de `domaine.annulation.DepotAnnulation` et de
+`domaine.consultation.DepotBillets`).
 
 Toute méthode qui touche la base traduit une base injoignable (connexion refusée, délai
 dépassé, connexion coupée) en `BaseIndisponible` : 503 BASE_INDISPONIBLE, sans détail technique
@@ -13,12 +14,13 @@ from collections.abc import Callable, Coroutine, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, exists, func, select, update
+from sqlalchemy import Select, and_, delete, exists, func, select, update
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billets.domaine.annulation import STATUT_ANNULE
+from billets.domaine.consultation import BilletLu, StatutBillet
 from billets.domaine.emission import STATUT_EMIS, NouveauBillet
 from billets.domaine.places import NouvellePlace, PageResultat, Place
 from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne, SeanceAnnuleeLigne
@@ -251,3 +253,70 @@ class DepotAnnulationSql:
             .returning(BilletLigne.id)
         )
         return len((await self._session.scalars(requete)).all())
+
+
+def _billet_lu(billet: BilletLigne, rang: str, numero: int) -> BilletLu:
+    return BilletLu(
+        id=billet.id,
+        commande_id=billet.commande_id,
+        seance_id=billet.seance_id,
+        place_id=billet.place_id,
+        rang=rang,
+        numero=numero,
+        statut=StatutBillet(billet.statut),
+        qr_code=billet.qr_code,
+        emis_le=billet.emis_le,
+    )
+
+
+class DepotBilletsSql:
+    """Réalisation de `domaine.consultation.DepotBillets` : toujours filtrée par `client`."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @staticmethod
+    def _avec_place() -> Select[BilletLigne, str, int]:
+        # Rang et numéro lus dans la même requête, par jointure sur la place du billet (même
+        # séance, comme fk_billets_place).
+        return select(BilletLigne, PlaceLigne.rang, PlaceLigne.numero).join(
+            PlaceLigne,
+            and_(
+                PlaceLigne.id == BilletLigne.place_id,
+                PlaceLigne.seance_id == BilletLigne.seance_id,
+            ),
+        )
+
+    @_base_requise
+    async def lister_billets(
+        self, client: str, commande_id: uuid.UUID | None, page: int, size: int
+    ) -> PageResultat[BilletLu]:
+        filtres = [BilletLigne.client == client]
+        if commande_id is not None:
+            filtres.append(BilletLigne.commande_id == commande_id)
+        total = await self._session.scalar(
+            select(func.count()).select_from(BilletLigne).where(*filtres)
+        )
+        requete = (
+            self._avec_place()
+            .where(*filtres)
+            .order_by(BilletLigne.emis_le.desc(), BilletLigne.id)
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        lignes = (await self._session.execute(requete)).all()
+        return PageResultat(
+            elements=[_billet_lu(billet, rang, numero) for billet, rang, numero in lignes],
+            total=int(total or 0),
+        )
+
+    @_base_requise
+    async def lire_billet(self, client: str, billet_id: uuid.UUID) -> BilletLu | None:
+        requete = self._avec_place().where(
+            BilletLigne.id == billet_id, BilletLigne.client == client
+        )
+        ligne = (await self._session.execute(requete)).first()
+        if ligne is None:
+            return None
+        billet, rang, numero = ligne
+        return _billet_lu(billet, rang, numero)

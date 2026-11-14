@@ -3,8 +3,9 @@
 Service créé au ticket BIL-001 sur le modèle de `services/echo/` (voir son README pour les
 conventions). BIL-006 : places des séances et verrou d'une place pendant l'achat.
 
-- Préfixe de routes annoncé à Consul et Traefik : `/api/v1/seats`, aussi sur l'hôte des
-  revendeurs `HOTE_PARTENAIRES` (`partenaires@file`, quota par jeton, BIL-012).
+- Préfixes de routes annoncés à Consul et Traefik : `/api/v1/seats` et `/api/v1/tickets`
+  (BIL-021), sur la chaîne `standard@file` et sur l'hôte des revendeurs `HOTE_PARTENAIRES`
+  (`partenaires@file`, quota par jeton, BIL-012). La santé reste sous `/api/v1/seats/health`.
 - Base PostgreSQL : `billets` ; deux instances en local (`billets-1`, `billets-2`), qui
   partagent la base et le Redis.
 - Routes :
@@ -14,7 +15,15 @@ conventions). BIL-006 : places des séances et verrou d'une place pendant l'acha
     `GET /api/v1/seats` dans `ROUTES_PUBLIQUES`, santé `/api/v1/seats/health` comprise) ;
     `disponible` est faux si la place porte un verrou ou un billet, quel que soit son statut ;
   - `PUT /api/v1/seats/{place_id}/lock` (`verrouillerPlace`, scope `seats:lock`, client
-    `services`).
+    `services`) ;
+  - `GET /api/v1/tickets?commande_id=&page=&size=` (`listerBillets`) et
+    `GET /api/v1/tickets/{billet_id}` (`lireBillet`), scope `tickets:read` (client et
+    revendeur, BIL-021) : toujours filtrés par l'appelant du jeton (`billets.client` = `sub`),
+    jamais par un paramètre ; `commande_id` facultatif restreint en plus à une commande (une
+    commande d'un autre appelant donne une page vide) ; billet d'un autre appelant : 404
+    `TICKET_NOT_FOUND`. Ordre : `emis_le` décroissant, puis identifiant. `rang` et `numero`
+    sont lus par jointure sur `places`, dans la même requête ; base injoignable : 503
+    `BASE_INDISPONIBLE`.
 - Ordre des places : rang en tri binaire (`COLLATE "C"`, `A` < `AA` < `B` ; `10` < `9`), puis
   numéro, puis identifiant.
 - Verrou d'une place : Redis, clé `place:<seance_id>:<place_id>`, valeur `commande_id`

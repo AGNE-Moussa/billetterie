@@ -8,6 +8,10 @@ import { GardeRoles } from "./auth/GardeRoles";
 import { MiseEnPage } from "./composants/MiseEnPage";
 import { PageCatalogue } from "./pages/catalogue/PageCatalogue";
 import { PageEvenement } from "./pages/catalogue/PageEvenement";
+import { PageBillet } from "./pages/client/PageBillet";
+import { PageBillets } from "./pages/client/PageBillets";
+import { PageCommande } from "./pages/client/PageCommande";
+import { PageCommandes } from "./pages/client/PageCommandes";
 import { PageIntrouvable } from "./pages/PageIntrouvable";
 import { PageRappelConnexion } from "./pages/PageRappelConnexion";
 import { PagePaiement } from "./pages/reservation/PagePaiement";
@@ -32,7 +36,11 @@ export function RoutesApplication() {
         {/* E03 public : seul « Réserver » demande la connexion. */}
         <Route path="/seances/:seanceId" element={<PagePlanSalle />} />
         <Route element={<RoutesClient />}>
+          <Route path="/commandes" element={<PageCommandes />} />
+          <Route path="/commandes/:commandeId" element={<PageCommande />} />
           <Route path="/commandes/:commandeId/paiement" element={<PagePaiement />} />
+          <Route path="/billets" element={<PageBillets />} />
+          <Route path="/billets/:billetId" element={<PageBillet />} />
         </Route>
         <Route path={CHEMIN_RAPPEL} element={<PageRappelConnexion />} />
         <Route path="*" element={<PageIntrouvable />} />
