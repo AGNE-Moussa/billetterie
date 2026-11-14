@@ -2,10 +2,12 @@
 
 Parcours de `creer_commande` (décisions Q1 à Q3, Q13 à Q19 de BIL-008) : clé d'idempotence,
 séance lue dans Catalogue, plafond et création EN_ATTENTE sous verrou consultatif, verrous de
-réservation, reverrouillage en confirmation, Paiements, puis CONFIRMEE et
-ticketing.order.confirmed dans la même transaction. Chaque échec synchrone sur une place ou un
-paiement passe la commande EXPIREE et publie ticketing.order.expired. Le numéro de carte ne fait
-que transiter vers Paiements : jamais enregistré ni journalisé.
+réservation, puis, si une carte est fournie, reverrouillage en confirmation, Paiements, puis
+CONFIRMEE et ticketing.order.confirmed dans la même transaction ; sans carte (BIL-020), la
+commande reste EN_ATTENTE jusqu'à expire_le et se paie par `payer_commande`.
+Chaque échec synchrone sur une place ou un paiement passe la commande EXPIREE et publie
+ticketing.order.expired. Le numéro de carte ne fait que transiter vers Paiements :
+jamais enregistré ni journalisé.
 """
 
 import logging
@@ -331,12 +333,13 @@ async def creer_commande(
     appelant: Appelant,
     seance_id: UUID,
     place_ids: Sequence[UUID],
-    carte_test: str,
+    carte_test: str | None,
     cle_idempotence: str | None,
     limite_billets: int,
 ) -> tuple[Commande, bool]:
-    """Crée, verrouille et paie une commande ; renvoie la commande et vrai si elle vient d'être
-    créée (201), faux pour le rejeu d'une `Idempotency-Key` (200)."""
+    """Crée et verrouille une commande, puis la paie si `carte_test` est fourni ; sans carte,
+    elle reste EN_ATTENTE jusqu'à `expire_le` (BIL-020). Renvoie la commande et vrai si elle
+    vient d'être créée (201), faux pour le rejeu d'une `Idempotency-Key` (200)."""
     client = appelant.identifiant
     if cle_idempotence is None:
         commande = await _creer(
@@ -390,7 +393,8 @@ async def payer_commande(
     commande_id: UUID,
     carte_test: str,
 ) -> Commande:
-    """Nouvel essai de paiement d'une commande EN_ATTENTE de l'appelant."""
+    """Paiement d'une commande EN_ATTENTE de l'appelant : premier paiement d'une commande créée
+    sans carte, ou nouvel essai après un 503 de Paiements."""
     commande = await lire_commande(depot, appelant, commande_id)
     if commande.statut is not StatutCommande.EN_ATTENTE:
         raise CommandeNonEnAttente(commande_id)
@@ -458,7 +462,7 @@ async def _creer(
     appelant: Appelant,
     seance_id: UUID,
     place_ids: Sequence[UUID],
-    carte_test: str,
+    carte_test: str | None,
     cle_idempotence: str | None,
     limite_billets: int,
 ) -> Commande:
@@ -513,6 +517,10 @@ async def _creer(
     if actuelle.statut is not StatutCommande.EN_ATTENTE:
         return _deja_traitee(actuelle)
     commande = replace(commande, lignes=lignes, montant_total=montant_total, expire_le=expire_le)
+    if carte_test is None:
+        # Réservation seule (BIL-020) : places verrouillées en durée de réservation jusqu'à
+        # expire_le, aucun appel à Paiements ; payée ensuite par payer_commande.
+        return commande
     return await _confirmer_et_payer(depot, billets, paiements, commande, carte_test)
 
 

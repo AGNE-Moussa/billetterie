@@ -17,6 +17,20 @@ export function formaterDateHeure(iso: string): string {
   return FORMAT_DATE_HEURE.format(new Date(iso));
 }
 
+const FORMAT_HEURE = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+/** Heure locale d'une date ISO 8601 (« 20:42 »). */
+export function formaterHeure(iso: string): string {
+  return FORMAT_HEURE.format(new Date(iso));
+}
+
+/** Durée restante en millisecondes affichée « mm:ss » (zéro si elle est négative). */
+export function formaterDuree(millisecondes: number): string {
+  const secondes = Math.max(0, Math.ceil(millisecondes / 1000));
+  const minutes = Math.floor(secondes / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(secondes % 60).padStart(2, "0")}`;
+}
+
 /** Montant en centimes affiché en euros (« 25,00 € »). */
 export function formaterEuros(centimes: number): string {
   return FORMAT_EUROS.format(centimes / 100);

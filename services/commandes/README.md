@@ -20,9 +20,14 @@ passer commande et payer ; BIL-010 : expirer les commandes non payées.
   clé, 409 `REQUEST_IN_PROGRESS` s'il est pris, rejeu d'une requête terminée en 200) ; séance lue
   dans Catalogue ; plafond compté et commande `EN_ATTENTE` créée sous
   `pg_advisory_xact_lock(client, seance_id)` ; verrou de réservation de chaque place au nom de
-  la commande (prix de sa catégorie) ; reverrouillage en durée de confirmation ; paiement
-  (`Idempotency-Key` = `commande_id`) ; `CONFIRMEE` et `ticketing.order.confirmed` dans la même
-  transaction.
+  la commande (prix de sa catégorie) ; puis, avec `carte_test` seulement, reverrouillage en durée
+  de confirmation ; paiement (`Idempotency-Key` = `commande_id`) ; `CONFIRMEE` et
+  `ticketing.order.confirmed` dans la même transaction.
+- `carte_test` facultatif dans `creerCommande` (BIL-020) : absent ou `null`, la commande
+  s'arrête après les verrous de réservation : 201 `EN_ATTENTE` avec `expire_le`, aucun appel à
+  Paiements ; le client la paie ensuite par `payerCommande` (premier paiement), avant
+  `expire_le`, sinon la tâche d'expiration la passe `EXPIREE`. 402 et 503 Paiements ne
+  concernent que l'appel avec carte. Un revendeur peut aussi commander sans carte.
 - Échecs : place prise ou inconnue, Billets indisponible pendant la réservation, place perdue au
   reverrouillage, paiement refusé, séance annulée chez Paiements : commande `EXPIREE` et
   `ticketing.order.expired` (toutes les places de la commande). Billets indisponible au

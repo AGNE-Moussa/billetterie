@@ -1,0 +1,83 @@
+/* E03 et E04 : récapitulatif, actions, compte à rebours et lignes de la commande. */
+
+.entete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.sousTitre {
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+.recapitulatif {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-3);
+  padding: var(--espace-3) var(--espace-4);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+  background-color: var(--couleur-surface);
+}
+
+.recapitulatif p {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.alerte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding: var(--espace-3) var(--espace-4);
+  border-left: 4px solid var(--couleur-erreur);
+  background-color: var(--couleur-surface);
+}
+
+.alerte p {
+  margin: 0;
+}
+
+.compteARebours {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.compteARebours strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+}
+
+.lignes {
+  width: 100%;
+  max-width: 32rem;
+  border-collapse: collapse;
+}
+
+.lignes th,
+.lignes td {
+  padding: var(--espace-2);
+  border-bottom: 1px solid var(--couleur-bordure);
+  text-align: left;
+}
+
+.lignes .montant {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  max-width: 32rem;
+}
