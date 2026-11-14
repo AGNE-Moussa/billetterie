@@ -9,13 +9,17 @@ import functools
 import logging
 import uuid
 from collections.abc import Callable, Coroutine
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import exc as sa_exc
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from commun.evenements import Evenement
+from commun.outbox import publier_plus_tard
+from commun.verrou_seance import verrouiller_seance
 from paiements.domaine.paiements import Paiement, StatutPaiement
 from paiements.infra.base import BaseIndisponible, PaiementLigne, SeanceAnnuleeLigne
 
@@ -101,3 +105,64 @@ class DepotPaiementsSql:
         if ligne is None:  # pragma: no cover - la ligne vient d'être insérée ou existait
             raise RuntimeError("Paiement introuvable après insertion")
         return _paiement(ligne)
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        """Verrou consultatif partagé de la séance (Q2 de BIL-011) : le paiement attend la fin
+        d'une annulation en cours, deux paiements ne s'attendent pas."""
+        await verrouiller_seance(self._session, seance_id, exclusif=False)
+
+
+class DepotRemboursementsSql:
+    """Réalisation de `domaine.remboursements.DepotRemboursements`, dans la session du
+    consommateur."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        await verrouiller_seance(self._session, seance_id, exclusif=True)
+
+    @_base_requise
+    async def inscrire_seance_annulee(self, seance_id: uuid.UUID, annulee_le: datetime) -> bool:
+        requete = (
+            insert(SeanceAnnuleeLigne)
+            .values(seance_id=seance_id, annulee_le=annulee_le)
+            .on_conflict_do_nothing(index_elements=[SeanceAnnuleeLigne.seance_id])
+            .returning(SeanceAnnuleeLigne.seance_id)
+        )
+        return (await self._session.execute(requete)).first() is not None
+
+    @_base_requise
+    async def rembourser_paiements_de_la_seance(self, seance_id: uuid.UUID) -> list[Paiement]:
+        # Passage conditionnel (H5) : un paiement déjà remboursé (ticket.rejected, autre
+        # livraison simultanée, attendue sur le verrou de ligne) n'est pas renvoyé.
+        lignes = await self._session.scalars(
+            update(PaiementLigne)
+            .where(
+                PaiementLigne.seance_id == seance_id,
+                PaiementLigne.statut == StatutPaiement.ACCEPTE.value,
+            )
+            .values(statut=StatutPaiement.REMBOURSE.value)
+            .returning(PaiementLigne)
+            .execution_options(populate_existing=True)
+        )
+        return [_paiement(ligne) for ligne in lignes.all()]
+
+    @_base_requise
+    async def rembourser_paiement_de_la_commande(self, commande_id: uuid.UUID) -> Paiement | None:
+        ligne = await self._session.scalar(
+            update(PaiementLigne)
+            .where(
+                PaiementLigne.commande_id == commande_id,
+                PaiementLigne.statut == StatutPaiement.ACCEPTE.value,
+            )
+            .values(statut=StatutPaiement.REMBOURSE.value)
+            .returning(PaiementLigne)
+            .execution_options(populate_existing=True)
+        )
+        return None if ligne is None else _paiement(ligne)
+
+    async def publier(self, evenement: Evenement) -> None:
+        await publier_plus_tard(self._session, evenement)

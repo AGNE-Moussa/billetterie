@@ -103,6 +103,24 @@ def _commande(ligne: CommandeLigne, lignes: list[LigneCommandeLigne]) -> Command
     )
 
 
+async def _lignes_des_commandes(
+    session: AsyncSession, commande_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[Any]]:
+    """Lignes de chaque commande, par place."""
+    par_commande: dict[uuid.UUID, list[Any]] = {i: [] for i in commande_ids}
+    if not commande_ids:
+        return par_commande
+    requete = (
+        select(LigneCommandeLigne)
+        .where(LigneCommandeLigne.commande_id.in_(commande_ids))
+        .order_by(LigneCommandeLigne.commande_id, LigneCommandeLigne.place_id)
+        .execution_options(populate_existing=True)
+    )
+    for ligne in (await session.scalars(requete)).all():
+        par_commande[ligne.commande_id].append(ligne)
+    return par_commande
+
+
 class DepotCommandesSql:
     def __init__(self, session: AsyncSession, moteur_cles: AsyncEngine | None = None) -> None:
         """`moteur_cles` : moteur dédié aux clés d'idempotence (`creer_moteur_cles`) ; à défaut,
@@ -207,18 +225,7 @@ class DepotCommandesSql:
     # --- lectures -------------------------------------------------------------------------
 
     async def _lignes(self, commande_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Any]]:
-        par_commande: dict[uuid.UUID, list[Any]] = {i: [] for i in commande_ids}
-        if not commande_ids:
-            return par_commande
-        requete = (
-            select(LigneCommandeLigne)
-            .where(LigneCommandeLigne.commande_id.in_(commande_ids))
-            .order_by(LigneCommandeLigne.commande_id, LigneCommandeLigne.place_id)
-            .execution_options(populate_existing=True)
-        )
-        for ligne in (await self._session.scalars(requete)).all():
-            par_commande[ligne.commande_id].append(ligne)
-        return par_commande
+        return await _lignes_des_commandes(self._session, commande_ids)
 
     async def _lire(self, *conditions: Any) -> Commande | None:
         requete = select(CommandeLigne).where(*conditions).execution_options(populate_existing=True)
@@ -364,3 +371,53 @@ class DepotCommandesSql:
     async def publier(self, evenement: Evenement) -> None:
         async with self._unite():
             await publier_plus_tard(self._session, evenement)
+
+
+class DepotAnnulationSql:
+    """Réalisation de `domaine.annulation.DepotAnnulation`, dans la session (et la transaction)
+    du consommateur (BIL-011)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def commandes_en_attente_de_la_seance(self, seance_id: uuid.UUID) -> list[Commande]:
+        # FOR UPDATE, ordre stable par identifiant (pas d'interblocage entre deux livraisons
+        # simultanées). READ COMMITTED : une ligne attendue puis passée CONFIRMEE ou EXPIREE par
+        # la transaction concurrente est réévaluée et écartée. `expire_le` NULL compris (Q5).
+        requete = (
+            select(CommandeLigne)
+            .where(
+                CommandeLigne.seance_id == seance_id,
+                CommandeLigne.statut == StatutCommande.EN_ATTENTE.value,
+            )
+            .order_by(CommandeLigne.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        commandes = list((await self._session.scalars(requete)).all())
+        lignes = await _lignes_des_commandes(self._session, [c.id for c in commandes])
+        return [_commande(c, lignes[c.id]) for c in commandes]
+
+    @_base_requise
+    async def lire_commande_verrouillee(self, commande_id: uuid.UUID) -> Commande | None:
+        requete = (
+            select(CommandeLigne)
+            .where(CommandeLigne.id == commande_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        ligne = await self._session.scalar(requete)
+        if ligne is None:
+            return None
+        lignes = await _lignes_des_commandes(self._session, [ligne.id])
+        return _commande(ligne, lignes[ligne.id])
+
+    @_base_requise
+    async def changer_statut(self, commande_id: uuid.UUID, statut: StatutCommande) -> None:
+        await self._session.execute(
+            update(CommandeLigne).where(CommandeLigne.id == commande_id).values(statut=statut.value)
+        )
+
+    async def publier(self, evenement: Evenement) -> None:
+        await publier_plus_tard(self._session, evenement)

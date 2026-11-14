@@ -1,5 +1,5 @@
 """Assemblage : configuration, journaux, erreurs, authentification, base, Consul, clients des
-autres services, relais de l'outbox, tâche d'expiration, routes.
+autres services, consommateurs RabbitMQ et relais de l'outbox, tâche d'expiration, routes.
 
 Lancement : uvicorn --factory commandes.principal:creer_app
 """
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from commandes.api.routes import routeur_commandes, routeur_sante
 from commandes.config import Parametres, parametres
+from commandes.consommateurs import abonner_consommateurs
 from commandes.domaine.services import ClientPaiements, PaiementEnregistre, PaiementLu
 from commandes.infra.base import creer_moteur, creer_moteur_cles
 from commandes.infra.clients import (
@@ -27,6 +28,7 @@ from commandes.infra.clients import (
 from commandes.infra.verrou_tache import VerrouTacheRedis
 from commandes.tache import TacheExpiration
 from commun.auth import installer_auth
+from commun.consommateurs import messagerie
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.http import ClientService, JetonService
@@ -123,9 +125,12 @@ def creer_app(
                         )
                     )
                 if config.rabbitmq_url:
-                    # Relais de l'outbox : ticketing.order.confirmed et ticketing.order.expired.
+                    # Consommateurs ticketing.show.cancelled et ticketing.payment.refunded
+                    # (BIL-011) ; `messagerie` arrête le broker à la sortie.
                     broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
-                    pile.push_async_callback(broker.stop)
+                    abonner_consommateurs(broker, app.state.sessions)
+                    await pile.enter_async_context(messagerie(broker))
+                    # Relais de l'outbox : ticketing.order.confirmed et ticketing.order.expired.
                     relais = RelaisOutbox(app.state.sessions, broker)
                     await pile.enter_async_context(relais.en_fond())
                 # Tâche d'expiration des commandes non payées (BIL-010), une exécution par

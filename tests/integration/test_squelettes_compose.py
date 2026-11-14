@@ -116,8 +116,10 @@ def test_aucun_squelette_ne_publie_de_port_sur_l_hote(
 # Décisions Q16 et Q18 du plan BIL-004 : catalogue publie par l'outbox, son relais a besoin de
 # RabbitMQ ; il n'est plus un squelette vide. BIL-006 (décision Q5) : billets consomme
 # ticketing.show.scheduled, il n'en est plus un non plus. BIL-008 (décisions du squelette) :
-# commandes publie ticketing.order.confirmed et ticketing.order.expired par l'outbox.
-@pytest.mark.sauf_services("catalogue", "billets", "commandes")
+# commandes publie ticketing.order.confirmed et ticketing.order.expired par l'outbox. BIL-011 :
+# paiements consomme ticketing.show.cancelled et ticketing.ticket.rejected, publie
+# ticketing.payment.refunded par l'outbox.
+@pytest.mark.sauf_services("catalogue", "billets", "commandes", "paiements")
 def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelette: Any) -> None:
     for conteneur in _conteneurs(squelette):
         definition = _definition(config_locale, conteneur)

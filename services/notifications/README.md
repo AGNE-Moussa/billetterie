@@ -1,7 +1,8 @@
 # Service notifications
 
 Service créé sur le modèle de `services/echo/` (voir son README pour les conventions). Envoie
-les billets par e-mail (BIL-009).
+les billets par e-mail (BIL-009), prévient de l'annulation d'une séance et du remboursement
+(BIL-011).
 
 - Préfixe de routes annoncé à Consul et Traefik : `/api/v1/notifications`.
 - Base PostgreSQL : `notifications`.
@@ -17,6 +18,26 @@ les billets par e-mail (BIL-009).
   NULL (revendeur) = rien ; sinon `INSERT INTO envois ... ON CONFLICT DO NOTHING RETURNING`,
   puis l'envoi SMTP seulement si la ligne est nouvelle, puis le commit. Un échec SMTP annule
   tout (nouvel essai). Risque résiduel : SMTP réussi puis commit perdu = un doublon possible.
+- Annulation d'une séance (BIL-011) :
+  - `notifications.show-cancelled` (`ticketing.show.cancelled`) : un e-mail d'annulation par
+    commande de la séance dont le destinataire est connu au moment du traitement ; `email` NULL
+    (revendeur) : rien. Chaque commande a sa propre transaction, à part de celle du message :
+    inscription dans `envois` (une ligne par commande), envoi SMTP, puis commit. Un échec SMTP
+    n'annule que la commande en cours et fait échouer le message (nouvel essai) ; les
+    commandes déjà servies, inscrites, ne reçoivent rien de plus. La séance est citée par son
+    identifiant (`infos_seances` n'est pas remplie).
+  - `notifications.payment-refunded` (`ticketing.payment.refunded`) : un e-mail de
+    remboursement (montant en euros) ; commande inconnue = exception, nouvel essai puis
+    `notifications.payment-refunded.dlq` ; revendeur : rien.
+  - Journaux : identifiants seulement, jamais d'adresse.
+  - **Limites connues (Q6 de BIL-011)** : un acheteur dont `ticketing.order.confirmed` arrive
+    après le traitement de `ticketing.show.cancelled` ne reçoit pas l'e-mail d'annulation,
+    seulement celui du remboursement. Une commande remboursée sans avoir jamais été confirmée
+    (paiement accepté puis remboursé avant la confirmation, Q4) n'a pas de destinataire : son
+    `ticketing.payment.refunded` finit en `notifications.payment-refunded.dlq` après trois
+    essais, sans e-mail. E-mails d'annulation : un SMTP réussi suivi d'un commit perdu pour
+    cette commande peut donner un doublon pour elle seule (même risque résiduel que le billet) ;
+    un message qui finit en file d'erreur laisse servies les commandes déjà inscrites.
 - SMTP : `SMTP_HOTE` (`mailpit`), `SMTP_PORT` (1025), `SMTP_DELAI` (5 s, strictement
   positif : borne la connexion et chaque lecture), `SMTP_EXPEDITEUR`
   (`billetterie@exemple.test`) ; envoi `smtplib` dans un fil séparé. En local, Mailpit (boîte

@@ -57,6 +57,8 @@ class DepotEnMemoire:
         # `liste_commencee`, puis attend `bloquer_listes`.
         self.bloquer_listes: anyio.Event | None = None
         self.liste_commencee: anyio.Event | None = None
+        # BIL-011 : séances dont l'annulation a publié ticketing.show.cancelled, dans l'ordre.
+        self.annulations_publiees: list[UUID] = []
 
     def _verifier(self) -> None:
         if self.injoignable:
@@ -238,6 +240,23 @@ class DepotEnMemoire:
         self._lire()
         return len(self._seances_de(evenement_id))
 
+    async def annuler_seance(self, seance: Seance) -> bool:
+        """Passage conditionnel `annulee = false` → true ; chaque passage réussi « publie »
+        ticketing.show.cancelled (noté dans `annulations_publiees`, BIL-011 H3)."""
+        self._verifier()
+        actuelle = self.seances.get(seance.id)
+        if actuelle is None or actuelle.annulee:
+            return False
+        self.seances[seance.id] = replace(actuelle, annulee=True)
+        self.annulations_publiees.append(seance.id)
+        return True
+
+    def semer_seance_annulee(self, seance: Seance) -> Seance:
+        """Séance déjà annulée, posée sans passer par le domaine (aucun événement noté)."""
+        annulee = replace(seance, annulee=True)
+        self.seances[seance.id] = annulee
+        return annulee
+
 
 class CacheEnMemoire:
     """Double du port `CacheCatalogue` : expiration sur une horloge pilotée par `avancer`.
@@ -288,6 +307,11 @@ class CacheEnMemoire:
         await self._entrer()
         self.generations[famille] = self.generations.get(famille, 0) + 1
         return self.generations[famille]
+
+    async def supprimer(self, *cles: str) -> None:
+        await self._entrer()
+        for cle in cles:
+            self._valeurs.pop(cle, None)
 
 
 @dataclass(frozen=True)

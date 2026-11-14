@@ -73,6 +73,11 @@ class DonneesCommandeInvalides(ValueError):
 class DepotEmission(Protocol):
     """Accès aux billets et aux séances annulées, dans la transaction du consommateur."""
 
+    async def verrouiller_seance(self, seance_id: UUID) -> None:
+        """Verrou consultatif partagé de la séance, jusqu'à la fin de la transaction (Q3 de
+        BIL-011) ; à prendre avant de lire `seances_annulees`."""
+        ...
+
     async def seance_annulee(self, seance_id: UUID) -> bool:
         """Vrai si la séance figure dans `seances_annulees`."""
         ...
@@ -205,6 +210,10 @@ async def emettre_commande(
     """
     billets = billets_a_emettre(data, emis_le=emis_le, cle=cle)
     commande = commande_confirmee(data)
+    # Verrou partagé de la séance jusqu'au commit (Q3 de BIL-011) : une annulation en cours
+    # (verrou exclusif) finit avant la lecture de `seances_annulees` ; une annulation qui arrive
+    # après attend que les billets soient écrits, puis les passe `ANNULE`.
+    await depot.verrouiller_seance(commande.seance_id)
     deja_emises = await depot.places_de_la_commande_emises(
         commande.commande_id, commande.seance_id, sorted(commande.place_ids, key=str)
     )

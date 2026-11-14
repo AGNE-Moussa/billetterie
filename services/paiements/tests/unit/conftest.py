@@ -6,6 +6,7 @@ port `DepotPaiements`) et l'horloge de la requête.
 """
 
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -14,10 +15,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from commun.evenements import Evenement
 from commun.faux_jetons import EmetteurDeTest
 from paiements.api.dependances import obtenir_depot, obtenir_maintenant
 from paiements.config import Parametres
-from paiements.domaine.paiements import DepotPaiements, Paiement
+from paiements.domaine.paiements import DepotPaiements, Paiement, StatutPaiement
 from paiements.principal import creer_app
 
 MAINTENANT = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
@@ -26,20 +28,81 @@ URL_BASE = "postgresql+asyncpg://test@127.0.0.1:5432/paiements"
 
 
 class DepotEnMemoire:
-    """Double du port `DepotPaiements` : un paiement au plus par commande."""
+    """Double des ports `DepotPaiements` et `remboursements.DepotRemboursements` (BIL-011) :
+    un paiement au plus par commande.
+
+    `verrous_seance` note la séance de chaque verrou consultatif demandé ; `evenements` garde
+    les événements rangés dans l'outbox, dans l'ordre.
+    """
 
     def __init__(self) -> None:
         self.paiements: dict[UUID, Paiement] = {}
         self.seances_annulees: set[UUID] = set()
+        self.verrous_seance: list[UUID] = []
+        self.evenements: list[Evenement] = []
+
+    def semer(
+        self,
+        seance_id: UUID,
+        statut: StatutPaiement = StatutPaiement.ACCEPTE,
+        *,
+        montant: int = 4500,
+        commande_id: UUID | None = None,
+    ) -> Paiement:
+        """Pose un paiement sans passer par le domaine."""
+        paiement = Paiement(
+            id=uuid4(),
+            commande_id=commande_id or uuid4(),
+            seance_id=seance_id,
+            montant=montant,
+            statut=statut,
+            cree_le=MAINTENANT,
+        )
+        self.paiements[paiement.commande_id] = paiement
+        return paiement
+
+    def statut(self, paiement: Paiement) -> StatutPaiement:
+        return self.paiements[paiement.commande_id].statut
+
+    # --- DepotPaiements -------------------------------------------------------------------------
 
     async def lire_par_commande(self, commande_id: UUID) -> Paiement | None:
         return self.paiements.get(commande_id)
+
+    async def verrouiller_seance(self, seance_id: UUID) -> None:
+        self.verrous_seance.append(seance_id)
 
     async def seance_annulee(self, seance_id: UUID) -> bool:
         return seance_id in self.seances_annulees
 
     async def inserer_ou_relire(self, paiement: Paiement) -> Paiement:
         return self.paiements.setdefault(paiement.commande_id, paiement)
+
+    # --- DepotRemboursements --------------------------------------------------------------------
+
+    async def inscrire_seance_annulee(self, seance_id: UUID, annulee_le: datetime) -> bool:
+        if seance_id in self.seances_annulees:
+            return False
+        self.seances_annulees.add(seance_id)
+        return True
+
+    async def rembourser_paiements_de_la_seance(self, seance_id: UUID) -> list[Paiement]:
+        rembourses = []
+        for commande_id, paiement in list(self.paiements.items()):
+            if paiement.seance_id == seance_id and paiement.statut is StatutPaiement.ACCEPTE:
+                self.paiements[commande_id] = replace(paiement, statut=StatutPaiement.REMBOURSE)
+                rembourses.append(self.paiements[commande_id])
+        return rembourses
+
+    async def rembourser_paiement_de_la_commande(self, commande_id: UUID) -> Paiement | None:
+        paiement = self.paiements.get(commande_id)
+        if paiement is None or paiement.statut is not StatutPaiement.ACCEPTE:
+            return None
+        self.paiements[commande_id] = replace(paiement, statut=StatutPaiement.REMBOURSE)
+        return self.paiements[commande_id]
+
+    async def publier(self, evenement: Evenement) -> None:
+        self.evenements.append(evenement)
 
 
 @pytest.fixture

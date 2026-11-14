@@ -131,6 +131,10 @@ erDiagram
   été annulée depuis : ce cas est testé avant la séance annulée.
 - `seances_annulees` : remplie par `ticketing.show.cancelled` (billets de la séance passés
   `ANNULE`) ; consultée à l'émission, car l'ordre des messages n'est pas garanti.
+- Verrou consultatif de séance (BIL-011, `commun.verrou_seance`) : l'émission prend
+  `pg_advisory_xact_lock_shared` sur la séance avant de lire `seances_annulees`, le traitement de
+  `ticketing.show.cancelled` prend `pg_advisory_xact_lock` (exclusif) ; tenus jusqu'à la fin de
+  la transaction. Aucun billet `EMIS` ne reste sur une séance annulée, quel que soit l'ordre.
 - `disponible` (contrat) : ni verrou Redis, ni billet sur la place.
 
 ## Commandes
@@ -186,6 +190,10 @@ erDiagram
 - `ticketing.show.cancelled` : une commande `EN_ATTENTE` de la séance passe `EXPIREE` (et
   `ticketing.order.expired`) ; une commande `CONFIRMEE` attend `ticketing.payment.refunded`
   pour passer `REMBOURSEE`.
+- `ticketing.payment.refunded` (commande relue sous `FOR UPDATE`) : `CONFIRMEE` vers
+  `REMBOURSEE` ; une commande encore `EN_ATTENTE` (paiement remboursé avant la confirmation)
+  passe `EXPIREE` avec `ticketing.order.expired` ; `EXPIREE`, `REMBOURSEE` ou commande inconnue :
+  ignoré.
 - `Idempotency-Key` facultatif de `POST /orders` : colonne `cle_idempotence`,
   `UNIQUE (client, cle_idempotence)`.
 - La carte de test n'est jamais enregistrée.
@@ -215,7 +223,10 @@ erDiagram
   paiement enregistré.
 - `seances_annulees` : remplie par `ticketing.show.cancelled`, qui rembourse les paiements
   `ACCEPTE` de la séance ; un paiement demandé pour une séance annulée répond
-  `409 SHOW_CANCELLED` (l'ordre des messages n'est pas garanti).
+  `409 SHOW_CANCELLED` (l'ordre des messages n'est pas garanti). Même verrou consultatif de
+  séance que Billets : partagé pour payer (jusqu'au commit du paiement), exclusif pour
+  `ticketing.show.cancelled` ; un paiement simultané à l'annulation est soit refusé (409), soit
+  écrit avant et remboursé.
 - `ticketing.ticket.rejected` : remboursement du paiement de la commande.
 - Un remboursement ne concerne qu'un paiement `ACCEPTE` (passage à `REMBOURSE` conditionnel au
   statut) : `show.cancelled` puis `ticket.rejected` sur la même commande ne publient qu'un seul

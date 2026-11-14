@@ -445,6 +445,9 @@ services:
     environment: &paiements-env
       DATABASE_URL: postgresql+asyncpg://paiements:${PAIEMENTS_DB_PASSWORD:?à définir dans .env}@postgres:5432/paiements
       CONSUL_URL: http://consul:8500
+      # Consommateurs ticketing.show.cancelled et ticketing.ticket.rejected, relais de l'outbox
+      # ticketing.payment.refunded (BIL-011).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -462,6 +465,8 @@ services:
       paiements-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks: [billetterie]
 

@@ -42,6 +42,11 @@ class DepotEnMemoire:
     async def lire_destinataire(self, commande_id: UUID) -> Destinataire | None:
         return self.destinataires.get(commande_id)
 
+    # --- annulations.DepotAnnulations (BIL-011) -------------------------------------------------
+
+    async def destinataires_de_la_seance(self, seance_id: UUID) -> list[Destinataire]:
+        return [d for d in self.destinataires.values() if d.seance_id == seance_id]
+
     async def inscrire_envoi(self, envoi: Envoi) -> bool:
         # uq_envois_evenement_commande
         if any(
