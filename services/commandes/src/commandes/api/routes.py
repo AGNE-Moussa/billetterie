@@ -120,7 +120,10 @@ async def sante(session: SessionDep) -> Sante:
     operation_id="creerCommande",
     status_code=201,
     response_model=Commande,
-    response_description="Commande créée et payée (statut CONFIRMEE).",
+    response_description=(
+        "Commande créée. Avec carte_test, payée (statut CONFIRMEE) ; sans carte_test, statut"
+        " EN_ATTENTE, places verrouillées jusqu'à expire_le, à payer par payerCommande."
+    ),
     responses={
         200: {
             "model": Commande,
@@ -130,7 +133,10 @@ async def sante(session: SessionDep) -> Sante:
             ),
         },
         **REPONSES_AUTH,
-        402: PAIEMENT_REFUSE,
+        402: reponse_probleme(
+            "Avec carte_test seulement, paiement refusé ; la commande expire et ses places sont"
+            " libérées (PAYMENT_REFUSED)."
+        ),
         404: reponse_probleme(
             "Séance inconnue (SHOW_NOT_FOUND) ou place inconnue dans cette séance (SEAT_NOT_FOUND)."
         ),
@@ -142,21 +148,24 @@ async def sante(session: SessionDep) -> Sante:
         ),
         422: reponse_probleme("En-tête ou corps invalide (REQUETE_INVALIDE)."),
         503: reponse_probleme(
-            "Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements"
-            " indisponible (SERVICE_INDISPONIBLE). Si Paiements ne répond pas, la commande"
-            " reste EN_ATTENTE, ses places verrouillées jusqu'à expire_le ; elle se retrouve"
-            " par listerCommandes et se paie par payerCommande."
+            "Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements (appelé"
+            " avec carte_test seulement) indisponible (SERVICE_INDISPONIBLE). Si Paiements ne"
+            " répond pas, la commande reste EN_ATTENTE, ses places verrouillées jusqu'à"
+            " expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande."
         ),
     },
     summary=(
-        "Commander des places d'une séance et payer (scope orders:write ; client et revendeur)"
+        "Commander des places d'une séance, et payer si une carte est fournie (scope"
+        " orders:write ; client et revendeur)"
     ),
     description=(
         "Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets en"
         " durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un"
         " échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui"
-        " libère les places déjà verrouillées. Juste avant Paiements, les places sont"
-        " reverrouillées en durée de confirmation ; une place perdue donne 409"
+        " libère les places déjà verrouillées. Sans carte_test, la commande s'arrête là : 201"
+        " EN_ATTENTE, places verrouillées jusqu'à expire_le, aucun appel à Paiements ; elle se"
+        " paie ensuite par payerCommande. Avec carte_test, juste avant Paiements, les places"
+        " sont reverrouillées en durée de confirmation ; une place perdue donne 409"
         " SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté,"
         " la commande est confirmée et ticketing.order.confirmed est publié. La commande"
         " appartient à l'appelant du jeton."
@@ -267,16 +276,13 @@ async def lire_commande(commande_id: UUID, appelant: LectureDep, depot: DepotDep
             " jusqu'à expire_le (SERVICE_INDISPONIBLE)."
         ),
     },
-    summary=(
-        "Réessayer le paiement d'une de mes commandes en attente (scope orders:write ; client"
-        " et revendeur)"
-    ),
+    summary="Payer une de mes commandes en attente (scope orders:write ; client et revendeur)",
     description=(
-        "Nouvel essai après un 503 de Paiements, tant que la commande est EN_ATTENTE (avant"
-        " expire_le). Juste avant Paiements, les places sont reverrouillées en durée de"
-        " confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe"
-        " EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et"
-        " ticketing.order.confirmed est publié."
+        "Premier paiement d'une commande créée sans carte_test, ou nouvel essai après un 503 de"
+        " Paiements, tant que la commande est EN_ATTENTE (avant expire_le). Juste avant"
+        " Paiements, les places sont reverrouillées en durée de confirmation ; une place"
+        " perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit."
+        " Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié."
     ),
 )
 async def payer_commande(

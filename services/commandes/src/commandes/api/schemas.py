@@ -17,6 +17,14 @@ DESCRIPTION_CARTE = (
     " accepté (par exemple 4242424242424242)."
 )
 MOTIF_CARTE = r"^[0-9]{16}$"
+# creerCommande (BIL-020, Q1 de BIL-018) : sans carte, la commande reste EN_ATTENTE.
+DESCRIPTION_CARTE_FACULTATIVE = (
+    "Facultatif. Absent : la commande est créée EN_ATTENTE, places verrouillées jusqu'à"
+    " expire_le, sans appel à Paiements, et se paie ensuite par payerCommande. Présent : numéro"
+    " de carte du paiement simulé, transmis à Paiements et jamais journalisé. Numéros de test :"
+    " 4000000000000002 refusé (PAYMENT_REFUSED), tout autre numéro de 16 chiffres accepté (par"
+    " exemple 4242424242424242)."
+)
 
 
 class Sante(BaseModel):
@@ -30,7 +38,9 @@ class CommandeCreation(BaseModel):
         max_length=PLACES_PAR_COMMANDE_MAX,
         json_schema_extra={"uniqueItems": True},
     )
-    carte_test: str = Field(pattern=MOTIF_CARTE, description=DESCRIPTION_CARTE)
+    carte_test: str | None = Field(
+        default=None, pattern=MOTIF_CARTE, description=DESCRIPTION_CARTE_FACULTATIVE
+    )
 
     @field_validator("place_ids")
     @classmethod

@@ -190,10 +190,8 @@ def _corps_invalide(seance: Any, cas: str) -> dict[str, Any]:
         corps["place_ids"] = [str(seance["A1"]), str(seance["A1"])]
     elif cas == "seance_non_uuid":
         corps["seance_id"] = "pas-un-uuid"
-    elif cas == "carte_15_chiffres":
-        corps["carte_test"] = "424242424242424"
     else:
-        del corps["carte_test"]
+        corps["carte_test"] = "424242424242424"
     return corps
 
 
@@ -204,8 +202,8 @@ def _corps_invalide(seance: Any, cas: str) -> dict[str, Any]:
         ("onze_places", "place_ids"),
         ("doublon", "place_ids"),
         ("seance_non_uuid", "seance_id"),
+        # BIL-020 : sans carte_test, la commande est créée EN_ATTENTE (plus un 422).
         ("carte_15_chiffres", "carte_test"),
-        ("sans_carte", "carte_test"),
     ],
 )
 async def test_un_corps_de_commande_invalide_renvoie_422(

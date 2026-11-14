@@ -33,8 +33,8 @@ export interface paths {
     get: operations["listerCommandes"];
     put?: never;
     /**
-     * Commander des places d'une séance et payer (scope orders:write ; client et revendeur)
-     * @description Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère les places déjà verrouillées. Juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton.
+     * Commander des places d'une séance, et payer si une carte est fournie (scope orders:write ; client et revendeur)
+     * @description Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère les places déjà verrouillées. Sans carte_test, la commande s'arrête là : 201 EN_ATTENTE, places verrouillées jusqu'à expire_le, aucun appel à Paiements ; elle se paie ensuite par payerCommande. Avec carte_test, juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton.
      */
     post: operations["creerCommande"];
     delete?: never;
@@ -70,8 +70,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Réessayer le paiement d'une de mes commandes en attente (scope orders:write ; client et revendeur)
-     * @description Nouvel essai après un 503 de Paiements, tant que la commande est EN_ATTENTE (avant expire_le). Juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié.
+     * Payer une de mes commandes en attente (scope orders:write ; client et revendeur)
+     * @description Premier paiement d'une commande créée sans carte_test, ou nouvel essai après un 503 de Paiements, tant que la commande est EN_ATTENTE (avant expire_le). Juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié.
      */
     post: operations["payerCommande"];
     delete?: never;
@@ -95,9 +95,10 @@ export interface components {
       place_ids: string[];
       /**
        * Carte Test
-       * @description Numéro de carte du paiement simulé, transmis à Paiements et jamais journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre numéro de 16 chiffres accepté (par exemple 4242424242424242).
+       * @description Facultatif. Absent : la commande est créée EN_ATTENTE, places verrouillées jusqu'à expire_le, sans appel à Paiements, et se paie ensuite par payerCommande. Présent : numéro de carte du paiement simulé, transmis à Paiements et jamais journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre numéro de 16 chiffres accepté (par exemple 4242424242424242).
+       * @default null
        */
-      carte_test: string;
+      carte_test: string | null;
     };
     /** PaiementCommande */
     PaiementCommande: {
@@ -343,7 +344,7 @@ export interface operations {
           "application/json": components["schemas"]["Commande"];
         };
       };
-      /** @description Commande créée et payée (statut CONFIRMEE). */
+      /** @description Commande créée. Avec carte_test, payée (statut CONFIRMEE) ; sans carte_test, statut EN_ATTENTE, places verrouillées jusqu'à expire_le, à payer par payerCommande. */
       201: {
         headers: {
           [name: string]: unknown;
@@ -361,7 +362,7 @@ export interface operations {
           "application/problem+json": components["schemas"]["Probleme"];
         };
       };
-      /** @description Paiement refusé ; la commande expire et ses places sont libérées (PAYMENT_REFUSED). */
+      /** @description Avec carte_test seulement, paiement refusé ; la commande expire et ses places sont libérées (PAYMENT_REFUSED). */
       402: {
         headers: {
           [name: string]: unknown;
@@ -406,7 +407,7 @@ export interface operations {
           "application/problem+json": components["schemas"]["Probleme"];
         };
       };
-      /** @description Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements indisponible (SERVICE_INDISPONIBLE). Si Paiements ne répond pas, la commande reste EN_ATTENTE, ses places verrouillées jusqu'à expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande. */
+      /** @description Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements (appelé avec carte_test seulement) indisponible (SERVICE_INDISPONIBLE). Si Paiements ne répond pas, la commande reste EN_ATTENTE, ses places verrouillées jusqu'à expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande. */
       503: {
         headers: {
           [name: string]: unknown;

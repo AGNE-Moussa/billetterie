@@ -1,0 +1,122 @@
+/* Plan de salle (E03) : défilement horizontal sur mobile, chaque état distinct sans la couleur
+   seule (bordure pleine, barrée et grisée, remplie et épaisse). */
+
+.conteneur {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espace-3);
+  overflow-x: auto;
+  padding-block: var(--espace-2);
+}
+
+.scene {
+  margin: 0;
+  padding: var(--espace-1) var(--espace-8);
+  border-radius: var(--rayon);
+  background-color: var(--couleur-surface);
+  color: var(--couleur-texte-attenue);
+  font-size: 0.875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.grille {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.rang {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-1);
+}
+
+.nomRang {
+  min-width: 2rem;
+  font-weight: 600;
+  text-align: right;
+  padding-right: var(--espace-2);
+}
+
+.cellule {
+  display: inline-flex;
+}
+
+.place {
+  --couleur-categorie: var(--couleur-principale);
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 2px solid var(--couleur-categorie);
+  border-radius: var(--rayon);
+  background-color: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.place[data-categorie="1"] {
+  --couleur-categorie: light-dark(#7c3aed, #c4b5fd);
+}
+
+.place[data-categorie="2"] {
+  --couleur-categorie: light-dark(#0f766e, #5eead4);
+}
+
+.place[data-categorie="3"] {
+  --couleur-categorie: light-dark(#b45309, #fcd34d);
+}
+
+.place[data-categorie="4"] {
+  --couleur-categorie: light-dark(#be185d, #f9a8d4);
+}
+
+.place[data-categorie="5"] {
+  --couleur-categorie: light-dark(#4d7c0f, #bef264);
+}
+
+.place[data-etat="indisponible"] {
+  border-style: dashed;
+  border-color: var(--couleur-bordure);
+  background-color: var(--couleur-surface);
+  color: var(--couleur-texte-attenue);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
+.place[data-etat="selectionnee"] {
+  border-width: 3px;
+  background-color: var(--couleur-categorie);
+  color: var(--couleur-fond);
+  font-weight: 700;
+}
+
+.place[aria-disabled="true"]:not([data-etat="indisponible"]) {
+  cursor: default;
+}
+
+/* Légende (rendue par la page) : mêmes pastilles que les places. */
+.legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2) var(--espace-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legende li {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.pastille {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0;
+  cursor: default;
+}
