@@ -1,0 +1,70 @@
+/* E10 à E15 : espace organisateur (BIL-022). */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.recherche {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--espace-2);
+  max-width: 32rem;
+}
+
+.recherche > :first-child {
+  flex: 1;
+}
+
+.formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  max-width: 40rem;
+}
+
+.groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin: 0;
+  padding: var(--espace-3) var(--espace-4);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon);
+}
+
+.groupe legend {
+  padding: 0 var(--espace-1);
+  font-weight: 600;
+}
+
+/* Deux champs côte à côte (nom et prix, rang et places), un seul sur mobile. */
+.ligne {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  align-items: end;
+  column-gap: var(--espace-3);
+}
+
+.erreurGroupe {
+  margin: 0;
+  color: var(--couleur-erreur);
+}
+
+.chiffres {
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.liste {
+  margin: 0;
+  padding-left: var(--espace-4);
+}

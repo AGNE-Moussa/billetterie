@@ -12,6 +12,12 @@ import { PageBillet } from "./pages/client/PageBillet";
 import { PageBillets } from "./pages/client/PageBillets";
 import { PageCommande } from "./pages/client/PageCommande";
 import { PageCommandes } from "./pages/client/PageCommandes";
+import { PageGererEvenement } from "./pages/organisateur/PageGererEvenement";
+import { PageLieux } from "./pages/organisateur/PageLieux";
+import { PageNouvelEvenement } from "./pages/organisateur/PageNouvelEvenement";
+import { PageNouvelleSeance } from "./pages/organisateur/PageNouvelleSeance";
+import { PageOrganisateur } from "./pages/organisateur/PageOrganisateur";
+import { PageSeanceOrganisateur } from "./pages/organisateur/PageSeanceOrganisateur";
 import { PageIntrouvable } from "./pages/PageIntrouvable";
 import { PageRappelConnexion } from "./pages/PageRappelConnexion";
 import { PagePaiement } from "./pages/reservation/PagePaiement";
@@ -21,6 +27,18 @@ import { PagePlanSalle } from "./pages/reservation/PagePlanSalle";
 function RoutesClient() {
   return (
     <GardeRoles roles={["customer"]}>
+      <Outlet />
+    </GardeRoles>
+  );
+}
+
+/**
+ * Espace organisateur : une seule garde `admin` pour toutes ses routes (routes.md). Un client,
+ * un revendeur ou un visiteur n'y voit jamais rien (CA1 de BIL-022).
+ */
+function RoutesOrganisateur() {
+  return (
+    <GardeRoles roles={["admin"]}>
       <Outlet />
     </GardeRoles>
   );
@@ -41,6 +59,17 @@ export function RoutesApplication() {
           <Route path="/commandes/:commandeId/paiement" element={<PagePaiement />} />
           <Route path="/billets" element={<PageBillets />} />
           <Route path="/billets/:billetId" element={<PageBillet />} />
+        </Route>
+        <Route element={<RoutesOrganisateur />}>
+          <Route path="/organisateur" element={<PageOrganisateur />} />
+          <Route path="/organisateur/evenements/nouveau" element={<PageNouvelEvenement />} />
+          <Route path="/organisateur/evenements/:evenementId" element={<PageGererEvenement />} />
+          <Route
+            path="/organisateur/evenements/:evenementId/seances/nouvelle"
+            element={<PageNouvelleSeance />}
+          />
+          <Route path="/organisateur/seances/:seanceId" element={<PageSeanceOrganisateur />} />
+          <Route path="/organisateur/lieux" element={<PageLieux />} />
         </Route>
         <Route path={CHEMIN_RAPPEL} element={<PageRappelConnexion />} />
         <Route path="*" element={<PageIntrouvable />} />

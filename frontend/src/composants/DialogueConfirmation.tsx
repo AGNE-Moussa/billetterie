@@ -21,6 +21,8 @@ export interface ProprietesDialogueConfirmation {
   libelleConfirmer?: string;
   /** « Annuler » par défaut. */
   libelleAnnuler?: string;
+  /** Action en cours : « Confirmer » inactif et annoncé occupé (aucune seconde confirmation). */
+  occupe?: boolean;
 }
 
 export function DialogueConfirmation({
@@ -31,6 +33,7 @@ export function DialogueConfirmation({
   surAnnuler,
   libelleConfirmer = "Confirmer",
   libelleAnnuler = "Annuler",
+  occupe = false,
 }: ProprietesDialogueConfirmation) {
   const dialogue = useRef<HTMLDialogElement>(null);
   const idTitre = useId();
@@ -106,7 +109,7 @@ export function DialogueConfirmation({
         <Bouton variante="secondaire" surClic={surAnnuler}>
           {libelleAnnuler}
         </Bouton>
-        <Bouton variante="danger" surClic={surConfirmer}>
+        <Bouton variante="danger" surClic={surConfirmer} occupe={occupe}>
           {libelleConfirmer}
         </Bouton>
       </div>
