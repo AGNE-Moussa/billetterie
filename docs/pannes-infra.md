@@ -1,5 +1,8 @@
 # Scénarios de panne de l'infrastructure (BIL-F16)
 
+Pannes des services métier (Notifications, Catalogue, Billets, Paiements) et déroulé de la démo
+en moins de 15 minutes : `docs/demo.md` (`scripts/demo.sh`, `make demo-pannes`).
+
 Démarche du chaos engineering : on définit l'**état stable**, on pose une **hypothèse**, on
 provoque la panne **pendant le trafic**, puis on **observe**. Un écart n'est pas un échec de
 l'expérience : c'est une découverte, corrigée avant d'y poser du métier.

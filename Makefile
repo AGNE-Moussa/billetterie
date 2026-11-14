@@ -2,7 +2,7 @@
 # Les recettes doivent être indentées par une tabulation.
 
 .DEFAULT_GOAL := help
-.PHONY: help init up observabilite pannes down reset demo test test-unit test-integration test-concurrence test-smoke lint typecheck
+.PHONY: help init up observabilite pannes parcours demo-pannes down reset demo test test-unit test-integration test-concurrence test-smoke lint typecheck
 
 # Dossiers de tests de chaque service (et du vérificateur), trouvés par make (portable sous Windows).
 TESTS_UNITAIRES := tests/unit $(wildcard services/*/tests/unit) $(wildcard infra/*/tests/unit)
@@ -14,6 +14,8 @@ help:
 	@echo   up                demarre la plateforme locale (Docker Compose)
 	@echo   observabilite     demarre la plateforme avec Prometheus et Grafana (http://127.0.0.1:3000)
 	@echo   pannes            rejoue les scenarios de panne (docs/pannes-infra.md), plateforme demarree
+	@echo   parcours          joue le parcours complet postman/billetterie.json avec Newman (docs/demo.md)
+	@echo   demo-pannes       parcours puis pannes des services de la conception (docs/demo.md)
 	@echo   down              arrete la plateforme locale (observabilite comprise)
 	@echo   reset             arrete la plateforme et efface ses donnees (volumes)
 	@echo   demo              charge le jeu de demonstration du catalogue, plateforme demarree
@@ -36,6 +38,13 @@ observabilite:
 
 pannes:
 	bash scripts/pannes.sh tous
+
+# Plateforme demarree (make up) et jeu de demonstration charge (make demo).
+parcours:
+	bash scripts/demo.sh parcours
+
+demo-pannes:
+	bash scripts/demo.sh tout
 
 down:
 	docker compose --profile observabilite down
