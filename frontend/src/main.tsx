@@ -10,6 +10,7 @@ import { BrowserRouter } from "react-router";
 
 import "./theme/theme.css";
 
+import { reessayerRequete } from "./api/reessai";
 import { CHEMIN_RAPPEL_SILENCIEUX, creerUserManager } from "./auth/configurationOidc";
 import { FournisseurAuthentification } from "./auth/FournisseurAuthentification";
 import { FournisseurNotifications } from "./notifications/FournisseurNotifications";
@@ -24,7 +25,9 @@ function demarrerApplication() {
   }
   // Avant createRoot : FournisseurTheme part de la même valeur (choix retenu, sinon système).
   appliquerThemeInitial();
-  const clientRequetes = new QueryClient();
+  const clientRequetes = new QueryClient({
+    defaultOptions: { queries: { retry: reessayerRequete } },
+  });
   createRoot(racine).render(
     <StrictMode>
       <FournisseurTheme>

@@ -1,0 +1,114 @@
+/* E01 et E02 : une colonne sur mobile, grilles fluides au-delà (CA2 de BIL-019). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.page h1 {
+  margin: 0;
+}
+
+/* Champs des filtres : autant de colonnes que la largeur le permet, une seule sur mobile. */
+.champs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  column-gap: var(--espace-4);
+}
+
+.actionsFiltres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}
+
+.resultats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.titreResultats {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.nombre {
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+.etat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espace-3);
+}
+
+.liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--espace-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liste > li {
+  display: flex;
+}
+
+.liste > li > * {
+  flex: 1;
+}
+
+.liste[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+/* Début de la description : trois lignes au plus. */
+.description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* Texte lu par les lecteurs d'écran, invisible à l'écran. */
+.masque {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* E02 */
+
+.retour {
+  margin: 0;
+}
+
+.descriptionComplete {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.tarifs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.annulee {
+  font-weight: 600;
+  color: var(--couleur-erreur);
+}

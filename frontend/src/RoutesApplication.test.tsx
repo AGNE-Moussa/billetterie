@@ -19,10 +19,11 @@ function rendreA(chemin: string) {
   );
 }
 
-it("test_la_route_racine_affiche_la_page_d_accueil", () => {
+// BIL-019 (R1 de docs/front/routes.md) : la racine affiche le catalogue des événements.
+it("test_la_route_racine_affiche_le_catalogue", () => {
   rendreA("/");
 
-  expect(screen.getByRole("heading", { level: 1, name: "Billetterie" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1, name: "Événements" })).toBeInTheDocument();
 });
 
 it("test_une_route_inconnue_affiche_la_page_introuvable", () => {
@@ -35,7 +36,7 @@ it("test_une_route_inconnue_affiche_la_page_introuvable", () => {
 // Cas composant de BIL-F28 (CA1, mise en page) : les pages existantes sont rendues dans
 // l'unique contenu principal de la mise en page (les pages ne portent plus leur propre <main>).
 it.each([
-  { chemin: "/", titre: "Billetterie" },
+  { chemin: "/", titre: "Événements" },
   { chemin: "/route-inconnue", titre: "Page introuvable" },
 ])(
   "test_les_pages_existantes_s_affichent_dans_un_seul_contenu_principal ($chemin)",
