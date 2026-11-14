@@ -405,6 +405,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
       HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
+      # File d'attente (BIL-015) : mêmes valeurs que file-attente. Liste vide : aucune séance
+      # sous file, aucun jeton d'admission exigé ; clé exigée dès qu'une séance y figure.
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -434,6 +438,51 @@ services:
     environment:
       <<: *commandes-env
       INSTANCE: commandes-2
+
+  # File d'attente : /api/v1/queues, deux instances (BIL-015). Ni base ni migrations : positions,
+  # admissions et verrou de la tâche des vagues dans Redis.
+  file-attente-1:
+    image: billetterie/file-attente:dev
+    build:
+      context: .
+      dockerfile: services/file-attente/Dockerfile
+    environment: &file-attente-env
+      INSTANCE: file-attente-1
+      CONSUL_URL: http://consul:8500
+      # Redis local sans mot de passe, aucun secret.
+      REDIS_URL: redis://redis:6379/0
+      # Séances sous file (identifiants séparés par des virgules), mêmes valeurs que Commandes.
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      # Clé HMAC des jetons d'admission partagée avec Commandes (au moins 32 caractères).
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
+      # Vagues : clients admis par vague, intervalle en secondes ; validité d'une admission.
+      TAILLE_VAGUE: ${TAILLE_VAGUE:-50}
+      INTERVALLE_VAGUES: ${INTERVALLE_VAGUES:-10}
+      DUREE_ADMISSION: ${DUREE_ADMISSION:-600}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      consul:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [billetterie]
+
+  # Même image, construite une seule fois par file-attente-1.
+  file-attente-2:
+    image: billetterie/file-attente:dev
+    environment:
+      <<: *file-attente-env
+      INSTANCE: file-attente-2
+    depends_on:
+      file-attente-1:
+        condition: service_started
+      consul:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [billetterie]
 
   # Paiements : /api/v1/payments.
   paiements-migrations:

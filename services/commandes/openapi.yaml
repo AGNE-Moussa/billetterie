@@ -5,6 +5,9 @@
 # L'expiration d'une commande non payée n'a pas de route : elle publie ticketing.order.expired.
 # BIL-020 : carte_test facultatif dans creerCommande (sans carte : 201 EN_ATTENTE, payée ensuite
 # par payerCommande) ; changement recopié dans docs/contrats/commandes.yaml et partenaires.yaml.
+# BIL-015 : en-tête X-Admission-Token dans creerCommande (jeton d'admission de file-attente,
+# exigé d'un client pour une séance sous file), 403 ADMISSION_REQUIRED et ADMISSION_INVALID ;
+# changement recopié dans docs/contrats/commandes.yaml et partenaires.yaml.
 openapi: 3.1.0
 info:
   title: Service commandes
@@ -45,7 +48,9 @@ paths:
         reverrouillées en durée de confirmation ; une place perdue donne 409
         SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la
         commande est confirmée et ticketing.order.confirmed est publié. La commande appartient
-        à l'appelant du jeton.
+        à l'appelant du jeton. Séance sous file d'attente (BIL-015) : un client doit présenter
+        dans X-Admission-Token le jeton d'admission que file-attente lui a remis pour cette
+        séance, vérifié avant tout verrou ; un revendeur n'y est pas soumis.
       operationId: creerCommande
       parameters:
       - name: Idempotency-Key
@@ -60,6 +65,19 @@ paths:
         description: Facultatif ; une requête terminée, rejouée avec la même clé par le même
           appelant, répond 200 avec la commande déjà créée ; rejouée pendant que la première
           est en cours, elle répond 409 REQUEST_IN_PROGRESS.
+      - name: X-Admission-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 512
+          - type: 'null'
+          title: X-Admission-Token
+        description: Jeton d'admission signé par file-attente (jeton_admission de
+          lirePositionFile). Exigé d'un client pour une séance sous file d'attente, ignoré
+          sinon et pour un revendeur ; il doit être émis pour cette séance et pour l'appelant
+          du jeton, et ne pas être expiré.
       requestBody:
         content:
           application/json:
@@ -96,7 +114,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '403':
-          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT), ou, pour un client
+            et une séance sous file d'attente, X-Admission-Token absent (ADMISSION_REQUIRED) ou
+            jeton d'admission mal signé, expiré, d'une autre séance ou d'un autre appelant
+            (ADMISSION_INVALID) ; aucune commande n'est créée.
           content:
             application/problem+json:
               schema:

@@ -34,7 +34,7 @@ export interface paths {
     put?: never;
     /**
      * Commander des places d'une séance, et payer si une carte est fournie (scope orders:write ; client et revendeur)
-     * @description Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère les places déjà verrouillées. Sans carte_test, la commande s'arrête là : 201 EN_ATTENTE, places verrouillées jusqu'à expire_le, aucun appel à Paiements ; elle se paie ensuite par payerCommande. Avec carte_test, juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton.
+     * @description Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère les places déjà verrouillées. Sans carte_test, la commande s'arrête là : 201 EN_ATTENTE, places verrouillées jusqu'à expire_le, aucun appel à Paiements ; elle se paie ensuite par payerCommande. Avec carte_test, juste avant Paiements, les places sont reverrouillées en durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton. Séance sous file d'attente (BIL-015) : un client doit présenter dans X-Admission-Token le jeton d'admission que file-attente lui a remis pour cette séance, vérifié avant tout verrou ; un revendeur n'y est pas soumis.
      */
     post: operations["creerCommande"];
     delete?: never;
@@ -324,6 +324,8 @@ export interface operations {
       header?: {
         /** @description Facultatif ; une requête terminée, rejouée avec la même clé par le même appelant, répond 200 avec la commande déjà créée ; rejouée pendant que la première est en cours, elle répond 409 REQUEST_IN_PROGRESS. */
         "Idempotency-Key"?: string | null;
+        /** @description Jeton d'admission signé par file-attente (jeton_admission de lirePositionFile). Exigé d'un client pour une séance sous file d'attente, ignoré sinon et pour un revendeur ; il doit être émis pour cette séance et pour l'appelant du jeton, et ne pas être expiré. */
+        "X-Admission-Token"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -370,7 +372,7 @@ export interface operations {
           "application/problem+json": components["schemas"]["Probleme"];
         };
       };
-      /** @description Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT). */
+      /** @description Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT), ou, pour un client et une séance sous file d'attente, X-Admission-Token absent (ADMISSION_REQUIRED) ou jeton d'admission mal signé, expiré, d'une autre séance ou d'un autre appelant (ADMISSION_INVALID) ; aucune commande n'est créée. */
       403: {
         headers: {
           [name: string]: unknown;

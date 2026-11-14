@@ -24,6 +24,7 @@ COPY services/billets/pyproject.toml services/billets/
 COPY services/commandes/pyproject.toml services/commandes/
 COPY services/paiements/pyproject.toml services/paiements/
 COPY services/notifications/pyproject.toml services/notifications/
+COPY services/file-attente/pyproject.toml services/file-attente/
 COPY infra/verificateur/pyproject.toml infra/verificateur/
 RUN uv sync --locked --no-dev --package billetterie-commandes --no-install-workspace
 

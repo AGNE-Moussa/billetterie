@@ -1,0 +1,23 @@
+[project]
+name = "billetterie-file-attente"
+version = "0.1.0"
+description = "Service file-attente de la billetterie (préfixe /api/v1/queues) : salle d'attente virtuelle."
+requires-python = ">=3.12,<3.13"
+# Ni base PostgreSQL ni Alembic : l'état de la file vit entièrement dans Redis (BIL-015).
+dependencies = [
+    "billetterie-commun",
+    "fastapi>=0.149.0",
+    "pydantic-settings>=2.16.0",
+    "redis>=8.1.0",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "file_attente"
+
+[tool.uv.sources]
+billetterie-commun = { workspace = true }

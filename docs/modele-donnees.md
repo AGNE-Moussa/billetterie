@@ -275,3 +275,17 @@ erDiagram
   la projection n'est pas encore remplie, et une clé étrangère enverrait tout
   `order.confirmed` en DLQ.
 - `envois` est l'historique d'envoi ; `UNIQUE (evenement_id, commande_id)`.
+
+## File-attente
+
+Aucune table ni base PostgreSQL : l'état de la salle d'attente (BIL-015) est éphémère, dans
+Redis.
+
+- `file-attente:{<seance>}:attente` : sorted set, `sub` du client vers son horodatage d'entrée
+  (ms) ; l'entrée est idempotente, la position est le rang.
+- `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission, posée avec `PX` =
+  `DUREE_ADMISSION` ; à l'échéance la clé disparaît et le client sort de la file.
+- `file-attente:tache-vagues` : verrou `SET NX PX` de la tâche d'admission par vagues (une
+  instance par cycle).
+- Jeton d'admission non stocké : HMAC de la séance, du `sub` et de l'échéance
+  (`commun.admission`), recalculé à chaque lecture et vérifié par Commandes.

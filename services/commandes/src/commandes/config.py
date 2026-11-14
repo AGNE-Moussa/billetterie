@@ -1,9 +1,13 @@
 """Configuration du service, lue uniquement dans les variables d'environnement."""
 
 from functools import lru_cache
+from typing import Annotated, Self
+from uuid import UUID
 
-from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from commun.admission import LONGUEUR_MIN_CLE
 
 # Délai par défaut d'une connexion et d'une requête à la base, en secondes (comme billets).
 DELAI_BASE_PAR_DEFAUT = 5.0
@@ -65,10 +69,34 @@ class Parametres(BaseSettings):
     expiration_periode: float = Field(default=EXPIRATION_PERIODE_PAR_DEFAUT, ge=0.001)
     # Nombre maximal de commandes expirées par cycle, par expire_le croissant.
     expiration_lot: int = Field(default=EXPIRATION_LOT_PAR_DEFAUT, gt=0)
+    # Séances sous file d'attente (BIL-015), identifiants séparés par des virgules, mêmes valeurs
+    # que file-attente : un client doit y présenter un jeton d'admission (X-Admission-Token).
+    seances_sous_file: Annotated[frozenset[UUID], NoDecode] = frozenset()
+    # Clé HMAC des jetons d'admission, partagée avec file-attente ; dans .env, jamais dans le
+    # dépôt. Exigée (au moins 32 caractères) dès qu'une séance est sous file.
+    admission_cle_signature: SecretStr = SecretStr("")
     # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
     jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
     jwt_audience: str = "billetterie-api"
     jwks_url: str = "http://keycloak:8080/auth/realms/billetterie/protocol/openid-connect/certs"
+
+    @field_validator("seances_sous_file", mode="before")
+    @classmethod
+    def _lire_seances(cls, valeur: object) -> object:
+        # Vide : aucune séance sous file.
+        if isinstance(valeur, str):
+            return frozenset(partie.strip() for partie in valeur.split(",") if partie.strip())
+        return valeur
+
+    @model_validator(mode="after")
+    def _cle_si_file(self) -> Self:
+        cle = self.admission_cle_signature.get_secret_value()
+        if self.seances_sous_file and len(cle) < LONGUEUR_MIN_CLE:
+            raise ValueError(
+                f"ADMISSION_CLE_SIGNATURE : au moins {LONGUEUR_MIN_CLE} caractères dès qu'une"
+                " séance est sous file"
+            )
+        return self
 
 
 @lru_cache

@@ -31,6 +31,7 @@ from commandes.api.schemas import (
     Sante,
 )
 from commandes.domaine import commandes as domaine
+from commandes.domaine.admission import controler_admission
 from commandes.infra.base import BaseIndisponible
 from commun.auth import REPONSES_AUTH, Appelant, exige_scopes
 from commun.erreurs import reponse_probleme
@@ -69,6 +70,30 @@ CleIdempotenceDep = Annotated[
             "Facultatif ; une requête terminée, rejouée avec la même clé par le même appelant,"
             " répond 200 avec la commande déjà créée ; rejouée pendant que la première est en"
             " cours, elle répond 409 REQUEST_IN_PROGRESS."
+        ),
+    ),
+]
+
+# X-Admission-Token facultatif de creerCommande (BIL-015) : jeton de file-attente, 512 caractères
+# au plus ; même construction que CleIdempotenceDep.
+JetonAdmissionDep = Annotated[
+    Annotated[
+        str | None,
+        WithJsonSchema(
+            {
+                "anyOf": [{"type": "string", "maxLength": 512}, {"type": "null"}],
+                "title": "X-Admission-Token",
+            }
+        ),
+    ],
+    Header(
+        alias="X-Admission-Token",
+        max_length=512,
+        description=(
+            "Jeton d'admission signé par file-attente (jeton_admission de lirePositionFile)."
+            " Exigé d'un client pour une séance sous file d'attente, ignoré sinon et pour un"
+            " revendeur ; il doit être émis pour cette séance et pour l'appelant du jeton, et ne"
+            " pas être expiré."
         ),
     ),
 ]
@@ -137,6 +162,12 @@ async def sante(session: SessionDep) -> Sante:
             "Avec carte_test seulement, paiement refusé ; la commande expire et ses places sont"
             " libérées (PAYMENT_REFUSED)."
         ),
+        403: reponse_probleme(
+            "Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT), ou, pour un client et une"
+            " séance sous file d'attente, X-Admission-Token absent (ADMISSION_REQUIRED) ou jeton"
+            " d'admission mal signé, expiré, d'une autre séance ou d'un autre appelant"
+            " (ADMISSION_INVALID) ; aucune commande n'est créée."
+        ),
         404: reponse_probleme(
             "Séance inconnue (SHOW_NOT_FOUND) ou place inconnue dans cette séance (SEAT_NOT_FOUND)."
         ),
@@ -168,7 +199,9 @@ async def sante(session: SessionDep) -> Sante:
         " sont reverrouillées en durée de confirmation ; une place perdue donne 409"
         " SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté,"
         " la commande est confirmée et ticketing.order.confirmed est publié. La commande"
-        " appartient à l'appelant du jeton."
+        " appartient à l'appelant du jeton. Séance sous file d'attente (BIL-015) : un client"
+        " doit présenter dans X-Admission-Token le jeton d'admission que file-attente lui a"
+        " remis pour cette séance, vérifié avant tout verrou ; un revendeur n'y est pas soumis."
     ),
 )
 async def creer_commande(
@@ -182,7 +215,17 @@ async def creer_commande(
     maintenant: MaintenantDep,
     reponse: Response,
     cle_idempotence: CleIdempotenceDep = None,
+    jeton_admission: JetonAdmissionDep = None,
 ) -> Commande:
+    # File d'attente (BIL-015) : avant toute écriture et tout verrou.
+    controler_admission(
+        appelant,
+        corps.seance_id,
+        jeton_admission,
+        seances_sous_file=parametres.seances_sous_file,
+        cle=parametres.admission_cle_signature.get_secret_value(),
+        maintenant=maintenant,
+    )
     commande, creee = await domaine.creer_commande(
         depot,
         catalogue,

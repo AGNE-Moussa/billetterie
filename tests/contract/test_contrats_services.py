@@ -24,8 +24,10 @@ OPTIONS: dict[str, dict[str, str]] = {
 @pytest.mark.parametrize("contrat", CONTRATS, ids=[c.parent.name for c in CONTRATS])
 def test_le_code_de_chaque_service_respecte_son_contrat(contrat: Path) -> None:
     nom = contrat.parent.name
-    principal = importlib.import_module(f"{nom}.principal")
-    config = importlib.import_module(f"{nom}.config")
+    # Dossier `file-attente`, paquet Python `file_attente` (BIL-015).
+    paquet = nom.replace("-", "_")
+    principal = importlib.import_module(f"{paquet}.principal")
+    config = importlib.import_module(f"{paquet}.config")
     url = f"postgresql+asyncpg://{nom}:{secrets.token_urlsafe(16)}@127.0.0.1:5432/{nom}"
     app = principal.creer_app(config.Parametres(database_url=url, **OPTIONS.get(nom, {})))
 
