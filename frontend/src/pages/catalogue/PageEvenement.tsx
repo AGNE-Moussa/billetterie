@@ -1,0 +1,230 @@
+// E02 Fiche événement (route /evenements/:evenementId, BIL-019) : nom, description et séances
+// paginées (page dans l'URL) avec date, lieu, tarifs et mention « Annulée ». Un lieu est lu une
+// fois par identifiant distinct (cache TanStack Query). La disponibilité par séance n'est pas
+// affichée : aucune route ne la donne (Q4 de docs/front/ecrans.md).
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { useId } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
+
+import { lireEvenement, lireLieu, listerSeances, type Lecture } from "../../api/catalogue";
+import type { Lieu, Seance } from "../../api/genere/catalogue";
+import { convertirErreur } from "../../api/problemes";
+import { BandeauModeDegrade } from "../../composants/BandeauModeDegrade";
+import { Bouton } from "../../composants/Bouton";
+import { Chargement } from "../../composants/Chargement";
+import { Erreur } from "../../composants/Erreur";
+import { TableauPagine, type ColonneTableau } from "../../composants/TableauPagine";
+import { Vide } from "../../composants/Vide";
+import { formaterDateHeure, formaterEuros } from "../../format";
+import { lirePage } from "./filtres";
+import type { EtatRetourCatalogue } from "./PageCatalogue";
+import styles from "./PageCatalogue.module.css";
+
+/** Un lieu change rarement : relu au plus toutes les cinq minutes. */
+const FRAICHEUR_LIEU_MS = 5 * 60 * 1000;
+
+/** Codes qui signifient « cet événement n'existe pas » (identifiant inconnu ou mal formé). */
+const CODES_INTROUVABLE = new Set(["EVENT_NOT_FOUND", "REQUETE_INVALIDE"]);
+
+function estIntrouvable(erreur: unknown): boolean {
+  const { code } = convertirErreur(erreur);
+  return code !== null && CODES_INTROUVABLE.has(code);
+}
+
+/** Chemin du catalogue à retrouver (filtres compris) si la fiche a été ouverte depuis lui. */
+function cheminRetour(etat: unknown): string {
+  if (typeof etat === "object" && etat !== null && "retourCatalogue" in etat) {
+    const { retourCatalogue } = etat as EtatRetourCatalogue;
+    if (typeof retourCatalogue === "string" && retourCatalogue.startsWith("?")) {
+      return `/${retourCatalogue}`;
+    }
+  }
+  return "/";
+}
+
+function LienRetour() {
+  const { state } = useLocation();
+  return (
+    <p className={styles.retour}>
+      <Link to={cheminRetour(state)}>Retour au catalogue</Link>
+    </p>
+  );
+}
+
+function EvenementIntrouvable() {
+  return (
+    <div className={styles.page}>
+      <h1>Événement introuvable</h1>
+      <p>Cet événement n'existe pas ou n'est plus proposé.</p>
+      <LienRetour />
+    </div>
+  );
+}
+
+export function PageEvenement() {
+  const { evenementId = "" } = useParams();
+  const [parametres, setParametres] = useSearchParams();
+  const page = lirePage(parametres);
+  const idSeances = useId();
+
+  const evenement = useQuery({
+    queryKey: ["catalogue", "evenement", evenementId],
+    queryFn: () => lireEvenement(evenementId),
+  });
+  const seances = useQuery({
+    queryKey: ["catalogue", "seances", evenementId, page],
+    queryFn: () => listerSeances(evenementId, page),
+    placeholderData: keepPreviousData,
+  });
+  const idsLieux = [...new Set(seances.data?.donnees.elements.map((s) => s.lieu_id) ?? [])];
+  const lieux = useQueries({
+    queries: idsLieux.map((lieuId) => ({
+      queryKey: ["catalogue", "lieu", lieuId],
+      queryFn: () => lireLieu(lieuId),
+      staleTime: FRAICHEUR_LIEU_MS,
+    })),
+  });
+
+  if (estIntrouvable(evenement.error) || estIntrouvable(seances.error)) {
+    return <EvenementIntrouvable />;
+  }
+
+  const lieuxConnus = new Map<string, Lecture<Lieu>>();
+  const lieuxEnErreur = new Set<string>();
+  lieux.forEach((lecture, index) => {
+    const lieuId = idsLieux[index];
+    if (lieuId === undefined) return;
+    if (lecture.data !== undefined) lieuxConnus.set(lieuId, lecture.data);
+    else if (lecture.error !== null) lieuxEnErreur.add(lieuId);
+  });
+  const perimee =
+    evenement.data?.perimee === true ||
+    seances.data?.perimee === true ||
+    [...lieuxConnus.values()].some((lecture) => lecture.perimee);
+
+  const changerPage = (numero: number) => {
+    const suivants = new URLSearchParams(parametres);
+    if (numero > 1) suivants.set("page", String(numero));
+    else suivants.delete("page");
+    setParametres(suivants);
+  };
+
+  return (
+    <div className={styles.page}>
+      <LienRetour />
+      {perimee ? <BandeauModeDegrade /> : null}
+      {evenement.error !== null ? (
+        <>
+          <h1>Fiche événement</h1>
+          <div className={styles.etat}>
+            <Erreur probleme={evenement.error} />
+            <Bouton
+              variante="secondaire"
+              occupe={evenement.isFetching}
+              surClic={() => void evenement.refetch()}
+            >
+              Réessayer
+            </Bouton>
+          </div>
+        </>
+      ) : evenement.isPending ? (
+        <>
+          <h1>Fiche événement</h1>
+          <Chargement libelle="Chargement de l'événement…" />
+        </>
+      ) : (
+        <>
+          <h1>{evenement.data.donnees.nom}</h1>
+          <p className={styles.descriptionComplete}>{evenement.data.donnees.description}</p>
+        </>
+      )}
+
+      <section aria-labelledby={idSeances} className={styles.resultats}>
+        <h2 id={idSeances} className={styles.titreResultats}>
+          Séances
+        </h2>
+        {seances.error !== null ? (
+          <div className={styles.etat}>
+            <Erreur probleme={seances.error} />
+            <Bouton
+              variante="secondaire"
+              occupe={seances.isFetching}
+              surClic={() => void seances.refetch()}
+            >
+              Réessayer
+            </Bouton>
+          </div>
+        ) : seances.isPending ? (
+          <Chargement libelle="Chargement des séances…" />
+        ) : seances.data.donnees.total === 0 ? (
+          <Vide
+            message="Aucune séance programmée pour l'instant."
+            action={<Link to="/">Voir les autres événements</Link>}
+          />
+        ) : (
+          <TableauPagine
+            libelle="Séances de l'événement"
+            colonnes={colonnesSeances(lieuxConnus, lieuxEnErreur)}
+            page={seances.data.donnees}
+            cleLigne={(seance) => seance.id}
+            surChangerPage={changerPage}
+            messageVide="Cette page de séances est vide."
+            occupe={seances.isFetching && seances.isPlaceholderData}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function colonnesSeances(
+  lieux: ReadonlyMap<string, Lecture<Lieu>>,
+  lieuxEnErreur: ReadonlySet<string>,
+): readonly ColonneTableau<Seance>[] {
+  return [
+    {
+      entete: "Date",
+      rendu: (seance) => <time dateTime={seance.debut}>{formaterDateHeure(seance.debut)}</time>,
+    },
+    {
+      entete: "Lieu",
+      rendu: (seance) => {
+        const lieu = lieux.get(seance.lieu_id)?.donnees;
+        if (lieu !== undefined) return `${lieu.nom}, ${lieu.ville}`;
+        return lieuxEnErreur.has(seance.lieu_id) ? "Lieu indisponible" : "Chargement du lieu…";
+      },
+    },
+    { entete: "Tarifs", rendu: (seance) => <Tarifs seance={seance} /> },
+    {
+      entete: "Réservation",
+      rendu: (seance) =>
+        seance.annulee ? (
+          <span className={styles.annulee}>Annulée</span>
+        ) : (
+          <Link to={`/seances/${seance.id}`}>
+            Choisir
+            <span className={styles.masque}> la séance du {formaterDateHeure(seance.debut)}</span>
+          </Link>
+        ),
+    },
+  ];
+}
+
+function Tarifs({ seance }: { seance: Seance }) {
+  if (seance.categories.length === 0) {
+    return <>Tarifs à venir</>;
+  }
+  const minimum = Math.min(...seance.categories.map((categorie) => categorie.prix));
+  return (
+    <>
+      <strong>À partir de {formaterEuros(minimum)}</strong>
+      <ul className={styles.tarifs}>
+        {seance.categories.map((categorie) => (
+          <li key={categorie.id}>
+            {categorie.nom} : {formaterEuros(categorie.prix)}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}

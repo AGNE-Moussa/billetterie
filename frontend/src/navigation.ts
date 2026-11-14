@@ -9,5 +9,5 @@ export interface LienNavigation {
   roles?: readonly Role[];
 }
 
-/** Liens livrés par l'application : seulement « Accueil » tant qu'aucun écran métier n'existe. */
-export const LIENS_NAVIGATION: readonly LienNavigation[] = [{ libelle: "Accueil", chemin: "/" }];
+/** Liens livrés par l'application (table de docs/front/routes.md) : le catalogue, public. */
+export const LIENS_NAVIGATION: readonly LienNavigation[] = [{ libelle: "Événements", chemin: "/" }];

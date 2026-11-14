@@ -23,7 +23,7 @@ interface ProprietesCommunesChamp {
 
 export type ProprietesChampFormulaire = ProprietesCommunesChamp &
   (
-    | { type: "text" | "email" | "number" | "password" | "textarea" }
+    | { type: "text" | "search" | "date" | "email" | "number" | "password" | "textarea" }
     | { type: "select"; options: readonly OptionChamp[] }
   );
 

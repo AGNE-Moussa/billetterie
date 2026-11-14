@@ -1,0 +1,10 @@
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+}
+
+.position {
+  margin: 0;
+}

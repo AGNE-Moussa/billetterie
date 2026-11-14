@@ -8,7 +8,8 @@ test("test_l_accueil_s_affiche_via_traefik_et_une_url_profonde_rechargee_ne_renv
   const accueil = await page.goto("/");
   expect(accueil?.status()).toBe(200);
   expect(accueil?.headers()["content-type"]).toContain("text/html");
-  await expect(page.getByRole("heading", { level: 1, name: "Billetterie" })).toBeVisible();
+  // BIL-019 : la racine affiche le catalogue des événements.
+  await expect(page.getByRole("heading", { level: 1, name: "Événements" })).toBeVisible();
 
   await page.goto("/page-inexistante");
   const rechargee = await page.reload();

@@ -11,8 +11,9 @@ interface ElementAttendu {
 }
 
 const ALLER_AU_CONTENU: ElementAttendu = { role: "link", nom: "Aller au contenu" };
-// Liens livrés par l'application (src/navigation.ts) : « Accueil » seul, public.
-const ACCUEIL: ElementAttendu = { role: "link", nom: "Accueil" };
+// Liens livrés par l'application (src/navigation.ts) : « Événements » seul, public (BIL-019).
+// L'ordre de tabulation du contenu (filtres du catalogue) est à revoir dans la passe finale.
+const ACCUEIL: ElementAttendu = { role: "link", nom: "Événements" };
 const BASCULE_THEME: ElementAttendu = { role: "button", nom: "Thème sombre" };
 const SE_DECONNECTER: ElementAttendu = { role: "button", nom: "Se déconnecter" };
 const SE_CONNECTER: ElementAttendu = { role: "button", nom: "Se connecter" };
