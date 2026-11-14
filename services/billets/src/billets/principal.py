@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from billets.api.routes import routeur_places, routeur_sante
+from billets.api.routes import routeur_billets, routeur_places, routeur_sante
 from billets.config import Parametres, parametres
 from billets.consommateurs import abonner_consommateurs
 from billets.infra.base import creer_moteur
@@ -31,7 +31,8 @@ from commun.registre import (
 )
 
 NOM_SERVICE = "billets"
-RESSOURCES = ("seats",)
+# tickets : billets de l'appelant (listerBillets, lireBillet ; BIL-021), sur les deux routeurs.
+RESSOURCES = ("seats", "tickets")
 
 
 def tags_consul() -> list[str]:
@@ -104,4 +105,5 @@ def creer_app(
     installer_observabilite(app, NOM_SERVICE)
     app.include_router(routeur_sante)
     app.include_router(routeur_places)
+    app.include_router(routeur_billets)
     return app

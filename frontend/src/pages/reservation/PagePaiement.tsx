@@ -4,8 +4,14 @@
 // écoulé : message et retour au plan de salle. Commande qui n'est plus EN_ATTENTE : renvoi vers
 // /commandes/:commandeId (E05, BIL-021). Les libellés des places viennent de `listerPlaces`
 // (Q6 de docs/front/ecrans.md).
+//
+// Double clic sur « Payer » (CA1 de BIL-021) : une seule requête part. Le verrou `envoiEnCours`
+// est posé de façon synchrone avant l'appel (le bouton `occupe` ne l'est qu'au rendu suivant) et
+// levé à la fin de l'appel. `payerCommande` ne déclare pas d'en-tête Idempotency-Key dans le
+// contrat : côté back, l'unicité tient à la commande (statut EN_ATTENTE, REQUEST_IN_PROGRESS,
+// Idempotency-Key de Paiements égale à l'identifiant de commande).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 
 import { listerToutesLesPlaces } from "../../api/billets";
@@ -24,6 +30,7 @@ import { PageIntrouvable } from "../PageIntrouvable";
 import styles from "../catalogue/PageCatalogue.module.css";
 import { categoriesParId, cleCommande, clePlaces, libellePlace } from "./places";
 import styleReservation from "./Reservation.module.css";
+import { useTempsRestant } from "./tempsRestant";
 
 /** Un lieu change rarement : relu au plus toutes les cinq minutes. */
 const FRAICHEUR_LIEU_MS = 5 * 60 * 1000;
@@ -43,18 +50,6 @@ const CODES_RELIRE = new Set(["REQUEST_IN_PROGRESS", "ORDER_NOT_PENDING"]);
 
 const MOTIF_CARTE = /^[0-9]{16}$/;
 
-/** Millisecondes restantes avant `expireLe` (date de l'API), relues chaque seconde. */
-function useTempsRestant(expireLe: string | undefined): number | null {
-  const [maintenant, setMaintenant] = useState(() => Date.now());
-  useEffect(() => {
-    if (expireLe === undefined) return undefined;
-    const minuterie = window.setInterval(() => setMaintenant(Date.now()), 1000);
-    return () => window.clearInterval(minuterie);
-  }, [expireLe]);
-  if (expireLe === undefined) return null;
-  return Date.parse(expireLe) - maintenant;
-}
-
 function codeDe(erreur: unknown): string | null {
   return erreur === null ? null : convertirErreur(erreur).code;
 }
@@ -70,6 +65,7 @@ export function PagePaiement() {
   const { notifier } = useNotifications();
   const [carte, setCarte] = useState("");
   const [erreurCarte, setErreurCarte] = useState<string | undefined>(undefined);
+  const envoiEnCours = useRef(false);
 
   const commande = useQuery({
     queryKey: cleCommande(commandeId),
@@ -103,6 +99,9 @@ export function PagePaiement() {
 
   const paiement = useMutation({
     mutationFn: (carteTest: string) => payerCommande(commandeId, carteTest),
+    onSettled: () => {
+      envoiEnCours.current = false;
+    },
     onSuccess: (payee: Commande) => {
       clientRequetes.setQueryData(cleCommande(commandeId), payee);
       notifier({ type: "succes", message: "Paiement accepté : votre commande est confirmée." });
@@ -170,12 +169,16 @@ export function PagePaiement() {
 
   const payer = (evenementFormulaire: FormEvent<HTMLFormElement>) => {
     evenementFormulaire.preventDefault();
+    if (envoiEnCours.current || paiement.isPending) {
+      return;
+    }
     const numero = carte.replace(/\s/g, "");
     if (!MOTIF_CARTE.test(numero)) {
       setErreurCarte("Saisissez les 16 chiffres du numéro de carte de test.");
       return;
     }
     setErreurCarte(undefined);
+    envoiEnCours.current = true;
     paiement.mutate(numero);
   };
 

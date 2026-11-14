@@ -29,8 +29,18 @@ OPERATIONS_PARTENAIRES = {
     "listerCommandes",
     "lireCommande",
     "payerCommande",
+    # BIL-021 : lecture de ses propres billets.
+    "listerBillets",
+    "lireBillet",
 }
-OPERATIONS_COMMANDES = {"creerCommande", "listerCommandes", "lireCommande", "payerCommande"}
+OPERATIONS_PROTEGEES = {
+    "creerCommande",
+    "listerCommandes",
+    "lireCommande",
+    "payerCommande",
+    "listerBillets",
+    "lireBillet",
+}
 REF_QUOTA = {"$ref": "#/components/responses/QuotaDepasse"}
 
 
@@ -116,11 +126,11 @@ def test_aucun_contrat_de_service_ne_declare_de_reponse_429(contrat: Path) -> No
     assert avec_429 == []
 
 
-def test_seules_les_operations_de_commandes_exigent_le_jeton_httpbearer(
+def test_seules_les_operations_de_commandes_et_de_billets_exigent_le_jeton_httpbearer(
     partenaires: dict[str, Any],
 ) -> None:
     for nom, (_chemin, _methode, operation) in _operations(partenaires).items():
-        if nom in OPERATIONS_COMMANDES:
+        if nom in OPERATIONS_PROTEGEES:
             assert operation.get("security") == [{"HTTPBearer": []}], nom
         else:
             assert "security" not in operation, nom

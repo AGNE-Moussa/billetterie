@@ -9,5 +9,12 @@ export interface LienNavigation {
   roles?: readonly Role[];
 }
 
-/** Liens livrés par l'application (table de docs/front/routes.md) : le catalogue, public. */
-export const LIENS_NAVIGATION: readonly LienNavigation[] = [{ libelle: "Événements", chemin: "/" }];
+/**
+ * Liens livrés par l'application (table de docs/front/routes.md) : le catalogue, public ; les
+ * commandes et les billets du client (BIL-021).
+ */
+export const LIENS_NAVIGATION: readonly LienNavigation[] = [
+  { libelle: "Événements", chemin: "/" },
+  { libelle: "Mes commandes", chemin: "/commandes", roles: ["customer"] },
+  { libelle: "Mes billets", chemin: "/billets", roles: ["customer"] },
+];

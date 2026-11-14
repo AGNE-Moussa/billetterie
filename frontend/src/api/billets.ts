@@ -1,8 +1,34 @@
-// Fonctions d'API du service billets (lecture publique des places), typées par
-// src/api/genere/billets.ts.
+// Fonctions d'API du service billets (lecture publique des places, billets du client connecté),
+// typées par src/api/genere/billets.ts.
 import { clientApi } from "./client";
-import type { Place } from "./genere/billets";
+import type { Billet, BilletPage, Place } from "./genere/billets";
 import { lire } from "./lecture";
+
+/**
+ * `GET /api/v1/tickets` (`listerBillets`) : une page des billets de l'appelant, restreinte à une
+ * commande si `commandeId` est fourni. Le filtre par appelant est fait par le back (jeton).
+ */
+export async function listerBillets(
+  page: number,
+  options: { commandeId?: string; size?: number } = {},
+): Promise<BilletPage> {
+  const { donnees } = await lire(() =>
+    clientApi().GET("/api/v1/tickets", {
+      params: { query: { page, size: options.size, commande_id: options.commandeId } },
+    }),
+  );
+  return donnees;
+}
+
+/** `GET /api/v1/tickets/{billet_id}` (`lireBillet`) : un billet de l'appelant et son QR code. */
+export async function lireBillet(billetId: string): Promise<Billet> {
+  const { donnees } = await lire(() =>
+    clientApi().GET("/api/v1/tickets/{billet_id}", {
+      params: { path: { billet_id: billetId } },
+    }),
+  );
+  return donnees;
+}
 
 /** Taille de page maximale de `listerPlaces` (`size` ≤ 100, conventions de pagination). */
 const TAILLE_PAGE_PLACES = 100;

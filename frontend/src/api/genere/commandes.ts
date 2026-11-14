@@ -96,9 +96,8 @@ export interface components {
       /**
        * Carte Test
        * @description Facultatif. Absent : la commande est créée EN_ATTENTE, places verrouillées jusqu'à expire_le, sans appel à Paiements, et se paie ensuite par payerCommande. Présent : numéro de carte du paiement simulé, transmis à Paiements et jamais journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre numéro de 16 chiffres accepté (par exemple 4242424242424242).
-       * @default null
        */
-      carte_test: string | null;
+      carte_test?: string | null;
     };
     /** PaiementCommande */
     PaiementCommande: {

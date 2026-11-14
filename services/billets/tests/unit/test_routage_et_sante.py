@@ -27,8 +27,12 @@ def test_billets_s_inscrit_avec_le_prefixe_seats(monkeypatch: pytest.MonkeyPatch
     tags = tags_traefik(NOM_SERVICE, *RESSOURCES)
     sante = tags_sante_traefik(NOM_SERVICE, RESSOURCES[0])
 
-    assert RESSOURCES == ("seats",)
-    assert "traefik.http.routers.billets.rule=PathPrefix(`/api/v1/seats`)" in tags
+    # BIL-021 : /api/v1/tickets en plus ; la santé reste sous /api/v1/seats.
+    assert RESSOURCES == ("seats", "tickets")
+    assert (
+        "traefik.http.routers.billets.rule="
+        "PathPrefix(`/api/v1/seats`) || PathPrefix(`/api/v1/tickets`)"
+    ) in tags
     regles = [t for t in sante if t.startswith("traefik.http.routers.billets-sante.rule=")]
     assert len(regles) == 1
     assert "Path(`/api/v1/seats/health`)" in regles[0]

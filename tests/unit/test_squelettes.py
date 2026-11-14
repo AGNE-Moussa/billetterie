@@ -79,6 +79,8 @@ SERVICES = [
         "seats",
         "billets",
         ("billets-1", "billets-2"),
+        # BIL-021 : lecture des billets sous /api/v1/tickets.
+        ("tickets",),
         # Clé QR synthétique, non réaliste (au moins 32 caractères).
         options=(
             ("redis_url", "redis://127.0.0.1:6379/0"),

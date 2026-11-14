@@ -20,7 +20,7 @@ RACINE = Path(__file__).resolve().parents[4]
 CONTRAT_SERVICE = RACINE / "services" / "billets" / "openapi.yaml"
 CONTRAT_CIBLE = RACINE / "docs" / "contrats" / "billets.yaml"
 METHODES = {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
-OPERATIONS = {"listerPlaces", "verrouillerPlace"}
+OPERATIONS = {"listerPlaces", "verrouillerPlace", "listerBillets", "lireBillet"}
 SCHEMAS = {"Place", "PlacePage", "VerrouCreation", "Verrou"}
 
 
