@@ -417,6 +417,19 @@ class DepotEnMemoire:
         else:
             self.evenements.append(evenement)
 
+    # --- annulation.DepotAnnulation (BIL-011) ---------------------------------------------------
+
+    async def commandes_en_attente_de_la_seance(self, seance_id: UUID) -> list[Commande]:
+        # `expire_le` NULL compris (Q5) ; tous clients confondus.
+        return [
+            c
+            for c in self.commandes.values()
+            if c.seance_id == seance_id and c.statut is StatutCommande.EN_ATTENTE
+        ]
+
+    async def lire_commande_verrouillee(self, commande_id: UUID) -> Commande | None:
+        return self.commandes.get(commande_id)
+
 
 # --- Séance commune -----------------------------------------------------------------------------
 

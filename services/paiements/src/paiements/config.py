@@ -31,6 +31,11 @@ class Parametres(BaseSettings):
     delai_base: float = Field(default=DELAI_BASE_PAR_DEFAUT, gt=0)
     # Désactivé dans les tests qui n'ont pas de Consul.
     consul_actif: bool = True
+    # Broker des événements (BIL-011 : consomme ticketing.show.cancelled et
+    # ticketing.ticket.rejected, publie ticketing.payment.refunded) ; sans URL, ni consommateur
+    # ni relais (tests unitaires).
+    # Exemple : amqp://<utilisateur>:<mot de passe>@rabbitmq:5672/
+    rabbitmq_url: str | None = None
     # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
     jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
     jwt_audience: str = "billetterie-api"

@@ -67,9 +67,20 @@ conventions). BIL-006 : places des séances et verrou d'une place pendant l'acha
     autre identifiant) : rien de plus, journal `INFO` ;
   - place inconnue (`fk_billets_place`) : exception, trois livraisons puis DLQ ;
   - un `ticketing.ticket.issued` par billet (outbox), sans e-mail (v1) ;
+  - verrou consultatif **partagé** de la séance (`commun.verrou_seance`,
+    `pg_advisory_xact_lock_shared`) pris avant la lecture de `seances_annulees`, tenu jusqu'au
+    commit (Q3 de BIL-011) ;
   - après le commit (point d'accroche `apres_commit` de `commun.consommateurs`, aussi pour un
     message déjà traité) : suppression des verrous de la commande par le script « comparer
     puis supprimer » ; Redis injoignable = journal `WARNING`, le message reste traité.
+- Consommateur : `ticketing.show.cancelled` (file `billets.show-cancelled`, DLQ
+  `billets.show-cancelled.dlq`, BIL-011) : sous le verrou consultatif **exclusif** de la
+  séance (une émission en cours finit avant, une émission qui arrive après lit la séance
+  annulée), inscrit la séance dans `seances_annulees` (`ON CONFLICT DO NOTHING`, `annulee_le`
+  d'origine conservée), puis passe ses billets `EMIS` en `ANNULE` (`qr_code` conservé), dans la
+  transaction de `messages_traites`. Places et billets annulés gardés : la place reste
+  indisponible (`uq_billets_place` sans condition). Le statut n'est pas encore lu au contrôle
+  d'un QR (route de scan, V3).
 - QR code (`domaine/qr.py`) : `<billet_id>.<signature>`, HMAC-SHA256 de l'identifiant en
   base64url sans remplissage ; `verifier_qr(contenu)` recalcule la signature (comparaison à
   temps constant) et rend l'identifiant, ou lève `QrInvalide`. Elle ne lit pas la base : le
@@ -81,7 +92,7 @@ conventions). BIL-006 : places des séances et verrou d'une place pendant l'acha
 - Migrations : `0001` (vide), `0002` (messagerie, commun.outbox), `0003` (places, billets ;
   contraintes `uq_places_seance_rang_numero`, `uq_places_seance_id`, `uq_billets_place`,
   `fk_billets_place` composite (`seance_id`, `place_id`) vers `places (seance_id, id)` : un
-  billet porte la séance de sa place, `ck_billets_statut`), `0004` (`seances_annulees`, vide,
-  remplie plus tard par `ticketing.show.cancelled`), lancées une fois par le conteneur
+  billet porte la séance de sa place, `ck_billets_statut`), `0004` (`seances_annulees`,
+  remplie par `ticketing.show.cancelled` depuis BIL-011), lancées une fois par le conteneur
   `billets-migrations` ; Alembic ne lit que `DATABASE_URL`.
 - Contrat : `openapi.yaml`, vérifié par `pytest -m contract`.

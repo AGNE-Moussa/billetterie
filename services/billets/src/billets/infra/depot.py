@@ -10,16 +10,19 @@ import functools
 import logging
 import uuid
 from collections.abc import Callable, Coroutine, Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from billets.domaine.emission import NouveauBillet
+from billets.domaine.annulation import STATUT_ANNULE
+from billets.domaine.emission import STATUT_EMIS, NouveauBillet
 from billets.domaine.places import NouvellePlace, PageResultat, Place
 from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne, SeanceAnnuleeLigne
+from commun.verrou_seance import verrouiller_seance
 
 journal = logging.getLogger(__name__)
 
@@ -209,3 +212,42 @@ class DepotEmissionSql:
                 )
             )
         return conflits
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        """Verrou consultatif partagé de la séance (Q3 de BIL-011) : l'émission attend la fin
+        d'une annulation en cours, deux émissions ne s'attendent pas."""
+        await verrouiller_seance(self._session, seance_id, exclusif=False)
+
+
+class DepotAnnulationSql:
+    """Réalisation de `domaine.annulation.DepotAnnulation`, dans la session du consommateur."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        await verrouiller_seance(self._session, seance_id, exclusif=True)
+
+    @_base_requise
+    async def inscrire_seance_annulee(self, seance_id: uuid.UUID, annulee_le: datetime) -> bool:
+        # Séance déjà inscrite (autre message) : `annulee_le` d'origine conservée.
+        requete = (
+            insert(SeanceAnnuleeLigne)
+            .values(seance_id=seance_id, annulee_le=annulee_le)
+            .on_conflict_do_nothing(index_elements=[SeanceAnnuleeLigne.seance_id])
+            .returning(SeanceAnnuleeLigne.seance_id)
+        )
+        return (await self._session.execute(requete)).first() is not None
+
+    @_base_requise
+    async def annuler_billets(self, seance_id: uuid.UUID) -> int:
+        # Passage conditionnel au statut courant (H5) ; places et billets gardés (H4).
+        requete = (
+            update(BilletLigne)
+            .where(BilletLigne.seance_id == seance_id, BilletLigne.statut == STATUT_EMIS)
+            .values(statut=STATUT_ANNULE)
+            .returning(BilletLigne.id)
+        )
+        return len((await self._session.scalars(requete)).all())

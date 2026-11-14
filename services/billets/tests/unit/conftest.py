@@ -9,7 +9,7 @@ s'exécute sans `await` intermédiaire, donc de façon atomique, comme le script
 """
 
 from collections.abc import AsyncIterator, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,6 +20,7 @@ from fastapi import FastAPI
 
 from billets.api.dependances import obtenir_depot, obtenir_maintenant, obtenir_verrous
 from billets.config import Parametres
+from billets.domaine.emission import STATUT_EMIS, NouveauBillet
 from billets.domaine.places import DepotPlaces, NouvellePlace, PageResultat, Place
 from billets.domaine.verrous import MagasinVerrous, VerrouIndisponible, cle_verrou
 from billets.principal import creer_app
@@ -193,6 +194,82 @@ class DepotEnMemoire:
                 connues.add((nouvelle.seance_id, nouvelle.rang, nouvelle.numero))
 
 
+class DepotBilletsEnMemoire:
+    """Double des ports `emission.DepotEmission` et `annulation.DepotAnnulation` (BIL-011).
+
+    `billets` : billets par identifiant, statut compris (`uq_billets_place` : une place, un
+    billet, quel que soit son statut). `verrous_seance` note la séance de chaque verrou
+    consultatif demandé, dans l'ordre (partagé ou exclusif selon le port, réalisé par infra/).
+    """
+
+    def __init__(self) -> None:
+        self.billets: dict[UUID, NouveauBillet] = {}
+        self.seances_annulees: dict[UUID, datetime] = {}
+        self.verrous_seance: list[UUID] = []
+
+    def semer_billet(
+        self, seance_id: UUID, place_id: UUID, commande_id: UUID, statut: str = STATUT_EMIS
+    ) -> NouveauBillet:
+        billet = NouveauBillet(
+            id=uuid4(),
+            commande_id=commande_id,
+            client="client-test",
+            seance_id=seance_id,
+            place_id=place_id,
+            statut=statut,
+            qr_code=f"qr-synthetique-{uuid4()}",
+            emis_le=MAINTENANT,
+        )
+        self.billets[billet.id] = billet
+        return billet
+
+    def statuts(self, seance_id: UUID) -> dict[UUID, str]:
+        """Statut de chaque billet de la séance, par place."""
+        return {b.place_id: b.statut for b in self.billets.values() if b.seance_id == seance_id}
+
+    # --- commun aux deux ports ------------------------------------------------------------------
+
+    async def verrouiller_seance(self, seance_id: UUID) -> None:
+        self.verrous_seance.append(seance_id)
+
+    # --- DepotEmission --------------------------------------------------------------------------
+
+    async def seance_annulee(self, seance_id: UUID) -> bool:
+        return seance_id in self.seances_annulees
+
+    async def places_de_la_commande_emises(
+        self, commande_id: UUID, seance_id: UUID, place_ids: Sequence[UUID]
+    ) -> set[UUID]:
+        return {
+            b.place_id
+            for b in self.billets.values()
+            if b.commande_id == commande_id and b.seance_id == seance_id and b.place_id in place_ids
+        }
+
+    async def emettre(self, billets: Sequence[NouveauBillet]) -> set[UUID]:
+        prises = {(b.seance_id, b.place_id) for b in self.billets.values()}
+        conflits = {b.place_id for b in billets if (b.seance_id, b.place_id) in prises}
+        if not conflits:
+            self.billets.update({b.id: b for b in billets})
+        return conflits
+
+    # --- DepotAnnulation ------------------------------------------------------------------------
+
+    async def inscrire_seance_annulee(self, seance_id: UUID, annulee_le: datetime) -> bool:
+        if seance_id in self.seances_annulees:
+            return False
+        self.seances_annulees[seance_id] = annulee_le
+        return True
+
+    async def annuler_billets(self, seance_id: UUID) -> int:
+        emis = [
+            b for b in self.billets.values() if b.seance_id == seance_id and b.statut == STATUT_EMIS
+        ]
+        for billet in emis:
+            self.billets[billet.id] = replace(billet, statut="ANNULE")
+        return len(emis)
+
+
 @dataclass
 class Seance:
     """Séance commune du plan : Fosse (A × 10, B × 12) et Balcon (C × 5), 27 places."""
@@ -260,6 +337,11 @@ def horloge() -> Horloge:
 @pytest.fixture
 def depot() -> DepotEnMemoire:
     return DepotEnMemoire()
+
+
+@pytest.fixture
+def depot_billets() -> DepotBilletsEnMemoire:
+    return DepotBilletsEnMemoire()
 
 
 @pytest.fixture

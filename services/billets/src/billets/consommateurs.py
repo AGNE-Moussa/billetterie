@@ -13,6 +13,9 @@ verrous Redis de la commande (décision Q4). File `billets.order-confirmed`.
 
 `ticketing.order.expired` (BIL-010) : libère, dans le traitement, les verrous des places encore
 détenus par la commande (décision Q3, H5). File `billets.order-expired`.
+
+`ticketing.show.cancelled` (BIL-011) : inscrit la séance dans `seances_annulees` et passe ses
+billets `ANNULE` (CA3, H4). File `billets.show-cancelled`.
 """
 
 import functools
@@ -22,6 +25,11 @@ from datetime import UTC, datetime
 from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from billets.domaine.annulation import (
+    CONSOMMATEUR_SEANCE_ANNULEE,
+    EVENEMENT_SEANCE_ANNULEE,
+    annuler_seance,
+)
 from billets.domaine.emission import (
     CONSOMMATEUR_COMMANDE_CONFIRMEE,
     EVENEMENT_BILLET_EMIS,
@@ -44,7 +52,7 @@ from billets.domaine.places import (
     places_de_la_seance,
 )
 from billets.domaine.verrous import MagasinVerrous, VerrouIndisponible
-from billets.infra.depot import DepotEmissionSql, DepotPlacesSql
+from billets.infra.depot import DepotAnnulationSql, DepotEmissionSql, DepotPlacesSql
 from commun.consommateurs import consommateur_idempotent, traiter_une_fois
 from commun.evenements import Evenement
 from commun.outbox import publier_plus_tard
@@ -161,6 +169,20 @@ async def liberer_places_de_la_commande_expiree(
     )
 
 
+async def annuler_billets_de_la_seance(session: AsyncSession, evenement: Evenement) -> None:
+    """Traitement de ticketing.show.cancelled (BIL-011, CA3) : inscrit la séance annulée et
+    passe ses billets `ANNULE`, dans la transaction de `messages_traites`."""
+    annules = await annuler_seance(
+        DepotAnnulationSql(session), evenement.data, annulee_le=datetime.now(UTC)
+    )
+    journal.info(
+        "Séance %s annulée : %d billets annulés (message %s)",
+        evenement.data.get("seance_id"),
+        annules,
+        evenement.id,
+    )
+
+
 def abonner_consommateurs(
     broker: RabbitBroker,
     sessions: async_sessionmaker[AsyncSession],
@@ -193,3 +215,10 @@ def abonner_consommateurs(
         nom=CONSOMMATEUR_COMMANDE_EXPIREE,
         type_evenement=EVENEMENT_COMMANDE_EXPIREE,
     )(functools.partial(liberer_places_de_la_commande_expiree, verrous))
+    # Billets de la séance annulée (BIL-011, CA3), sous le verrou exclusif de la séance (Q3).
+    consommateur_idempotent(
+        broker,
+        sessions,
+        nom=CONSOMMATEUR_SEANCE_ANNULEE,
+        type_evenement=EVENEMENT_SEANCE_ANNULEE,
+    )(annuler_billets_de_la_seance)

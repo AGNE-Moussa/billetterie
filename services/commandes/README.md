@@ -85,6 +85,24 @@ passer commande et payer ; BIL-010 : expirer les commandes non payées.
 - Base injoignable : 503 `BASE_INDISPONIBLE` après `DELAI_BASE` secondes (5 par défaut).
 - Événements : `ticketing.order.confirmed` et `ticketing.order.expired` par l'outbox, relais
   actif si `RABBITMQ_URL` est défini.
+- Annulation d'une séance (BIL-011), consommateurs actifs si `RABBITMQ_URL` est défini (le
+  modèle de données l'emporte sur le libellé du ticket : aucun statut « annulée ») :
+  - `commandes.show-cancelled` (`ticketing.show.cancelled`) : chaque commande `EN_ATTENTE` de
+    la séance (`expire_le` NULL compris), lue sous `FOR UPDATE`, passe `EXPIREE` avec son
+    `ticketing.order.expired` (toutes ses places, sans `remboursement_du`), sans appel à
+    Paiements : Paiements rembourse lui-même les paiements acceptés de la séance. Une commande
+    `CONFIRMEE` attend son remboursement.
+  - `commandes.payment-refunded` (`ticketing.payment.refunded`) : commande relue sous
+    `FOR UPDATE` ; `CONFIRMEE` → `REMBOURSEE` ; `EN_ATTENTE` → `EXPIREE` avec
+    `ticketing.order.expired` (paiement accepté puis remboursé avant la confirmation : la
+    confirmation de `payerCommande`, gardée par `EN_ATTENTE`, répond alors 409
+    `ORDER_NOT_PENDING` sans `ticketing.order.confirmed`) ; `EXPIREE` ou `REMBOURSEE` : ignoré
+    (`INFO`) ; commande inconnue : ignoré (`WARNING`, identifiant seul), jamais de file
+    d'erreur.
+  - Une commande `REMBOURSEE` ne compte plus dans le plafond de billets.
+  - `remboursement_du` sur `ticketing.order.expired` n'a toujours pas de consommateur (Q8 de
+    BIL-011, ticket de suivi) ; une séance annulée est couverte par `ticketing.show.cancelled`
+    côté Paiements.
 - Carte de test : transmise à Paiements, jamais enregistrée ni journalisée.
 - Migrations : `0001` (vide), `0002` (outbox, messages_traites), `0003` (commandes,
   lignes_commande), `0004` (index `ix_commandes_statut_expire_le`), lancées une fois par le

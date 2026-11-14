@@ -12,11 +12,12 @@ from collections.abc import Callable, Coroutine, Sequence
 from datetime import UTC
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, exists, func, insert, or_, select
+from sqlalchemy import ColumnElement, Select, exists, func, insert, or_, select, update
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalogue.domaine.catalogue import (
+    EVENEMENT_SEANCE_ANNULEE,
     EVENEMENT_SEANCE_PROGRAMMEE,
     Categorie,
     Evenement,
@@ -25,6 +26,7 @@ from catalogue.domaine.catalogue import (
     NouvelleSeance,
     Rang,
     Seance,
+    donnees_seance_annulee,
     donnees_seance_programmee,
 )
 from catalogue.infra.base import (
@@ -307,6 +309,27 @@ class DepotCatalogueSql:
             .where(SeanceLigne.evenement_id == evenement_id)
         )
         return (await self._session.execute(requete)).scalar_one()
+
+    @_base_requise
+    async def annuler_seance(self, seance: Seance) -> bool:
+        """Passage conditionnel `annulee = false` → true et outbox dans une transaction (H3)."""
+        # La condition `annulee = false` départage deux annulations simultanées : la seconde
+        # attend le verrou de ligne de la première, relit la ligne commitée et ne change rien.
+        resultat = await self._session.execute(
+            update(SeanceLigne)
+            .where(SeanceLigne.id == seance.id, SeanceLigne.annulee.is_(False))
+            .values(annulee=True)
+            .returning(SeanceLigne.id)
+        )
+        if resultat.first() is None:
+            await self._session.rollback()
+            return False
+        await publier_plus_tard(
+            self._session,
+            EvenementPublie.creer(EVENEMENT_SEANCE_ANNULEE, donnees_seance_annulee(seance)),
+        )
+        await self._session.commit()
+        return True
 
     async def _seances(self, requete: Select[Any]) -> list[Seance]:
         """Séances de la requête, dans son ordre, avec leurs catégories et leurs rangs."""

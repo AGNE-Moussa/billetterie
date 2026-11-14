@@ -83,6 +83,11 @@ class DepotPaiements(Protocol):
         """Le paiement enregistré de la commande, ou None."""
         ...
 
+    async def verrouiller_seance(self, seance_id: UUID) -> None:
+        """Verrou consultatif partagé de la séance, jusqu'à la fin de la transaction (Q2 de
+        BIL-011) ; à prendre avant de lire `seances_annulees`."""
+        ...
+
     async def seance_annulee(self, seance_id: UUID) -> bool:
         """Vrai si la séance figure dans `seances_annulees` (décision Q9)."""
         ...
@@ -103,7 +108,8 @@ async def payer(
     montant: int,
     carte_test: str,
 ) -> Paiement:
-    """Paie la commande, ou rejoue le paiement enregistré ; renvoie un paiement ACCEPTE.
+    """Paie la commande, ou rejoue le paiement enregistré ; renvoie un paiement ACCEPTE, ou
+    REMBOURSE au rejeu d'un paiement remboursé depuis.
 
     Lève `CleIdempotenceInvalide` (422), `PaiementRefuse` (402, aussi au rejeu d'un refus),
     `PaiementDejaExistant` (409) ou `SeanceAnnulee` (409).
@@ -114,6 +120,10 @@ async def payer(
     # (décision Q20).
     enregistre = await depot.lire_par_commande(commande_id)
     if enregistre is None:
+        # Verrou partagé de la séance jusqu'au commit de l'insertion (Q2 de BIL-011) : une
+        # annulation en cours finit avant la lecture ci-dessous ; une annulation qui arrive
+        # après attend le paiement écrit, puis le rembourse.
+        await depot.verrouiller_seance(seance_id)
         if await depot.seance_annulee(seance_id):
             raise SeanceAnnulee(seance_id)
         # Refus simulé par la seule carte de test, jamais par un réglage global (décision Q5).

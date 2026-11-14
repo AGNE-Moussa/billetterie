@@ -18,6 +18,15 @@ les conventions).
   de messagerie), lancées une fois par le conteneur `catalogue-migrations`.
 - Événement publié : `ticketing.show.scheduled` à chaque séance programmée, rangé dans l'outbox
   dans la transaction de la séance, puis publié par le `RelaisOutbox` (`RABBITMQ_URL`).
+- Annulation d'une séance (BIL-011) : `POST /api/v1/events/{evenement_id}/shows/{seance_id}/
+  cancellation` (`annulerSeance`, rôle `admin` contrôlé avant le scope `events:write`, sans
+  corps). Contrôles : 401, 403 `ROLE_MANQUANT` puis `SCOPE_MANQUANT`, 422, 404
+  `EVENT_NOT_FOUND` puis `SHOW_NOT_FOUND` (aussi pour une séance d'un autre événement), 409
+  `SHOW_ALREADY_CANCELLED` avant `SHOW_ALREADY_STARTED` (`debut <= maintenant`). Passage
+  `UPDATE seances SET annulee = true WHERE id = :s AND annulee = false` et
+  `ticketing.show.cancelled` dans l'outbox, même transaction ; aucune ligne changée (annulation
+  simultanée) : 409 `SHOW_ALREADY_CANCELLED`, aucun second événement. 200 : la `Seance`,
+  `annulee` vrai. La séance annulée reste listée par `listerSeances`.
 - Base injoignable : 503 `BASE_INDISPONIBLE` ; attente bornée par `DELAI_BASE` (secondes,
   5 par défaut) pour la connexion et chaque requête.
 - Cache Redis des lectures (BIL-005), actif si `REDIS_URL` est défini (sur la plateforme :
@@ -31,7 +40,8 @@ les conventions).
   `CacheCatalogue`) et `infra/cache.py` (redis-py).
 - Clés Redis : `catalogue:cache:v1:<fraiche|secours>:<operationId>:[g<génération>:]<sha256 des
   paramètres>`, toujours avec expiration ; `catalogue:generation:<famille>` (familles
-  `evenements`, `lieux`, `seances:<evenement_id>`), compteurs sans expiration, volontairement
+  `evenements`, `lieux`, `seances:<evenement_id>`, `seance:<seance_id>`, cette dernière créée
+  seulement par une annulation), compteurs sans expiration, volontairement
   hors du préfixe `catalogue:cache:` : un compteur qui expirerait repartirait de 0 et rendrait
   de nouveau accessibles d'anciennes copies de secours. Ces compteurs supposent la politique
   d'éviction `noeviction` (valeur par défaut, `compose.yaml` ne fixe pas `maxmemory`) : avec
@@ -41,17 +51,21 @@ les conventions).
   `lieux`, `creerSeance(E)` `seances:E` et `evenements` (filtres ville et dates). Les copies
   des anciennes générations deviennent inaccessibles puis expirent. Une lecture lit la
   génération avant la base et n'écrit que sous elle : une lecture commencée avant une création
-  ne remet pas l'ancienne liste en cache. Les détails ne sont jamais invalidés (aucune route ne
-  les modifie).
+  ne remet pas l'ancienne liste en cache. Seule l'annulation d'une séance modifie un détail :
+  `lireSeance` et `lireSeanceParId` ont donc aussi une génération, famille `seance:<seance_id>`,
+  que l'annulation incrémente après son commit avec `seances:E` (BIL-011, H3). Une lecture de
+  détail commencée avant le commit écrit sous l'ancienne génération : elle ne remet jamais en
+  cache la séance non annulée.
 - Redis injoignable ou lent : chaque appel est borné par `DELAI_REDIS` (0,5 s) ; la requête
   continue sans cache (jamais de 5xx dû à Redis), avec un avertissement journalisé sans URL.
   Au premier échec, Redis est coupé pour le reste de la requête : plus aucun appel, un seul
   avertissement par requête. Un compteur de génération non entier est traité comme Redis
   injoignable.
 - Limites connues :
-  - Redis en panne pendant une création admin : la création répond 201 mais l'invalidation
-    échoue (journal d'erreur). Redis étant persistant, à son retour les anciennes copies
-    fraîches peuvent encore servir jusqu'à 30 s et les copies de secours jusqu'à 24 h.
+  - Redis en panne pendant une création ou une annulation admin : l'écriture réussit (201 ou
+    200) mais l'invalidation échoue (journal d'erreur). Redis étant persistant, à son retour
+    les anciennes copies fraîches peuvent encore servir jusqu'à 30 s et les copies de secours
+    jusqu'à 24 h.
   - Par la gateway, CA2 n'est pas tenu : base arrêtée, `/health` répond 503, Consul passe
     l'instance en « critical » et Traefik la retire ; les lectures reçoivent alors le 503 de
     Traefik. Le secours n'est servi qu'en appel direct du service (ticket de suivi : check

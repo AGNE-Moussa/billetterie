@@ -50,6 +50,13 @@ def famille_seances(evenement_id: UUID) -> str:
     return f"seances:{evenement_id}"
 
 
+def famille_seance(seance_id: UUID) -> str:
+    """Génération des deux lectures de détail d'une séance (`lireSeance`, `lireSeanceParId`),
+    incrémentée par son annulation (BIL-011) : une lecture commencée avant l'annulation écrit
+    sous l'ancienne génération, jamais lue ensuite."""
+    return f"seance:{seance_id}"
+
+
 ValeurParametre = str | int | UUID | datetime | None
 
 journal = logging.getLogger(__name__)
@@ -157,7 +164,8 @@ class LecturesEnCache:
     ) -> Response:
         """Réponse 200 de la lecture `operation`, depuis le cache ou la base.
 
-        `famille` : famille de listes dont la génération entre dans la clé (None pour un détail).
+        `famille` : famille dont la génération entre dans la clé (listes, et détails d'une
+        séance depuis BIL-011) ; None pour un détail jamais modifié.
         """
         if self._cache is None:
             return _reponse((await lire()).model_dump_json())

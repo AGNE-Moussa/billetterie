@@ -1,6 +1,6 @@
 """Événements, lieux et séances du catalogue : règles métier, sans SQLAlchemy."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
@@ -9,6 +9,8 @@ from commun.erreurs import ErreurMetier
 
 # Publié à chaque séance programmée, dans la transaction de la séance (outbox).
 EVENEMENT_SEANCE_PROGRAMMEE = "ticketing.show.scheduled"
+# Publié à l'annulation d'une séance, dans la transaction du passage `annulee` (BIL-011, H3).
+EVENEMENT_SEANCE_ANNULEE = "ticketing.show.cancelled"
 
 
 @dataclass(frozen=True)
@@ -141,6 +143,28 @@ class RangDejaAttribue(ErreurMetier):
         self.rang = rang
 
 
+class SeanceDejaAnnulee(ErreurMetier):
+    def __init__(self, seance_id: UUID) -> None:
+        super().__init__(
+            "SHOW_ALREADY_CANCELLED",
+            409,
+            f"La séance {seance_id} est déjà annulée.",
+            titre="Séance déjà annulée",
+        )
+        self.seance_id = seance_id
+
+
+class SeanceDejaCommencee(ErreurMetier):
+    def __init__(self, seance_id: UUID) -> None:
+        super().__init__(
+            "SHOW_ALREADY_STARTED",
+            409,
+            f"La séance {seance_id} a déjà commencé.",
+            titre="Séance déjà commencée",
+        )
+        self.seance_id = seance_id
+
+
 class DepotCatalogue(Protocol):
     """Accès aux événements, lieux et séances ; l'implémentation vit dans infra/."""
 
@@ -181,6 +205,12 @@ class DepotCatalogue(Protocol):
         ...
 
     async def compter_seances(self, evenement_id: UUID) -> int: ...
+
+    async def annuler_seance(self, seance: Seance) -> bool:
+        """`UPDATE seances SET annulee = true WHERE id = :s AND annulee = false` et publication
+        de EVENEMENT_SEANCE_ANNULEE dans la même transaction (H3) ; faux si aucune ligne n'a
+        changé (séance déjà annulée, aussi par une requête simultanée)."""
+        ...
 
 
 def _decalage(page: int, size: int) -> int:
@@ -275,6 +305,31 @@ async def lister_seances(
     await lire_evenement(depot, evenement_id)
     elements = await depot.lister_seances(evenement_id, _decalage(page, size), size)
     return PageResultat(elements=elements, total=await depot.compter_seances(evenement_id))
+
+
+async def annuler_seance(
+    depot: DepotCatalogue, evenement_id: UUID, seance_id: UUID, maintenant: datetime
+) -> Seance:
+    """Annule la séance de l'événement et renvoie la séance annulée (BIL-011).
+
+    Erreurs dans l'ordre de H2 : EVENT_NOT_FOUND, SHOW_NOT_FOUND (aussi pour une séance d'un
+    autre événement), SHOW_ALREADY_CANCELLED, puis SHOW_ALREADY_STARTED (`debut <= maintenant`).
+    """
+    seance = await lire_seance(depot, evenement_id, seance_id)
+    if seance.annulee:
+        raise SeanceDejaAnnulee(seance_id)
+    # « Commencée » : même définition que Commandes (BIL-008, H2).
+    if seance.debut <= maintenant:
+        raise SeanceDejaCommencee(seance_id)
+    # Passage conditionnel : une annulation simultanée a pu passer entre la lecture et ici.
+    if not await depot.annuler_seance(seance):
+        raise SeanceDejaAnnulee(seance_id)
+    return replace(seance, annulee=True)
+
+
+def donnees_seance_annulee(seance: Seance) -> dict[str, Any]:
+    """`data` de EVENEMENT_SEANCE_ANNULEE (docs/evenements/ticketing.show.cancelled.json)."""
+    return {"seance_id": str(seance.id), "evenement_id": str(seance.evenement_id)}
 
 
 def donnees_seance_programmee(seance: Seance, evenement: Evenement, lieu: Lieu) -> dict[str, Any]:

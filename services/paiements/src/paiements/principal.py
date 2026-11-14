@@ -1,4 +1,5 @@
-"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, routes.
+"""Assemblage : configuration, journaux, erreurs, authentification, base, consommateurs RabbitMQ
+et relais de l'outbox (si `RABBITMQ_URL`), Consul, routes.
 
 Lancement : uvicorn --factory paiements.principal:creer_app
 """
@@ -7,16 +8,20 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from commun.auth import installer_auth
+from commun.consommateurs import messagerie
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
+from commun.outbox import RelaisOutbox
 from commun.registre import inscription, tags_sante_traefik, tags_traefik
 from paiements.api.routes import routeur_paiements, routeur_sante
 from paiements.config import Parametres, parametres
+from paiements.consommateurs import abonner_consommateurs
 from paiements.infra.base import creer_moteur
 
 NOM_SERVICE = "paiements"
@@ -50,6 +55,14 @@ def creer_app(
         app.state.sessions = async_sessionmaker(moteur, expire_on_commit=False)
         try:
             async with AsyncExitStack() as pile:
+                if config.rabbitmq_url:
+                    # Consommateurs ticketing.show.cancelled et ticketing.ticket.rejected, relais
+                    # de ticketing.payment.refunded (BIL-011) ; sans URL, aucun.
+                    broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
+                    abonner_consommateurs(broker, app.state.sessions)
+                    await pile.enter_async_context(messagerie(broker))
+                    relais = RelaisOutbox(app.state.sessions, broker)
+                    await pile.enter_async_context(relais.en_fond())
                 if config.consul_actif:
                     # Inscription après l'ouverture de la base, retrait avant sa fermeture.
                     await pile.enter_async_context(
