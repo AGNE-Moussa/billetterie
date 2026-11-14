@@ -578,10 +578,20 @@ expiration (voir Q7).
 
 | Méthode | Chemin | operationId | Codé |
 | --- | --- | --- | --- |
-| (entrer dans la file, lire sa position) | service `file-attente` | à définir | **à créer** |
+| POST | `/api/v1/queues/{seance_id}/position` | `entrerFile` | oui (BIL-015) |
+| GET | `/api/v1/queues/{seance_id}/position` | `lirePositionFile` | oui (BIL-015) |
+| POST | `/api/v1/orders` (en-tête `X-Admission-Token`) | `creerCommande` | oui (BIL-015) |
 
-- Aucune route : le contrat du service `file-attente` sera écrit par BIL-015. Écran
-  maintenu ici pour couvrir US8 ; ses routes seront fixées avec ce contrat.
+- Route `/seances/:seanceId/attente`, garde `customer`. À l'ouverture, `entrerFile` (idempotent :
+  un rafraîchissement retrouve sa place ou son admission, CA1) ; puis `lirePositionFile` toutes
+  les 5 à 30 s (quart de l'attente estimée), jamais plus souvent.
+- E03 tente `entrerFile` pour un client : 404 `QUEUE_NOT_FOUND` → plan de salle direct ;
+  `EN_ATTENTE` → E16 ; `ADMIS` → réservation avec `X-Admission-Token`, expiration affichée.
+- Admission (`ADMIS`) : jeton gardé en mémoire de l'onglet (cache TanStack Query), jamais dans
+  le stockage du navigateur ; redirection vers E03, sélection `?places=` conservée.
+- 403 `ADMISSION_REQUIRED` / `ADMISSION_INVALID` sur `creerCommande`, ou admission échue :
+  retour sur E16 avec un message ; 404 `QUEUE_POSITION_NOT_FOUND` : « Reprendre une place ».
+- Position et estimation dans `role="status"` (`aria-live="polite"`), barre `<progress>` libellée.
 - **Chargement** : « Connexion à la file d'attente… ».
 - **Vide** : sans objet.
 - **Erreur** : file indisponible en `Erreur` avec « Réessayer ».
@@ -614,7 +624,7 @@ expiration (voir Q7).
 | Libellé de place dans commande et billet | E04 à E08 | `rang`, `numero` | Q6 |
 | Abandonner une commande en attente | E04 | aucune | Q7 |
 | Modifier un événement ou une séance | E11, E12 | aucune | Q8 |
-| File d'attente | E16 | service `file-attente` | BIL-015 (V2) |
+| File d'attente | E16 | service `file-attente` | codé (BIL-015) |
 
 ## Questions
 

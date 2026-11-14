@@ -4,13 +4,18 @@
 // (commande EN_ATTENTE, places verrouillées jusqu'à `expire_le`), puis mène au paiement (E04).
 // Place prise entre-temps (409 SEAT_ALREADY_TAKEN, CA1) : message, plan relu, sélection gardée
 // sans la place perdue, page intacte.
+// File d'attente (US8, BIL-023) : pour un client, la page tente d'abord `entrerFile`. 404
+// QUEUE_NOT_FOUND : pas de file, comportement ci-dessus. EN_ATTENTE : salle d'attente (E16).
+// ADMIS : le jeton d'admission part dans X-Admission-Token de `creerCommande`, son expiration
+// est affichée ; 403 ADMISSION_REQUIRED ou ADMISSION_INVALID, ou admission échue : retour E16.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 
 import { listerToutesLesPlaces } from "../../api/billets";
 import { lireEvenement, lireLieu, lireSeanceParId } from "../../api/catalogue";
 import { reserverPlaces } from "../../api/commandes";
+import { entrerFile } from "../../api/fileAttente";
 import type { Place } from "../../api/genere/billets";
 import type { Commande } from "../../api/genere/commandes";
 import { convertirErreur, MESSAGE_GENERIQUE } from "../../api/problemes";
@@ -20,9 +25,17 @@ import { Bouton } from "../../composants/Bouton";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
 import { Vide } from "../../composants/Vide";
-import { formaterDateHeure, formaterEuros } from "../../format";
+import { formaterDateHeure, formaterDuree, formaterEuros, formaterHeure } from "../../format";
 import { useNotifications } from "../../notifications/notifications";
 import styles from "../catalogue/PageCatalogue.module.css";
+import {
+  CODE_SANS_FILE,
+  CODES_ADMISSION,
+  cheminAttente,
+  cleFile,
+  type EtatRetourAttente,
+  type MotifRetourAttente,
+} from "./fileAttente";
 import {
   avecSelection,
   categoriesParId,
@@ -34,6 +47,7 @@ import {
 } from "./places";
 import { LegendePlan, PlanSalle } from "./PlanSalle";
 import styleReservation from "./Reservation.module.css";
+import { useTempsRestant } from "./tempsRestant";
 
 /** Un lieu change rarement : relu au plus toutes les cinq minutes. */
 const FRAICHEUR_LIEU_MS = 5 * 60 * 1000;
@@ -103,6 +117,30 @@ function MessageErreurReservation({ erreur }: { erreur: unknown }) {
   );
 }
 
+/**
+ * Expiration de l'admission (`admission_expire_le` de l'API), à part pour que le compte à
+ * rebours, relu chaque seconde, ne fasse pas redessiner tout le plan. Échue : `surExpiration`.
+ */
+function ExpirationAdmission({
+  expireLe,
+  surExpiration,
+}: {
+  expireLe: string;
+  surExpiration: () => void;
+}) {
+  const restant = useTempsRestant(expireLe);
+  const echue = restant !== null && restant <= 0;
+  useEffect(() => {
+    if (echue) surExpiration();
+  }, [echue, surExpiration]);
+  return (
+    <p>
+      Admission valable jusqu'à <time dateTime={expireLe}>{formaterHeure(expireLe)}</time> (encore{" "}
+      <strong>{formaterDuree(restant ?? 0)}</strong>) : réservez avant cette heure.
+    </p>
+  );
+}
+
 export function PagePlanSalle() {
   const { seanceId = "" } = useParams();
   const [parametres, setParametres] = useSearchParams();
@@ -138,9 +176,50 @@ export function PagePlanSalle() {
     queryFn: () => listerToutesLesPlaces(seanceId),
   });
 
+  // File d'attente : tentée pour un client sur une séance ouverte. `entrerFile` est idempotent :
+  // un client admis retrouve son jeton, un client en attente sa place.
+  const estClient = session.statut === "connecte" && session.roles.includes("customer");
+  const file = useQuery({
+    queryKey: cleFile(seanceId),
+    queryFn: () => entrerFile(seanceId),
+    enabled: estClient && seance.data !== undefined && !seance.data.donnees.annulee,
+    refetchOnWindowFocus: false,
+  });
+  const admission = file.data?.statut === "ADMIS" ? file.data : null;
+  const jetonAdmission = admission?.jeton_admission ?? null;
+  const fileSansAdmission = file.data?.statut === "EN_ATTENTE";
+
+  /** Renvoie en salle d'attente (E16), sélection gardée ; position relue à l'arrivée. */
+  const retournerEnAttente = (motif: MotifRetourAttente | null) => {
+    clientRequetes.removeQueries({ queryKey: cleFile(seanceId) });
+    const etat: EtatRetourAttente | null = motif === null ? null : { motif };
+    void naviguer(cheminAttente(seanceId, search), { replace: true, state: etat });
+  };
+  const retourRef = useRef(retournerEnAttente);
+  useEffect(() => {
+    retourRef.current = retournerEnAttente;
+  });
+
+  useEffect(() => {
+    if (fileSansAdmission) retourRef.current(null);
+  }, [fileSansAdmission]);
+  // Stable : l'effet d'ExpirationAdmission ne se relance pas à chaque rendu.
+  const surExpirationAdmission = useCallback(() => {
+    retourRef.current("admission-expiree");
+  }, []);
+  const erreurFile = file.error !== null && codeDe(file.error) !== CODE_SANS_FILE;
+
   const reservation = useMutation({
-    mutationFn: async ({ ids, cle }: { ids: string[]; cle: string }): Promise<Commande> => {
-      const commande = await reserverPlaces(seanceId, ids, cle);
+    mutationFn: async ({
+      ids,
+      cle,
+      jeton,
+    }: {
+      ids: string[];
+      cle: string;
+      jeton: string | null;
+    }): Promise<Commande> => {
+      const commande = await reserverPlaces(seanceId, ids, cle, jeton);
       if (commande.statut !== "EN_ATTENTE") {
         throw new ReservationNonAboutie();
       }
@@ -154,6 +233,12 @@ export function PagePlanSalle() {
     },
     onError: (erreur) => {
       const code = codeDe(erreur);
+      if (code !== null && CODES_ADMISSION.has(code)) {
+        // Jeton absent, échu ou refusé : aucune commande créée, retour en salle d'attente.
+        tentative.current = null;
+        retourRef.current("admission-refusee");
+        return;
+      }
       // Rejouer la même clé n'a de sens que si la première requête a pu ne pas aboutir.
       if (
         erreur instanceof ReservationNonAboutie ||
@@ -265,7 +350,7 @@ export function PagePlanSalle() {
     if (tentative.current?.selection !== cleSelection) {
       tentative.current = { selection: cleSelection, cle: crypto.randomUUID() };
     }
-    reservation.mutate({ ids: selection, cle: tentative.current.cle });
+    reservation.mutate({ ids: selection, cle: tentative.current.cle, jeton: jetonAdmission });
   };
 
   const seConnecterPourReserver = () => {
@@ -287,6 +372,10 @@ export function PagePlanSalle() {
     );
   } else if (!session.roles.includes("customer")) {
     action = <p>Réservé aux clients.</p>;
+  } else if (file.isPending) {
+    action = <Chargement libelle="Vérification de la file d'attente…" />;
+  } else if (fileSansAdmission) {
+    action = <Chargement libelle="Redirection vers la salle d'attente…" />;
   } else {
     action = (
       <Bouton surClic={reserver} inactif={selection.length === 0} occupe={reservation.isPending}>
@@ -360,6 +449,30 @@ export function PagePlanSalle() {
             />
             {reservation.error !== null ? (
               <MessageErreurReservation erreur={reservation.error} />
+            ) : null}
+            {erreurFile ? (
+              <div className={styleReservation.alerte}>
+                <p>
+                  La file d'attente n'a pas pu être vérifiée ; la réservation reste possible si
+                  cette séance n'est pas sous file.
+                </p>
+                <Erreur probleme={file.error} />
+                <div>
+                  <Bouton
+                    variante="secondaire"
+                    occupe={file.isFetching}
+                    surClic={() => void file.refetch()}
+                  >
+                    Réessayer
+                  </Bouton>
+                </div>
+              </div>
+            ) : null}
+            {admission?.admission_expire_le != null && !lectureSeule ? (
+              <ExpirationAdmission
+                expireLe={admission.admission_expire_le}
+                surExpiration={surExpirationAdmission}
+              />
             ) : null}
             <div className={styleReservation.recapitulatif}>
               <p aria-live="polite">

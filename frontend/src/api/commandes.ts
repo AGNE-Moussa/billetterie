@@ -15,16 +15,25 @@ export async function listerCommandes(page: number, size?: number): Promise<Comm
 /**
  * `POST /api/v1/orders` sans `carte_test` (`creerCommande`) : réserve les places, la commande
  * reste `EN_ATTENTE` jusqu'à `expire_le`. `cleIdempotence` : une par tentative de réservation ;
- * rejouée, la requête rend la même commande au lieu d'en créer une seconde.
+ * rejouée, la requête rend la même commande au lieu d'en créer une seconde. `jetonAdmission` :
+ * jeton remis par file-attente pour une séance sous file, envoyé dans `X-Admission-Token`
+ * (BIL-015, BIL-023) ; absent, l'en-tête n'est pas envoyé.
  */
 export async function reserverPlaces(
   seanceId: string,
   placeIds: readonly string[],
   cleIdempotence: string,
+  jetonAdmission: string | null = null,
 ): Promise<Commande> {
+  const enTetes: { "Idempotency-Key": string; "X-Admission-Token"?: string } = {
+    "Idempotency-Key": cleIdempotence,
+  };
+  if (jetonAdmission !== null) {
+    enTetes["X-Admission-Token"] = jetonAdmission;
+  }
   const { donnees } = await lire(() =>
     clientApi().POST("/api/v1/orders", {
-      params: { header: { "Idempotency-Key": cleIdempotence } },
+      params: { header: enTetes },
       // `carte_test: null` explicite : sans carte (le type généré le rend obligatoire).
       body: { seance_id: seanceId, place_ids: [...placeIds], carte_test: null },
     }),

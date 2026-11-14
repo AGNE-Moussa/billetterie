@@ -22,6 +22,7 @@ import { PageIntrouvable } from "./pages/PageIntrouvable";
 import { PageRappelConnexion } from "./pages/PageRappelConnexion";
 import { PagePaiement } from "./pages/reservation/PagePaiement";
 import { PagePlanSalle } from "./pages/reservation/PagePlanSalle";
+import { PageSalleAttente } from "./pages/reservation/PageSalleAttente";
 
 /** Routes réservées aux clients : une seule garde `customer` pour toutes (routes.md). */
 function RoutesClient() {
@@ -54,6 +55,8 @@ export function RoutesApplication() {
         {/* E03 public : seul « Réserver » demande la connexion. */}
         <Route path="/seances/:seanceId" element={<PagePlanSalle />} />
         <Route element={<RoutesClient />}>
+          {/* E16 : salle d'attente d'une séance sous file (BIL-023). */}
+          <Route path="/seances/:seanceId/attente" element={<PageSalleAttente />} />
           <Route path="/commandes" element={<PageCommandes />} />
           <Route path="/commandes/:commandeId" element={<PageCommande />} />
           <Route path="/commandes/:commandeId/paiement" element={<PagePaiement />} />
