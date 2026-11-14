@@ -96,3 +96,51 @@ conventions). BIL-006 : places des séances et verrou d'une place pendant l'acha
   remplie par `ticketing.show.cancelled` depuis BIL-011), lancées une fois par le conteneur
   `billets-migrations` ; Alembic ne lit que `DATABASE_URL`.
 - Contrat : `openapi.yaml`, vérifié par `pytest -m contract`.
+
+## Deux instances (BIL-013)
+
+- **Instances nommées plutôt que `deploy.replicas: 2`** : le compose déclare `billets-1` et
+  `billets-2` (ancre `*billets-instance`), comme echo et Commandes. Chaque instance s'annonce à
+  Consul avec son nom réseau (`INSTANCE`), d'où un identifiant unique
+  (`commun.registre.identifiant_instance` : `billets-billets-1-8000`, `billets-billets-2-8000`)
+  et un check HTTP qui vise cette instance précise. Avec `deploy.replicas`, les répliques
+  partageraient la même variable `INSTANCE` : même identifiant Consul (la seconde écraserait la
+  première dans le registre), même adresse annoncée (résolue au hasard par le DNS de Docker),
+  et des journaux, métriques et verrous de tâche impossibles à attribuer à une instance.
+- Répartition : les deux instances portent le même nom de service Consul (`billets`) et les
+  mêmes tags ; Traefik (`consulCatalog`) en fait un seul service à deux serveurs, en
+  round-robin, et n'envoie du trafic qu'aux instances au check `passing` (`strictChecks`).
+  CA1 se vérifie après `make up` : `http://127.0.0.1:8500/ui/dc1/services/billets/instances`,
+  ou `make test-smoke` (`test_les_cinq_services_sont_verts_dans_consul` attend deux instances
+  `passing`). Répartition visible dans Grafana (`make observabilite`, panneau « Répartition par
+  instance »).
+- Aucun état métier en mémoire de processus : verrous des places dans Redis (scripts Lua
+  atomiques), unicité en base (`uq_billets_place`), verrou consultatif PostgreSQL de la séance
+  (`commun.verrou_seance`), idempotence des consommateurs en base (`messages_traites`). Les
+  files RabbitMQ (`billets.*`) sont partagées : chaque message va à une seule des deux instances.
+  Le relais de l'outbox tourne dans chaque instance ; `FOR UPDATE SKIP LOCKED` réserve chaque
+  ligne à un seul relais (aucune double publication hors arrêt brutal, couvert par
+  l'idempotence des consommateurs). L'ordre global de publication n'est plus garanti entre les
+  deux relais : les consommateurs ne le supposent pas (rule `evenements.md`). Seuls restent en
+  mémoire des états techniques propres à l'instance : clés JWKS en cache, disjoncteurs des
+  appels sortants, métriques Prometheus, connexion au broker.
+
+### Rejouer les tests de concurrence BIL-007 avec deux instances
+
+`make test-concurrence` (Docker requis, Testcontainers) joue tous les tests marqués
+`concurrence`. Ils montent déjà **deux instances** de chaque service (deux applications
+`creer_app` distinctes, sur la même base PostgreSQL et le même Redis réels) et répartissent les
+appels entre elles :
+
+- `services/billets/tests/integration/test_concurrence_ventes.py` : 100 verrouillages
+  simultanés de la même place, répartis sur `billets-1` et `billets-2`, puis la contrainte
+  `uq_billets_place` seule ;
+- `services/billets/tests/integration/test_emission_concurrence.py` : émission concurrente ;
+- `services/commandes/tests/integration/test_concurrence_commandes.py`,
+  `test_concurrence_meme_commande_postgres_redis.py` et
+  `test_expiration_concurrence_postgres_redis.py` : commandes, paiement et tâche d'expiration
+  disputés entre `commandes-1` et `commandes-2`.
+
+Pour ne rejouer que BIL-007 : `uv run pytest services/billets/tests/integration/test_concurrence_ventes.py -m concurrence`.
+Contre la plateforme Docker Compose elle-même (deux conteneurs derrière Traefik), il n'existe
+pas de test automatisé : `make up`, puis vérifier Consul et le panneau Grafana ci-dessus.

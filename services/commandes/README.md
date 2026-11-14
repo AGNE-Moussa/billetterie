@@ -108,3 +108,21 @@ passer commande et payer ; BIL-010 : expirer les commandes non payées.
   lignes_commande), `0004` (index `ix_commandes_statut_expire_le`), lancées une fois par le
   conteneur `commandes-migrations`.
 - Contrat : `openapi.yaml`, vérifié par `pytest -m contract`.
+
+## Deux instances (BIL-013)
+
+- Instances nommées `commandes-1` et `commandes-2` (ancre `*commandes-instance`), pas
+  `deploy.replicas` : identifiant Consul unique par instance (`commandes-commandes-1-8000`,
+  `commandes-commandes-2-8000`), valeur du verrou de la tâche d'expiration lisible
+  (`INSTANCE`). Raisons détaillées et vérification de CA1 : `services/billets/README.md`,
+  section « Deux instances ».
+- Aucun état métier en mémoire de processus : clés d'idempotence et plafond par verrous
+  consultatifs PostgreSQL (`pg_try_advisory_xact_lock`, `pg_advisory_xact_lock`), transitions
+  de statut sous `FOR UPDATE`, tâche d'expiration gardée par le verrou Redis
+  `commandes:tache:expiration` (une instance par période, la base reste l'arbitre), relais de
+  l'outbox en `FOR UPDATE SKIP LOCKED`, files RabbitMQ `commandes.*` partagées par les deux
+  instances, idempotence dans `messages_traites`. En mémoire, seulement de l'état technique
+  propre à l'instance : jeton de service, clés JWKS, disjoncteurs (chaque instance ouvre le
+  sien), métriques.
+- Tests de concurrence avec deux instances : `make test-concurrence` (liste des fichiers dans
+  `services/billets/README.md`).
