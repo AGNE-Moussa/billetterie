@@ -131,14 +131,17 @@ function Resultats({
   if (elements.length === 0) {
     if (total > 0) {
       return (
-        <Vide
-          message="Cette page n'existe pas."
-          action={
-            <Bouton variante="secondaire" surClic={() => surChangerPage(1)}>
-              Revenir à la première page
-            </Bouton>
-          }
-        />
+        <>
+          {perimee ? <BandeauModeDegrade /> : null}
+          <Vide
+            message="Cette page n'existe pas."
+            action={
+              <Bouton variante="secondaire" surClic={() => surChangerPage(1)}>
+                Revenir à la première page
+              </Bouton>
+            }
+          />
+        </>
       );
     }
     return (
