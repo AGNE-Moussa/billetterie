@@ -2,14 +2,38 @@
   display: flex;
   flex-direction: column;
   gap: var(--espace-3);
-  align-items: flex-start;
-  padding: var(--espace-6);
+  align-items: center;
+  padding: var(--espace-8) var(--espace-6);
+  text-align: center;
   background-color: var(--couleur-surface);
   border: 1px dashed var(--couleur-bordure);
-  border-radius: var(--rayon);
+  border-radius: var(--rayon-l);
+}
+
+.illustration {
+  color: var(--couleur-accent);
 }
 
 .message {
+  max-width: 32rem;
   margin: 0;
-  color: var(--couleur-texte-attenue);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--couleur-texte);
+}
+
+/* Lien d'action rendu comme un bouton secondaire. */
+.action > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--espace-2) var(--espace-6);
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-pilule);
+}
+
+.action > a:hover {
+  background-color: var(--couleur-surface-2);
 }

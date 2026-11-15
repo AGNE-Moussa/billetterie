@@ -12,8 +12,10 @@ import { Bouton } from "../../composants/Bouton";
 import { Carte } from "../../composants/Carte";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
+import { NOM_MARQUE } from "../../composants/Logo";
 import { Pagination } from "../../composants/Pagination";
 import { Vide } from "../../composants/Vide";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
 import {
   FILTRES_VIDES,
   filtresActifs,
@@ -53,13 +55,25 @@ export function PageCatalogue() {
 
   return (
     <div className={styles.page}>
-      <h1>Événements</h1>
-      <FormulaireFiltres
-        key={versParametres(filtres).toString()}
-        initiaux={filtres}
-        surFiltrer={appliquer}
-        surEffacer={effacer}
-      />
+      <div className={styles.hero}>
+        <div className={styles.heroDecor} aria-hidden="true" />
+        <div className={styles.heroInterieur}>
+          <p className={styles.surtitre}>{NOM_MARQUE} · Billetterie de spectacles</p>
+          <h1 className={styles.heroTitre}>Événements</h1>
+          <p className={styles.accroche}>
+            Concerts, théâtre, humour : trouvez la séance qui vous ressemble et choisissez votre
+            place, siège par siège, sur le plan de salle.
+          </p>
+          <div className={styles.panneauRecherche}>
+            <FormulaireFiltres
+              key={versParametres(filtres).toString()}
+              initiaux={filtres}
+              surFiltrer={appliquer}
+              surEffacer={effacer}
+            />
+          </div>
+        </div>
+      </div>
       <section aria-labelledby={idResultats} className={styles.resultats}>
         <h2 id={idResultats} className={styles.titreResultats}>
           Résultats
@@ -109,7 +123,7 @@ function Resultats({
     );
   }
   if (isPending) {
-    return <Chargement libelle="Chargement des événements…" />;
+    return <Chargement libelle="Chargement des événements…" forme="cartes" nombre={6} />;
   }
 
   const { donnees, perimee } = data;
@@ -160,8 +174,13 @@ function Resultats({
             <Carte
               titre={evenement.nom}
               niveauTitre={3}
+              visuel={<VisuelEvenement graine={evenement.id} nom={evenement.nom} />}
               actions={
-                <Link to={`/evenements/${evenement.id}`} state={etatRetour}>
+                <Link
+                  to={`/evenements/${evenement.id}`}
+                  state={etatRetour}
+                  className={styles.lienAction}
+                >
                   Voir les séances<span className={styles.masque}> de {evenement.nom}</span>
                 </Link>
               }

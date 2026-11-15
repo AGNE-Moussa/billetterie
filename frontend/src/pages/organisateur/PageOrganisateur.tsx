@@ -70,16 +70,23 @@ export function PageOrganisateur() {
 
   return (
     <div className={styles.page}>
-      <h1>Espace organisateur</h1>
-      <div className={styleOrganisateur.actions}>
-        <Link to="/organisateur/evenements/nouveau">Créer un événement</Link>
-        <Link to="/organisateur/lieux">Lieux</Link>
+      <div className={styleOrganisateur.barre}>
+        <div>
+          <p className={styleOrganisateur.surtitre}>Back-office</p>
+          <h1>Espace organisateur</h1>
+        </div>
+        <div className={styleOrganisateur.actions}>
+          <Link to="/organisateur/evenements/nouveau">Créer un événement</Link>
+          <Link to="/organisateur/lieux">Lieux</Link>
+        </div>
       </div>
-      <Recherche
-        key={q}
-        initiale={q}
-        surChercher={(recherche) => setParametres(versParametres(recherche, 1))}
-      />
+      <div className={styleOrganisateur.panneau}>
+        <Recherche
+          key={q}
+          initiale={q}
+          surChercher={(recherche) => setParametres(versParametres(recherche, 1))}
+        />
+      </div>
       {evenements.data?.perimee === true ? <BandeauModeDegrade /> : null}
       {evenements.error !== null ? (
         <div className={styles.etat}>
@@ -93,7 +100,7 @@ export function PageOrganisateur() {
           </Bouton>
         </div>
       ) : evenements.isPending ? (
-        <Chargement libelle="Chargement des événements…" />
+        <Chargement libelle="Chargement des événements…" forme="lignes" />
       ) : evenements.data.donnees.total === 0 ? (
         <Vide
           message={

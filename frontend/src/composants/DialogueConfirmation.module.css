@@ -1,23 +1,26 @@
 .dialogue {
   width: min(32rem, calc(100vw - 2 * var(--espace-4)));
-  padding: var(--espace-6);
+  padding: var(--espace-8);
   color: var(--couleur-texte);
-  background-color: var(--couleur-fond);
-  border: 1px solid var(--couleur-bordure);
-  border-radius: var(--rayon);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-3);
 }
 
 .dialogue::backdrop {
   background-color: var(--couleur-voile);
+  backdrop-filter: blur(3px);
 }
 
 .titre {
   margin: 0 0 var(--espace-3);
-  font-size: 1.25rem;
+  font-size: 1.4rem;
 }
 
 .message {
   margin: 0 0 var(--espace-6);
+  color: var(--couleur-texte-attenue);
 }
 
 .actions {

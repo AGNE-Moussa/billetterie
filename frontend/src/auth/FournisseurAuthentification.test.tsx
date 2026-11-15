@@ -669,7 +669,11 @@ it("test_un_echec_du_renouvellement_ramene_a_l_etat_non_connecte_avec_session_ex
   keycloak.reponseImposee = (corps) =>
     corps.get("grant_type") === "refresh_token" ? reponseInvalidGrant() : undefined;
 
-  await avancerDe(250_000);
+  // Juste après l'échéance de renouvellement (240 s), puis attente de la réponse : un saut
+  // d'horloge plus long pendant la requête dépasserait son délai (10 s) et oidc-client-ts
+  // relancerait un essai, ce qui rendait ce test instable sous charge.
+  await avancerDe(241_000);
+  await waitFor(() => expect(keycloak.requetesDeRenouvellement()).toHaveLength(1));
 
   expect(await screen.findByText(/Votre session a expiré/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Se connecter" })).toBeInTheDocument();

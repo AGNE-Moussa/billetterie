@@ -15,6 +15,7 @@ import { Vide } from "../../composants/Vide";
 import { formaterDateHeure, formaterEuros } from "../../format";
 import { lirePage } from "../catalogue/filtres";
 import styles from "../catalogue/PageCatalogue.module.css";
+import styleClient from "./Client.module.css";
 import { LIBELLES_STATUT_COMMANDE } from "./libelles";
 import { descriptionSeance, useInfosSeances, type InfosSeance } from "./seances";
 
@@ -55,7 +56,7 @@ export function PageCommandes() {
           </Bouton>
         </div>
       ) : commandes.isPending ? (
-        <Chargement libelle="Chargement de vos commandes…" />
+        <Chargement libelle="Chargement de vos commandes…" forme="lignes" />
       ) : commandes.data.total === 0 ? (
         <Vide
           message="Vous n'avez pas encore de commande."
@@ -89,12 +90,19 @@ function colonnesCommandes(
     { entete: "Séance", rendu: (commande) => descriptionSeance(infos.get(commande.seance_id)) },
     { entete: "Places", rendu: (commande) => String(commande.lignes.length) },
     { entete: "Total", rendu: (commande) => formaterEuros(commande.montant_total) },
-    { entete: "Statut", rendu: (commande) => LIBELLES_STATUT_COMMANDE[commande.statut] },
+    {
+      entete: "Statut",
+      rendu: (commande) => (
+        <span className={styleClient.statut} data-statut={commande.statut}>
+          {LIBELLES_STATUT_COMMANDE[commande.statut]}
+        </span>
+      ),
+    },
     {
       entete: "Action",
       rendu: (commande) =>
         commande.statut === "EN_ATTENTE" ? (
-          <Link to={`/commandes/${commande.id}/paiement`}>
+          <Link to={`/commandes/${commande.id}/paiement`} className={styleClient.lienBillet}>
             Payer
             <span className={styles.masque}>
               {" "}

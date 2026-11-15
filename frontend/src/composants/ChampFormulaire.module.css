@@ -6,7 +6,8 @@
 }
 
 .libelle {
-  font-weight: 600;
+  font-size: 0.9375rem;
+  font-weight: 700;
 }
 
 .obligatoire {
@@ -15,12 +16,29 @@
 }
 
 .saisie {
+  min-height: 2.75rem;
   padding: var(--espace-2) var(--espace-3);
   font: inherit;
   color: var(--couleur-texte);
-  background-color: var(--couleur-fond);
+  background-color: var(--couleur-surface);
   border: 1px solid var(--couleur-bordure);
   border-radius: var(--rayon);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.saisie:hover {
+  border-color: var(--couleur-texte-attenue);
+}
+
+.saisie:focus-visible {
+  border-color: var(--couleur-principale);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--couleur-principale) 18%, transparent);
+}
+
+textarea.saisie {
+  resize: vertical;
 }
 
 .saisieEnErreur {
@@ -30,7 +48,7 @@
 
 .aide {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--couleur-texte-attenue);
 }
 

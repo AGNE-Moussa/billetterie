@@ -12,11 +12,13 @@ import { Bouton } from "../../composants/Bouton";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
 import { QrCode } from "../../composants/QrCode";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
 import { formaterDateHeure } from "../../format";
 import { PageIntrouvable } from "../PageIntrouvable";
 import styles from "../catalogue/PageCatalogue.module.css";
 import { libellePlace } from "../reservation/places";
 import styleReservation from "../reservation/Reservation.module.css";
+import styleClient from "./Client.module.css";
 import { cleBillet, LIBELLES_STATUT_BILLET } from "./libelles";
 import { useInfosSeances } from "./seances";
 
@@ -68,7 +70,7 @@ export function PageBillet() {
       <div className={styles.page}>
         <LienRetour />
         <h1>Billet</h1>
-        <Chargement libelle="Chargement du billet…" />
+        <Chargement libelle="Chargement du billet…" forme="bloc" />
       </div>
     );
   }
@@ -82,39 +84,71 @@ export function PageBillet() {
     <div className={styles.page}>
       <LienRetour />
       {infos?.perimee === true ? <BandeauModeDegrade /> : null}
-      <div className={styleReservation.entete}>
-        <h1>{infos?.evenement?.nom ?? "Billet"}</h1>
-        <p className={styleReservation.sousTitre}>
-          {seance !== undefined ? (
-            <time dateTime={seance.debut}>{formaterDateHeure(seance.debut)}</time>
-          ) : infos?.enErreur === true ? (
-            "Séance indisponible"
+      {/* Billet façon ticket : partie principale, perforation, talon avec le QR code. */}
+      <div className={styleReservation.billet}>
+        <div className={styleReservation.billetPrincipal}>
+          <div className={styleReservation.billetBandeau}>
+            <VisuelEvenement
+              graine={seance?.evenement_id ?? donnees.seance_id}
+              nom={infos?.evenement?.nom ?? ""}
+            />
+          </div>
+          <div
+            className={`${styleReservation.entete ?? ""} ${styleReservation.billetEntete ?? ""}`}
+          >
+            <h1>{infos?.evenement?.nom ?? "Billet"}</h1>
+            <p className={styleReservation.sousTitre}>
+              {seance !== undefined ? (
+                <time dateTime={seance.debut}>{formaterDateHeure(seance.debut)}</time>
+              ) : infos?.enErreur === true ? (
+                "Séance indisponible"
+              ) : (
+                "Chargement de la séance…"
+              )}
+              {lieu !== undefined ? ` - ${lieu.nom}, ${lieu.adresse}, ${lieu.ville}` : null}
+            </p>
+          </div>
+          <dl className={styleReservation.billetInfos}>
+            <div>
+              <dt>Place</dt>
+              <dd>{place}</dd>
+            </div>
+            <div>
+              <dt>Statut</dt>
+              <dd>
+                <span className={styleClient.statut} data-statut={donnees.statut}>
+                  {LIBELLES_STATUT_BILLET[donnees.statut]}
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+        <div className={styleReservation.talon}>
+          {donnees.statut === "EMIS" ? (
+            <figure>
+              <QrCode
+                valeur={donnees.qr_code}
+                libelle={`QR code du billet ${place.toLowerCase()}`}
+              />
+              <figcaption>
+                {LIBELLES_STATUT_BILLET[donnees.statut]} - émis le{" "}
+                <time dateTime={donnees.emis_le}>{formaterDateHeure(donnees.emis_le)}</time>
+              </figcaption>
+            </figure>
           ) : (
-            "Chargement de la séance…"
+            <div role="alert" className={styleReservation.alerte}>
+              <p>
+                <strong>Billet annulé : séance annulée et commande remboursée.</strong>
+              </p>
+            </div>
           )}
-          {lieu !== undefined ? ` - ${lieu.nom}, ${lieu.adresse}, ${lieu.ville}` : null}
-        </p>
-        <p>{place}</p>
+        </div>
       </div>
 
-      {donnees.statut === "EMIS" ? (
-        <figure>
-          <QrCode valeur={donnees.qr_code} libelle={`QR code du billet ${place.toLowerCase()}`} />
-          <figcaption>
-            {LIBELLES_STATUT_BILLET[donnees.statut]} - émis le{" "}
-            <time dateTime={donnees.emis_le}>{formaterDateHeure(donnees.emis_le)}</time>
-          </figcaption>
-        </figure>
-      ) : (
-        <div role="alert" className={styleReservation.alerte}>
-          <p>
-            <strong>Billet annulé : séance annulée et commande remboursée.</strong>
-          </p>
-        </div>
-      )}
-
       <p>
-        <Link to={`/commandes/${donnees.commande_id}`}>Voir la commande</Link>
+        <Link to={`/commandes/${donnees.commande_id}`} className={styleReservation.lienBouton}>
+          Voir la commande
+        </Link>
       </p>
     </div>
   );

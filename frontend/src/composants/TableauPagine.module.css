@@ -1,11 +1,15 @@
 .conteneur {
   display: flex;
   flex-direction: column;
-  gap: var(--espace-3);
+  gap: var(--espace-4);
 }
 
 .defilement {
   overflow-x: auto;
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
   /* Le contour de focus (:focus-visible, theme.css) reste visible malgré le défilement. */
   outline-offset: -2px;
 }
@@ -20,20 +24,41 @@
 }
 
 .legende {
-  padding-block-end: var(--espace-2);
-  font-weight: 600;
+  padding: var(--espace-4) var(--espace-4) var(--espace-2);
+  font-family: var(--police-titre);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-stretch: condensed;
   text-align: start;
 }
 
 .tableau th,
 .tableau td {
-  padding: var(--espace-2) var(--espace-3);
+  padding: var(--espace-3) var(--espace-4);
   text-align: start;
-  border-block-end: 1px solid var(--couleur-bordure);
+  vertical-align: top;
+  border-block-end: 1px solid var(--couleur-bordure-douce);
 }
 
 .tableau th {
-  background-color: var(--couleur-surface);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--couleur-texte-attenue);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: var(--couleur-surface-2);
+}
+
+.tableau tbody tr {
+  transition: background-color var(--transition);
+}
+
+.tableau tbody tr:hover {
+  background-color: color-mix(in srgb, var(--couleur-surface-2) 60%, transparent);
+}
+
+.tableau tbody tr:last-child td {
+  border-block-end: none;
 }
 
 .pagination {
@@ -41,8 +66,11 @@
   flex-wrap: wrap;
   gap: var(--espace-3);
   align-items: center;
+  justify-content: center;
 }
 
 .position {
   margin: 0;
+  font-weight: 600;
+  color: var(--couleur-texte-attenue);
 }

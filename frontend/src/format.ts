@@ -17,6 +17,20 @@ export function formaterDateHeure(iso: string): string {
   return FORMAT_DATE_HEURE.format(new Date(iso));
 }
 
+const FORMAT_JOUR = new Intl.DateTimeFormat("fr-FR", { day: "2-digit" });
+const FORMAT_MOIS = new Intl.DateTimeFormat("fr-FR", { month: "short" });
+const FORMAT_JOUR_SEMAINE = new Intl.DateTimeFormat("fr-FR", { weekday: "short" });
+
+/** Morceaux d'une date ISO pour une pastille de calendrier (« sam. », « 12 », « déc. »). */
+export function morceauxDate(iso: string): { jourSemaine: string; jour: string; mois: string } {
+  const date = new Date(iso);
+  return {
+    jourSemaine: FORMAT_JOUR_SEMAINE.format(date),
+    jour: FORMAT_JOUR.format(date),
+    mois: FORMAT_MOIS.format(date),
+  };
+}
+
 const FORMAT_HEURE = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 /** Heure locale d'une date ISO 8601 (« 20:42 »). */

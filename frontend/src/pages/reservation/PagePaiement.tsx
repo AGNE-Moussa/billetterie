@@ -24,6 +24,7 @@ import { Bouton } from "../../composants/Bouton";
 import { ChampFormulaire } from "../../composants/ChampFormulaire";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
+import { NOM_MARQUE } from "../../composants/Logo";
 import { formaterDateHeure, formaterDuree, formaterEuros, formaterHeure } from "../../format";
 import { useNotifications } from "../../notifications/notifications";
 import { PageIntrouvable } from "../PageIntrouvable";
@@ -174,7 +175,7 @@ export function PagePaiement() {
     }
     const numero = carte.replace(/\s/g, "");
     if (!MOTIF_CARTE.test(numero)) {
-      setErreurCarte("Saisissez les 16 chiffres du numéro de carte de test.");
+      setErreurCarte("Saisissez les 16 chiffres de votre numéro de carte.");
       return;
     }
     setErreurCarte(undefined);
@@ -220,20 +221,24 @@ export function PagePaiement() {
 
   return (
     <div className={styles.page}>
-      <h1>Paiement</h1>
+      <div className={styleReservation.entete}>
+        <h1>Paiement</h1>
+        <p className={styleReservation.sousTitre}>
+          {evenement.data?.donnees.nom ?? "Séance"}
+          {seance.data !== undefined ? (
+            <>
+              {" - "}
+              <time dateTime={seance.data.donnees.debut}>
+                {formaterDateHeure(seance.data.donnees.debut)}
+              </time>
+            </>
+          ) : null}
+          {lieu.data !== undefined
+            ? ` - ${lieu.data.donnees.nom}, ${lieu.data.donnees.ville}`
+            : null}
+        </p>
+      </div>
       {perimee ? <BandeauModeDegrade /> : null}
-      <p className={styleReservation.sousTitre}>
-        {evenement.data?.donnees.nom ?? "Séance"}
-        {seance.data !== undefined ? (
-          <>
-            {" - "}
-            <time dateTime={seance.data.donnees.debut}>
-              {formaterDateHeure(seance.data.donnees.debut)}
-            </time>
-          </>
-        ) : null}
-        {lieu.data !== undefined ? ` - ${lieu.data.donnees.nom}, ${lieu.data.donnees.ville}` : null}
-      </p>
 
       {issue === undefined && restant !== null ? (
         <p className={styleReservation.compteARebours}>
@@ -245,72 +250,108 @@ export function PagePaiement() {
         </p>
       ) : null}
 
-      <table className={styleReservation.lignes}>
-        <caption className={styles.masque}>Places de la commande</caption>
-        <thead>
-          <tr>
-            <th scope="col">Place</th>
-            <th scope="col" className={styleReservation.montant}>
-              Montant
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {donnees.lignes.map((ligne) => {
-            const place = placesParId.get(ligne.place_id);
-            const categorie =
-              place !== undefined ? categories.get(place.categorie_id)?.nom : undefined;
-            return (
-              <tr key={ligne.place_id}>
-                <td>
-                  {place !== undefined ? libellePlace(place) : "Place"}
-                  {categorie !== undefined ? ` (${categorie})` : null}
-                </td>
-                <td className={styleReservation.montant}>{formaterEuros(ligne.montant)}</td>
+      <div className={styleReservation.paiement}>
+        <div className={styleReservation.colonne}>
+          <p className={styleReservation.titreColonne} aria-hidden="true">
+            Récapitulatif
+          </p>
+          <table className={styleReservation.lignes}>
+            <caption className={styles.masque}>Places de la commande</caption>
+            <thead>
+              <tr>
+                <th scope="col">Place</th>
+                <th scope="col" className={styleReservation.montant}>
+                  Montant
+                </th>
               </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th scope="row">Total</th>
-            <td className={styleReservation.montant}>{formaterEuros(donnees.montant_total)}</td>
-          </tr>
-        </tfoot>
-      </table>
+            </thead>
+            <tbody>
+              {donnees.lignes.map((ligne) => {
+                const place = placesParId.get(ligne.place_id);
+                const categorie =
+                  place !== undefined ? categories.get(place.categorie_id)?.nom : undefined;
+                return (
+                  <tr key={ligne.place_id}>
+                    <td>
+                      {place !== undefined ? libellePlace(place) : "Place"}
+                      {categorie !== undefined ? ` (${categorie})` : null}
+                    </td>
+                    <td className={styleReservation.montant}>{formaterEuros(ligne.montant)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td className={styleReservation.montant}>{formaterEuros(donnees.montant_total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
 
-      {issue ?? (
-        <form className={styleReservation.formulaire} onSubmit={payer} noValidate>
-          <ChampFormulaire
-            type="text"
-            libelle="Numéro de carte de test"
-            nom="carte_test"
-            autoComplete="off"
-            obligatoire
-            valeur={carte}
-            surChanger={setCarte}
-            erreur={erreurCarte}
-            aide="Paiement simulé, aucune carte réelle : 4000000000000002 est refusé, tout autre numéro de 16 chiffres est accepté (par exemple 4242424242424242)."
-          />
-          {paiement.error !== null ? (
-            <div className={styleReservation.alerte}>
-              {codePaiement !== null && codePaiement.endsWith("_INDISPONIBLE") ? (
-                <p>
-                  Paiement momentanément impossible. Réessayez avant{" "}
-                  {formaterHeure(donnees.expire_le)}.
-                </p>
+        <div className={styleReservation.colonne}>
+          {issue ?? (
+            <form className={styleReservation.formulaire} onSubmit={payer} noValidate>
+              <CarteBancaire saisie={carte} />
+              <ChampFormulaire
+                type="text"
+                libelle="Numéro de carte"
+                nom="carte_test"
+                autoComplete="off"
+                obligatoire
+                valeur={carte}
+                surChanger={setCarte}
+                erreur={erreurCarte}
+                aide="Paiement sécurisé : votre numéro de carte n'est jamais conservé."
+              />
+              {paiement.error !== null ? (
+                <div className={styleReservation.alerte}>
+                  {codePaiement !== null && codePaiement.endsWith("_INDISPONIBLE") ? (
+                    <p>
+                      Paiement momentanément impossible. Réessayez avant{" "}
+                      {formaterHeure(donnees.expire_le)}.
+                    </p>
+                  ) : null}
+                  <Erreur probleme={paiement.error} />
+                </div>
               ) : null}
-              <Erreur probleme={paiement.error} />
-            </div>
-          ) : null}
-          <div className={styleReservation.actions}>
-            <Bouton type="submit" occupe={paiement.isPending}>
-              Payer {formaterEuros(donnees.montant_total)}
-            </Bouton>
-            <Link to={`/seances/${donnees.seance_id}`}>Abandonner</Link>
-          </div>
-        </form>
-      )}
+              <div className={styleReservation.actions}>
+                <Bouton type="submit" occupe={paiement.isPending}>
+                  Payer {formaterEuros(donnees.montant_total)}
+                </Bouton>
+                <Link to={`/seances/${donnees.seance_id}`}>Abandonner</Link>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Numéro saisi en groupes de quatre, complété par des points (16 chiffres). */
+function numeroAffiche(saisie: string): string {
+  const chiffres = saisie.replace(/\D/g, "").slice(0, 16).padEnd(16, "•");
+  return chiffres.replace(/(.{4})(?=.)/g, "$1 ");
+}
+
+/**
+ * Carte bancaire stylisée, purement décorative (aria-hidden) : reflète la saisie du champ
+ * « Numéro de carte ». Aucune donnée n'est conservée ni envoyée en dehors du paiement.
+ */
+function CarteBancaire({ saisie }: { saisie: string }) {
+  return (
+    <div className={styleReservation.carteBancaire} aria-hidden="true">
+      <div className={styleReservation.piedCarte}>
+        <span className={styleReservation.puceCarte} />
+        <span className={styleReservation.marqueCarte}>{NOM_MARQUE}</span>
+      </div>
+      <span className={styleReservation.numeroCarte}>{numeroAffiche(saisie)}</span>
+      <div className={styleReservation.piedCarte}>
+        <span>Carte bancaire</span>
+        <span>MM/AA</span>
+      </div>
     </div>
   );
 }

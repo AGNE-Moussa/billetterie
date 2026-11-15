@@ -32,7 +32,12 @@ export function FormulaireFiltres({
   };
 
   return (
-    <form role="search" aria-label="Filtrer les événements" onSubmit={soumettre}>
+    <form
+      role="search"
+      aria-label="Filtrer les événements"
+      className={styles.filtres}
+      onSubmit={soumettre}
+    >
       <div className={styles.champs}>
         <ChampFormulaire
           type="search"

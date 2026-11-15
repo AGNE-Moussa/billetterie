@@ -51,6 +51,30 @@ function MessageRetour({ motif }: { motif: MotifRetourAttente }) {
   );
 }
 
+/** Ondes concentriques autour d'un billet : attente en douceur (figées si mouvement réduit). */
+function Anneaux() {
+  return (
+    <div className={styleReservation.anneaux} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path
+          d="M4 6h16a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4V7a1 1 0 0 1 1-1z"
+          fill="currentColor"
+        />
+        <path
+          d="M15 8v8"
+          stroke="#ffffff"
+          strokeWidth="1.2"
+          strokeDasharray="1.5 1.5"
+          opacity="0.8"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export function PageSalleAttente() {
   const { seanceId = "" } = useParams();
   const { search, state } = useLocation();
@@ -157,20 +181,32 @@ export function PageSalleAttente() {
       </div>
     );
   } else if (position === undefined) {
-    contenu = <Chargement libelle="Connexion à la file d'attente…" />;
+    contenu = (
+      <div className={styleReservation.attente}>
+        <Anneaux />
+        <Chargement libelle="Connexion à la file d'attente…" />
+      </div>
+    );
   } else if (position.statut === "ADMIS") {
     contenu = redirigerALAdmission ? (
-      <Chargement libelle="C'est votre tour : ouverture du plan de salle…" />
+      <div className={styleReservation.attente}>
+        <Anneaux />
+        <Chargement libelle="C'est votre tour : ouverture du plan de salle…" />
+      </div>
     ) : (
-      <div className={styles.etat}>
-        <p role="status" aria-live="polite">
+      <div className={styleReservation.attente}>
+        <p role="status" aria-live="polite" className={styleReservation.statutAttente}>
           <strong>C'est votre tour.</strong>{" "}
           {position.admission_expire_le !== null
             ? `Vous pouvez réserver jusqu'à ${formaterHeure(position.admission_expire_le)}.`
             : null}
         </p>
         <p>
-          <Link to={cheminPlan(seanceId, search)} replace>
+          <Link
+            to={cheminPlan(seanceId, search)}
+            replace
+            className={`${styleReservation.lienBouton ?? ""} ${styleReservation.lienPrincipal ?? ""}`}
+          >
             Aller au plan de salle
           </Link>
         </p>
@@ -178,11 +214,12 @@ export function PageSalleAttente() {
     );
   } else {
     contenu = (
-      <section className={styles.resultats} aria-labelledby="titre-file">
+      <section className={styleReservation.attente} aria-labelledby="titre-file">
+        <Anneaux />
         <h2 id="titre-file" className={styles.titreResultats}>
           Vous êtes dans la file d'attente
         </h2>
-        <p role="status" aria-live="polite">
+        <p role="status" aria-live="polite" className={styleReservation.statutAttente}>
           Position : {rang === null ? "inconnue" : FORMAT_ENTIER.format(rang)} - Attente estimée :{" "}
           {formaterAttente(position.attente_estimee_secondes)}
         </p>

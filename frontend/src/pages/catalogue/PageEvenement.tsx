@@ -1,5 +1,6 @@
-// E02 Fiche événement (route /evenements/:evenementId, BIL-019) : nom, description et séances
-// paginées (page dans l'URL) avec date, lieu, tarifs et mention « Annulée ». Un lieu est lu une
+// E02 Fiche événement (route /evenements/:evenementId, BIL-019) : bannière (visuel généré), nom,
+// description et séances paginées en cartes (page dans l'URL) avec date, lieu, tarifs et mention
+// « Annulée ». Un lieu est lu une
 // fois par identifiant distinct (cache TanStack Query). La disponibilité par séance n'est pas
 // affichée : aucune route ne la donne (Q4 de docs/front/ecrans.md).
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
@@ -13,9 +14,10 @@ import { BandeauModeDegrade } from "../../composants/BandeauModeDegrade";
 import { Bouton } from "../../composants/Bouton";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
-import { TableauPagine, type ColonneTableau } from "../../composants/TableauPagine";
+import { Pagination } from "../../composants/Pagination";
 import { Vide } from "../../composants/Vide";
-import { formaterDateHeure, formaterEuros } from "../../format";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
+import { formaterDateHeure, formaterEuros, morceauxDate } from "../../format";
 import { lirePage } from "./filtres";
 import type { EtatRetourCatalogue } from "./PageCatalogue";
 import styles from "./PageCatalogue.module.css";
@@ -130,11 +132,20 @@ export function PageEvenement() {
       ) : evenement.isPending ? (
         <>
           <h1>Fiche événement</h1>
-          <Chargement libelle="Chargement de l'événement…" />
+          <Chargement libelle="Chargement de l'événement…" forme="bloc" />
         </>
       ) : (
         <>
-          <h1>{evenement.data.donnees.nom}</h1>
+          <div className={styles.banniere}>
+            <VisuelEvenement
+              graine={evenementId}
+              nom={evenement.data.donnees.nom}
+              format="banniere"
+            />
+            <div className={styles.banniereTexte}>
+              <h1>{evenement.data.donnees.nom}</h1>
+            </div>
+          </div>
           <p className={styles.descriptionComplete}>{evenement.data.donnees.description}</p>
         </>
       )}
@@ -155,69 +166,97 @@ export function PageEvenement() {
             </Bouton>
           </div>
         ) : seances.isPending ? (
-          <Chargement libelle="Chargement des séances…" />
+          <Chargement libelle="Chargement des séances…" forme="lignes" />
         ) : seances.data.donnees.total === 0 ? (
           <Vide
             message="Aucune séance programmée pour l'instant."
             action={<Link to="/">Voir les autres événements</Link>}
           />
+        ) : seances.data.donnees.elements.length === 0 ? (
+          <Vide message="Cette page de séances est vide." />
         ) : (
-          <TableauPagine
-            libelle="Séances de l'événement"
-            colonnes={colonnesSeances(lieuxConnus, lieuxEnErreur)}
-            page={seances.data.donnees}
-            cleLigne={(seance) => seance.id}
-            surChangerPage={changerPage}
-            messageVide="Cette page de séances est vide."
-            occupe={seances.isFetching && seances.isPlaceholderData}
-          />
+          <>
+            <ul
+              className={styles.seances}
+              aria-label="Séances de l'événement"
+              aria-busy={seances.isFetching && seances.isPlaceholderData ? true : undefined}
+            >
+              {seances.data.donnees.elements.map((seance) => (
+                <li key={seance.id}>
+                  <CarteSeance
+                    seance={seance}
+                    lieu={libelleLieu(seance, lieuxConnus, lieuxEnErreur)}
+                  />
+                </li>
+              ))}
+            </ul>
+            <Pagination
+              page={seances.data.donnees.page}
+              size={seances.data.donnees.size}
+              total={seances.data.donnees.total}
+              surChangerPage={changerPage}
+              occupe={seances.isFetching && seances.isPlaceholderData}
+            />
+          </>
         )}
       </section>
     </div>
   );
 }
 
-function colonnesSeances(
+function libelleLieu(
+  seance: Seance,
   lieux: ReadonlyMap<string, Lecture<Lieu>>,
   lieuxEnErreur: ReadonlySet<string>,
-): readonly ColonneTableau<Seance>[] {
-  return [
-    {
-      entete: "Date",
-      rendu: (seance) => <time dateTime={seance.debut}>{formaterDateHeure(seance.debut)}</time>,
-    },
-    {
-      entete: "Lieu",
-      rendu: (seance) => {
-        const lieu = lieux.get(seance.lieu_id)?.donnees;
-        if (lieu !== undefined) return `${lieu.nom}, ${lieu.ville}`;
-        return lieuxEnErreur.has(seance.lieu_id) ? "Lieu indisponible" : "Chargement du lieu…";
-      },
-    },
-    { entete: "Tarifs", rendu: (seance) => <Tarifs seance={seance} /> },
-    {
-      entete: "Réservation",
-      rendu: (seance) =>
-        seance.annulee ? (
-          <span className={styles.annulee}>Annulée</span>
+): string {
+  const lieu = lieux.get(seance.lieu_id)?.donnees;
+  if (lieu !== undefined) return `${lieu.nom}, ${lieu.ville}`;
+  return lieuxEnErreur.has(seance.lieu_id) ? "Lieu indisponible" : "Chargement du lieu…";
+}
+
+/** Séance en carte : pastille de date, date complète, lieu, tarifs, puis « Choisir » ou « Annulée ». */
+function CarteSeance({ seance, lieu }: { seance: Seance; lieu: string }) {
+  const idTitre = useId();
+  const { jourSemaine, jour, mois } = morceauxDate(seance.debut);
+  return (
+    <article
+      className={`${styles.seance ?? ""} ${seance.annulee ? (styles.seanceAnnulee ?? "") : ""}`}
+      aria-labelledby={idTitre}
+    >
+      <div className={styles.pastilleDate} aria-hidden="true">
+        <span className={styles.pastilleMois}>{jourSemaine}</span>
+        <span className={styles.pastilleJour}>{jour}</span>
+        <span className={styles.pastilleMois}>{mois}</span>
+      </div>
+      <div className={styles.infosSeance}>
+        <h3 id={idTitre}>
+          <time dateTime={seance.debut}>{formaterDateHeure(seance.debut)}</time>
+        </h3>
+        <p className={styles.lieu}>{lieu}</p>
+        <Tarifs seance={seance} />
+      </div>
+      <div className={styles.actionSeance}>
+        {seance.annulee ? (
+          <span className={`${styles.badge ?? ""} ${styles.annulee ?? ""}`}>Annulée</span>
         ) : (
-          <Link to={`/seances/${seance.id}`}>
+          <Link to={`/seances/${seance.id}`} className={styles.lienAction}>
             Choisir
             <span className={styles.masque}> la séance du {formaterDateHeure(seance.debut)}</span>
           </Link>
-        ),
-    },
-  ];
+        )}
+      </div>
+    </article>
+  );
 }
 
 function Tarifs({ seance }: { seance: Seance }) {
   if (seance.categories.length === 0) {
-    return <>Tarifs à venir</>;
+    return <p className={styles.prixMin}>Tarifs à venir</p>;
   }
   const minimum = Math.min(...seance.categories.map((categorie) => categorie.prix));
   return (
     <>
-      <strong>À partir de {formaterEuros(minimum)}</strong>
+      <p className={styles.prixMin}>À partir de {formaterEuros(minimum)}</p>
       <ul className={styles.tarifs}>
         {seance.categories.map((categorie) => (
           <li key={categorie.id}>

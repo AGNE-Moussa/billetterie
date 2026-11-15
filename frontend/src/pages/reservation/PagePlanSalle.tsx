@@ -25,6 +25,7 @@ import { Bouton } from "../../composants/Bouton";
 import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
 import { Vide } from "../../composants/Vide";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
 import { formaterDateHeure, formaterDuree, formaterEuros, formaterHeure } from "../../format";
 import { useNotifications } from "../../notifications/notifications";
 import styles from "../catalogue/PageCatalogue.module.css";
@@ -134,7 +135,7 @@ function ExpirationAdmission({
     if (echue) surExpiration();
   }, [echue, surExpiration]);
   return (
-    <p>
+    <p className={styleReservation.pastilleAdmission}>
       Admission valable jusqu'à <time dateTime={expireLe}>{formaterHeure(expireLe)}</time> (encore{" "}
       <strong>{formaterDuree(restant ?? 0)}</strong>) : réservez avant cette heure.
     </p>
@@ -390,17 +391,25 @@ export function PagePlanSalle() {
         <Link to={`/evenements/${donneesSeance.evenement_id}`}>Retour à l'événement</Link>
       </p>
       {perimee ? <BandeauModeDegrade /> : null}
-      <div className={styleReservation.entete}>
-        <h1>{evenement.data?.donnees.nom ?? "Séance"}</h1>
-        <p className={styleReservation.sousTitre}>
-          <time dateTime={donneesSeance.debut}>{formaterDateHeure(donneesSeance.debut)}</time>
-          {lieu.data !== undefined
-            ? ` - ${lieu.data.donnees.nom}, ${lieu.data.donnees.ville}`
-            : lieu.error !== null
-              ? " - Lieu indisponible"
-              : null}
-          {lectureSeule ? <span className={styles.annulee}> - Annulée</span> : null}
-        </p>
+      <div className={styleReservation.enteteVisuel}>
+        <div className={styleReservation.vignette}>
+          <VisuelEvenement
+            graine={donneesSeance.evenement_id}
+            nom={evenement.data?.donnees.nom ?? ""}
+          />
+        </div>
+        <div className={styleReservation.entete}>
+          <h1>{evenement.data?.donnees.nom ?? "Séance"}</h1>
+          <p className={styleReservation.sousTitre}>
+            <time dateTime={donneesSeance.debut}>{formaterDateHeure(donneesSeance.debut)}</time>
+            {lieu.data !== undefined
+              ? ` - ${lieu.data.donnees.nom}, ${lieu.data.donnees.ville}`
+              : lieu.error !== null
+                ? " - Lieu indisponible"
+                : null}
+            {lectureSeule ? <span className={styles.annulee}> - Annulée</span> : null}
+          </p>
+        </div>
       </div>
 
       <section aria-labelledby={idPlan} className={styles.resultats}>
@@ -419,7 +428,7 @@ export function PagePlanSalle() {
             </Bouton>
           </div>
         ) : places.isPending ? (
-          <Chargement libelle="Chargement du plan de salle…" />
+          <Chargement libelle="Chargement du plan de salle…" forme="bloc" />
         ) : places.data.length === 0 ? (
           <Vide
             message="Les places de cette séance sont en cours de création."
@@ -434,55 +443,79 @@ export function PagePlanSalle() {
             }
           />
         ) : (
-          <>
-            <LegendePlan
-              categories={donneesSeance.categories}
-              indicesCategories={indicesCategories}
-            />
-            <PlanSalle
-              places={places.data}
-              categories={categories}
-              indicesCategories={indicesCategories}
-              selection={selection}
-              lectureSeule={lectureSeule}
-              surBasculer={basculer}
-            />
-            {reservation.error !== null ? (
-              <MessageErreurReservation erreur={reservation.error} />
-            ) : null}
-            {erreurFile ? (
-              <div className={styleReservation.alerte}>
-                <p>
-                  La file d'attente n'a pas pu être vérifiée ; la réservation reste possible si
-                  cette séance n'est pas sous file.
-                </p>
-                <Erreur probleme={file.error} />
-                <div>
-                  <Bouton
-                    variante="secondaire"
-                    occupe={file.isFetching}
-                    surClic={() => void file.refetch()}
-                  >
-                    Réessayer
-                  </Bouton>
-                </div>
+          <div className={styleReservation.disposition}>
+            <div className={styleReservation.colonnePlan}>
+              <div className={styleReservation.cartePlan}>
+                <LegendePlan
+                  categories={donneesSeance.categories}
+                  indicesCategories={indicesCategories}
+                />
+                <PlanSalle
+                  places={places.data}
+                  categories={categories}
+                  indicesCategories={indicesCategories}
+                  selection={selection}
+                  lectureSeule={lectureSeule}
+                  surBasculer={basculer}
+                />
               </div>
-            ) : null}
-            {admission?.admission_expire_le != null && !lectureSeule ? (
-              <ExpirationAdmission
-                expireLe={admission.admission_expire_le}
-                surExpiration={surExpirationAdmission}
-              />
-            ) : null}
-            <div className={styleReservation.recapitulatif}>
-              <p aria-live="polite">
+              {reservation.error !== null ? (
+                <MessageErreurReservation erreur={reservation.error} />
+              ) : null}
+              {erreurFile ? (
+                <div className={styleReservation.alerte}>
+                  <p>
+                    L'accès à cette séance n'a pas pu être vérifié. Réessayez dans un instant ; vous
+                    pouvez aussi tenter directement votre réservation.
+                  </p>
+                  <Erreur probleme={file.error} />
+                  <div>
+                    <Bouton
+                      variante="secondaire"
+                      occupe={file.isFetching}
+                      surClic={() => void file.refetch()}
+                    >
+                      Réessayer
+                    </Bouton>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {/* Panier collant : à droite sur grand écran, en bas de l'écran sur mobile. */}
+            <div className={styleReservation.panier}>
+              {admission?.admission_expire_le != null && !lectureSeule ? (
+                <ExpirationAdmission
+                  expireLe={admission.admission_expire_le}
+                  surExpiration={surExpirationAdmission}
+                />
+              ) : null}
+              <p className={styleReservation.titrePanier} aria-hidden="true">
+                Votre sélection
+              </p>
+              {placesChoisies.length > 0 ? (
+                <ul className={styleReservation.puces} aria-hidden="true">
+                  {placesChoisies.map((place) => (
+                    <li
+                      key={place.id}
+                      data-categorie={String((indicesCategories.get(place.categorie_id) ?? 0) % 6)}
+                    >
+                      {libelleCourt(place)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <p aria-live="polite" className={styleReservation.resume}>
                 {placesChoisies.length === 0
                   ? "Aucune place sélectionnée."
                   : `Sélection : ${placesChoisies.map(libelleCourt).join(", ")} - ${formaterEuros(total)}`}{" "}
                 ({placesChoisies.length} {placesChoisies.length > 1 ? "places" : "place"} sur{" "}
                 {PLACES_PAR_COMMANDE_MAX})
               </p>
-              <div className={styleReservation.actions}>
+              <p className={styleReservation.total} aria-hidden="true">
+                <span>Total</span>
+                <strong>{formaterEuros(total)}</strong>
+              </p>
+              <div className={styleReservation.actionsPanier}>
                 {action}
                 <Bouton
                   variante="secondaire"
@@ -493,7 +526,7 @@ export function PagePlanSalle() {
                 </Bouton>
               </div>
             </div>
-          </>
+          </div>
         )}
       </section>
     </div>

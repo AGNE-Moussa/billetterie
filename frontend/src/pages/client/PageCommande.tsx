@@ -22,6 +22,7 @@ import styles from "../catalogue/PageCatalogue.module.css";
 import { categoriesParId, cleCommande, clePlaces, libellePlace } from "../reservation/places";
 import styleReservation from "../reservation/Reservation.module.css";
 import { useTempsRestant } from "../reservation/tempsRestant";
+import styleClient from "./Client.module.css";
 import { cleBilletsCommande, LIBELLES_STATUT_BILLET, LIBELLES_STATUT_COMMANDE } from "./libelles";
 import { descriptionSeance, useInfosSeances } from "./seances";
 
@@ -50,7 +51,10 @@ function MessageStatut({ commande }: { commande: Commande }) {
   switch (commande.statut) {
     case "CONFIRMEE":
       return (
-        <div role="status" className={styleReservation.recapitulatif}>
+        <div
+          role="status"
+          className={`${styleReservation.recapitulatif ?? ""} ${styleReservation.succes ?? ""}`}
+        >
           <p>
             <strong>Paiement accepté.</strong> Vos billets arrivent aussi par e-mail.
           </p>
@@ -79,7 +83,10 @@ function MessageStatut({ commande }: { commande: Commande }) {
               (jusqu'à {formaterHeure(commande.expire_le)})
             </p>
           ) : null}
-          <Link to={`/commandes/${commande.id}/paiement`}>
+          <Link
+            to={`/commandes/${commande.id}/paiement`}
+            className={`${styleReservation.lienBouton ?? ""} ${styleReservation.lienPrincipal ?? ""}`}
+          >
             Payer {formaterEuros(commande.montant_total)}
           </Link>
         </div>
@@ -165,7 +172,7 @@ export function PageCommande() {
     return (
       <div className={styles.page}>
         <h1>Commande</h1>
-        <Chargement libelle="Chargement de la commande…" />
+        <Chargement libelle="Chargement de la commande…" forme="lignes" nombre={2} />
       </div>
     );
   }
@@ -187,7 +194,10 @@ export function PageCommande() {
       <div className={styleReservation.entete}>
         <h1>Commande du {formaterDateHeure(donnees.cree_le)}</h1>
         <p className={styleReservation.sousTitre}>
-          Statut : <strong>{LIBELLES_STATUT_COMMANDE[donnees.statut]}</strong>
+          Statut :{" "}
+          <strong className={styleClient.statut} data-statut={donnees.statut}>
+            {LIBELLES_STATUT_COMMANDE[donnees.statut]}
+          </strong>
         </p>
         <p className={styleReservation.sousTitre}>{descriptionSeance(infos)}</p>
       </div>

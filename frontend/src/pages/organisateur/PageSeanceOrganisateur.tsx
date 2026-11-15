@@ -199,7 +199,7 @@ export function PageSeanceOrganisateur() {
           </tfoot>
         </table>
         <p className={styleOrganisateur.note}>
-          Places prises : verrouillées pour une commande en cours ou vendues.
+          Places prises : réservées pour une commande en cours ou déjà vendues.
         </p>
         <div>
           <Bouton

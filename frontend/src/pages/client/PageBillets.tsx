@@ -13,10 +13,12 @@ import { Chargement } from "../../composants/Chargement";
 import { Erreur } from "../../composants/Erreur";
 import { Pagination } from "../../composants/Pagination";
 import { Vide } from "../../composants/Vide";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
 import { formaterDateHeure } from "../../format";
 import { lirePage } from "../catalogue/filtres";
 import styles from "../catalogue/PageCatalogue.module.css";
 import { libellePlace } from "../reservation/places";
+import styleClient from "./Client.module.css";
 import { LIBELLES_STATUT_BILLET } from "./libelles";
 import { descriptionSeance, useInfosSeances } from "./seances";
 
@@ -56,7 +58,7 @@ export function PageBillets() {
           </Bouton>
         </div>
       ) : billets.isPending ? (
-        <Chargement libelle="Chargement de vos billets…" />
+        <Chargement libelle="Chargement de vos billets…" forme="cartes" />
       ) : billets.data.total === 0 ? (
         <Vide
           message="Aucun billet pour l'instant."
@@ -65,7 +67,7 @@ export function PageBillets() {
       ) : (
         <>
           <ul
-            className={styles.liste}
+            className={`${styles.liste ?? ""} ${styleClient.billets ?? ""}`}
             aria-labelledby={idListe}
             aria-busy={billets.isFetching && billets.isPlaceholderData ? true : undefined}
           >
@@ -75,22 +77,36 @@ export function PageBillets() {
                 <li key={billet.id}>
                   <Carte
                     titre={info?.evenement?.nom ?? "Billet"}
+                    visuel={
+                      <VisuelEvenement
+                        graine={info?.seance?.evenement_id ?? billet.seance_id}
+                        nom={info?.evenement?.nom ?? ""}
+                      >
+                        <span className={styleClient.placeVisuel} aria-hidden="true">
+                          {libellePlace(billet)}
+                        </span>
+                      </VisuelEvenement>
+                    }
                     actions={
-                      <Link to={`/billets/${billet.id}`}>
+                      <Link to={`/billets/${billet.id}`} className={styleClient.lienBillet}>
                         {billet.statut === "EMIS" ? "Afficher le QR code" : "Voir"}
                         <span className={styles.masque}> du billet {libellePlace(billet)}</span>
                       </Link>
                     }
                   >
-                    <p>{descriptionSeance(info)}</p>
-                    <p>{libellePlace(billet)}</p>
-                    <p>
-                      <strong>{LIBELLES_STATUT_BILLET[billet.statut]}</strong>
-                    </p>
-                    <p>
-                      Émis le{" "}
-                      <time dateTime={billet.emis_le}>{formaterDateHeure(billet.emis_le)}</time>
-                    </p>
+                    <div className={styleClient.infos}>
+                      <p>{descriptionSeance(info)}</p>
+                      <p>{libellePlace(billet)}</p>
+                      <p>
+                        <strong className={styleClient.statut} data-statut={billet.statut}>
+                          {LIBELLES_STATUT_BILLET[billet.statut]}
+                        </strong>
+                      </p>
+                      <p className={styleClient.attenue}>
+                        Émis le{" "}
+                        <time dateTime={billet.emis_le}>{formaterDateHeure(billet.emis_le)}</time>
+                      </p>
+                    </div>
                   </Carte>
                 </li>
               );

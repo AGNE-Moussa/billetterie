@@ -1,26 +1,48 @@
-/* E01 et E02 : une colonne sur mobile, grilles fluides au-delà (CA2 de BIL-019). */
+/* Styles partagés des écrans (page, états, retour, listes), puis E01 (hero, cartes affiches) et
+   E02 (bannière, séances en cartes). Une colonne sur mobile, grilles fluides au-delà. */
 
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--espace-4);
+  gap: var(--espace-6);
 }
 
 .page h1 {
   margin: 0;
 }
 
-/* Champs des filtres : autant de colonnes que la largeur le permet, une seule sur mobile. */
-.champs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  column-gap: var(--espace-4);
+/* Lien « Retour » : discret, avec une flèche. */
+.retour {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
-.actionsFiltres {
+.retour a {
+  display: inline-flex;
+  gap: var(--espace-1);
+  align-items: center;
+  text-decoration: none;
+}
+
+.retour a::before {
+  content: "←";
+  transition: transform var(--transition);
+}
+
+.retour a:hover::before {
+  transform: translateX(-3px);
+}
+
+.retour a:hover {
+  text-decoration: underline;
+}
+
+.etat {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--espace-2);
+  flex-direction: column;
+  gap: var(--espace-3);
+  align-items: flex-start;
 }
 
 .resultats {
@@ -31,27 +53,20 @@
 
 .titreResultats {
   margin: 0;
-  font-size: 1.25rem;
 }
 
 .nombre {
   margin: 0;
+  font-weight: 600;
   color: var(--couleur-texte-attenue);
-}
-
-.etat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--espace-3);
 }
 
 .liste {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
-  gap: var(--espace-4);
-  margin: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--espace-6);
   padding: 0;
+  margin: 0;
   list-style: none;
 }
 
@@ -70,10 +85,40 @@
 /* Début de la description : trois lignes au plus. */
 .description {
   display: -webkit-box;
+  margin: 0;
   overflow: hidden;
+  color: var(--couleur-texte-attenue);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
+}
+
+/* Lien d'action d'une carte, présenté en bouton. */
+.lienAction {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
+  min-height: 2.5rem;
+  padding: var(--espace-2) var(--espace-4);
+  font-weight: 700;
+  color: var(--couleur-sur-principale);
+  text-decoration: none;
+  background-color: var(--couleur-principale);
+  border-radius: var(--rayon-pilule);
+  transition: background-color var(--transition);
+}
+
+.lienAction::after {
+  content: "→";
+  transition: transform var(--transition);
+}
+
+.lienAction:hover {
+  background-color: var(--couleur-principale-survol);
+}
+
+.lienAction:hover::after {
+  transform: translateX(3px);
 }
 
 /* Texte lu par les lecteurs d'écran, invisible à l'écran. */
@@ -89,26 +134,334 @@
   border: 0;
 }
 
-/* E02 */
-
-.retour {
-  margin: 0;
-}
-
-.descriptionComplete {
-  margin: 0;
-  white-space: pre-line;
-}
-
-.tarifs {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.875rem;
-  color: var(--couleur-texte-attenue);
+/* Badges (Annulée, statuts). */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.15rem var(--espace-3);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: var(--rayon-pilule);
 }
 
 .annulee {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--couleur-erreur);
+}
+
+.badge.annulee {
+  background-color: var(--couleur-erreur-douce);
+  border: 1px solid color-mix(in srgb, var(--couleur-erreur) 50%, transparent);
+}
+
+/* E01 : hero pleine largeur, toujours « salle sombre », recherche intégrée. */
+
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: min(72vh, 40rem);
+  padding: var(--espace-12) var(--espace-4);
+  margin-block-start: calc(-1 * var(--espace-8));
+  margin-inline: calc(50% - 50vw);
+  overflow: hidden;
+  color: var(--scene-texte);
+  background: var(--degrade-scene);
+}
+
+/* Projecteurs et rangées de sièges stylisés, en arrière-plan. */
+.heroDecor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    conic-gradient(
+      from 200deg at 20% -10%,
+      transparent 0deg,
+      rgb(255 110 199 / 18%) 12deg,
+      transparent 26deg
+    ),
+    conic-gradient(
+      from 140deg at 80% -10%,
+      transparent 0deg,
+      rgb(185 156 255 / 18%) 14deg,
+      transparent 30deg
+    ),
+    radial-gradient(circle at 50% 120%, rgb(255 255 255 / 10%) 0 2px, transparent 3px) 0 0 / 28px
+      22px;
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  animation: projecteurs 12s ease-in-out infinite alternate;
+}
+
+@keyframes projecteurs {
+  from {
+    opacity: 0.75;
+    transform: translateX(-2%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(2%);
+  }
+}
+
+.heroInterieur {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  width: 100%;
+  max-width: var(--largeur-contenu);
+  margin: 0 auto;
+}
+
+.surtitre {
+  width: fit-content;
+  padding: var(--espace-1) var(--espace-3);
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--scene-texte);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  background-color: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: var(--rayon-pilule);
+}
+
+.page .heroTitre {
+  margin: 0;
+  font-size: clamp(3rem, 2rem + 6vw, 6.5rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  background: linear-gradient(100deg, #ffffff 0%, #ffd1ec 45%, #d9c7ff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Couleurs forcées (contraste élevé) : le texte en dégradé redevient un texte plein. */
+@media (forced-colors: active) {
+  .page .heroTitre {
+    color: CanvasText;
+    background: none;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+.accroche {
+  max-width: 40rem;
+  margin: 0;
+  font-size: clamp(1.05rem, 1rem + 0.4vw, 1.3rem);
+  color: var(--scene-texte-attenue);
+}
+
+/* Panneau de recherche : surface du thème, champs lisibles en clair comme en sombre. */
+.panneauRecherche {
+  max-width: 60rem;
+  padding: var(--espace-6) var(--espace-6) var(--espace-4);
+  margin-block-start: var(--espace-4);
+  color: var(--couleur-texte);
+  background-color: color-mix(in srgb, var(--couleur-surface) 94%, transparent);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: var(--rayon-l);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(10px);
+}
+
+.filtres {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Champs des filtres : autant de colonnes que la largeur le permet, une seule sur mobile. */
+.champs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  column-gap: var(--espace-4);
+}
+
+.actionsFiltres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+  margin-block-end: var(--espace-2);
+}
+
+/* E02 : bannière de l'événement, titre posé sur le visuel. */
+
+.banniere {
+  position: relative;
+  overflow: hidden;
+  color: var(--scene-texte);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-2);
+}
+
+.banniereTexte {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding: var(--espace-6);
+  background: linear-gradient(180deg, transparent, rgb(10 5 18 / 75%));
+}
+
+.page .banniereTexte h1 {
+  font-size: clamp(2rem, 1.4rem + 3vw, 3.5rem);
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 45%);
+}
+
+.descriptionComplete {
+  max-width: 48rem;
+  margin: 0;
+  font-size: 1.0625rem;
+  white-space: pre-line;
+}
+
+.seances {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.seances[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.seance {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--espace-4);
+  align-items: center;
+  padding: var(--espace-4);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
+  transition:
+    box-shadow var(--transition),
+    border-color var(--transition);
+}
+
+.seance:hover,
+.seance:focus-within {
+  border-color: color-mix(in srgb, var(--couleur-principale) 45%, transparent);
+  box-shadow: var(--ombre-2);
+}
+
+.seanceAnnulee {
+  background-color: var(--couleur-surface-2);
+}
+
+/* Pastille de date : jour en grand, mois et heure. */
+.pastilleDate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5rem;
+  padding: var(--espace-2) var(--espace-3);
+  line-height: 1.1;
+  color: #ffffff;
+  text-align: center;
+  background: linear-gradient(150deg, #b0127a, #5b2ee0);
+  border-radius: var(--rayon);
+}
+
+.seanceAnnulee .pastilleDate {
+  background: #5a5068;
+}
+
+.pastilleJour {
+  font-family: var(--police-titre);
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-stretch: condensed;
+}
+
+.pastilleMois {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.infosSeance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+  min-width: 0;
+}
+
+.infosSeance h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.lieu {
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+.tarifs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-1) var(--espace-3);
+  padding: 0;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+  list-style: none;
+}
+
+.prixMin {
+  margin: 0;
+  font-weight: 700;
+}
+
+.actionSeance {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 40rem) {
+  .hero {
+    min-height: auto;
+    padding-block: var(--espace-8);
+    margin-block-start: calc(-1 * var(--espace-6));
+  }
+
+  .panneauRecherche {
+    padding: var(--espace-4) var(--espace-4) var(--espace-2);
+  }
+
+  .seance {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .actionSeance {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .actionSeance > a {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .banniereTexte {
+    padding: var(--espace-4);
+  }
 }
