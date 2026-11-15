@@ -2,8 +2,10 @@
 
 Clés d'une séance (étiquette `{<seance>}` : toutes dans le même slot si Redis passe en cluster) :
 
-- `file-attente:{<seance>}:attente` : sorted set, membre `sub`, score l'horodatage d'entrée en
-  millisecondes (horloge de Redis, commune à toutes les instances) ;
+- `file-attente:{<seance>}:attente` : sorted set, membre `sub`, score le numéro d'arrivée tiré
+  de la séquence (strictement croissant : l'ordre d'entrée, sans ex aequo) ;
+- `file-attente:{<seance>}:sequence` : compteur `INCR` des arrivées de la séance, incrémenté
+  dans le script d'entrée, seulement pour un client absent de la file ;
 - `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission (millisecondes Unix), avec
   expiration `PX` de la durée d'admission ; à l'échéance, la clé disparaît et le client n'est
   plus dans la file.
@@ -29,15 +31,19 @@ from file_attente.domaine.file import EtatStocke, FileIndisponible, StatutFile
 # Verrou de la tâche des vagues, partagé par les instances.
 CLE_VERROU_VAGUES = "file-attente:tache-vagues"
 
-# KEYS[1] attente, KEYS[2] admission ; ARGV[1] sub.
+# KEYS[1] attente, KEYS[2] admission, KEYS[3] séquence ; ARGV[1] sub.
+# Un client déjà en file garde son score (donc sa position) ; sinon il reçoit le numéro suivant
+# de la séquence, strictement croissant : deux arrivants ne partagent jamais un score.
 _ENTRER = """
 local admis = redis.call('GET', KEYS[2])
 if admis then
   return {'ADMIS', 0, admis}
 end
-local t = redis.call('TIME')
-local score = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local ajoute = redis.call('ZADD', KEYS[1], 'NX', score, ARGV[1])
+local ajoute = 0
+if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then
+  local score = redis.call('INCR', KEYS[3])
+  ajoute = redis.call('ZADD', KEYS[1], 'NX', score, ARGV[1])
+end
 local rang = redis.call('ZRANK', KEYS[1], ARGV[1])
 return {'EN_ATTENTE', ajoute, rang}
 """
@@ -76,6 +82,10 @@ def cle_attente(seance_id: UUID) -> str:
     return f"{_prefixe(seance_id)}:attente"
 
 
+def cle_sequence(seance_id: UUID) -> str:
+    return f"{_prefixe(seance_id)}:sequence"
+
+
 def prefixe_admission(seance_id: UUID) -> str:
     return f"{_prefixe(seance_id)}:admis:"
 
@@ -107,7 +117,7 @@ class FileRedis:
             raise FileIndisponible() from erreur
 
     async def entrer(self, seance_id: UUID, sub: str) -> tuple[EtatStocke, bool]:
-        cles = [cle_attente(seance_id), prefixe_admission(seance_id) + sub]
+        cles = [cle_attente(seance_id), prefixe_admission(seance_id) + sub, cle_sequence(seance_id)]
         statut, ajoute, valeur = await self._appel(self._entrer, cles, [sub])
         if statut == StatutFile.ADMIS:
             return EtatStocke(StatutFile.ADMIS, admission_expire_le=_echeance(valeur)), False

@@ -17,8 +17,10 @@ fait foi : `openapi.yaml`.
 ## Fonctionnement
 
 - Une file par séance dans Redis : sorted set `file-attente:{<seance>}:attente` (membre `sub`,
-  score l'horodatage d'entrée en ms, horloge de Redis). Chaque opération est un script Lua
-  atomique : deux entrées simultanées du même client n'en font qu'une.
+  score le numéro d'arrivée tiré du compteur `file-attente:{<seance>}:sequence` par `INCR`).
+  Chaque opération est un script Lua atomique : deux entrées simultanées du même client n'en
+  font qu'une, et deux clients simultanés ont toujours des positions distinctes, dans l'ordre
+  d'arrivée.
 - Position 1 pour le prochain admis ; attente estimée `ceil(position / TAILLE_VAGUE) ×
   INTERVALLE_VAGUES`.
 - Vagues : tâche périodique (`tache.py`), toutes les `INTERVALLE_VAGUES` secondes, protégée par

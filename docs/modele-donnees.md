@@ -281,8 +281,11 @@ erDiagram
 Aucune table ni base PostgreSQL : l'état de la salle d'attente (BIL-015) est éphémère, dans
 Redis.
 
-- `file-attente:{<seance>}:attente` : sorted set, `sub` du client vers son horodatage d'entrée
-  (ms) ; l'entrée est idempotente, la position est le rang.
+- `file-attente:{<seance>}:attente` : sorted set, `sub` du client vers son numéro d'arrivée
+  (tiré de la séquence) ; l'entrée est idempotente (un client déjà présent garde son numéro),
+  la position est le rang.
+- `file-attente:{<seance>}:sequence` : compteur `INCR` des arrivées de la séance, incrémenté
+  dans le même script atomique que l'ajout ; scores strictement croissants, sans ex aequo.
 - `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission, posée avec `PX` =
   `DUREE_ADMISSION` ; à l'échéance la clé disparaît et le client sort de la file.
 - `file-attente:tache-vagues` : verrou `SET NX PX` de la tâche d'admission par vagues (une
