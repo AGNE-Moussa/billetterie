@@ -153,6 +153,9 @@ def plateforme(
                     conteneur.with_env("URL_GATEWAY", "http://traefik").with_env(
                         "SERVICES_CLIENT_SECRET", secrets.token_urlsafe(16)
                     )
+                    # BIL-010 (H6) : REDIS_URL obligatoire ; Redis absent du réseau, le cycle
+                    # d'expiration est sauté (décision Q2) et le service démarre quand même.
+                    conteneur.with_env("REDIS_URL", "redis://redis-absent.exemple.test:6379/0")
                 instances[instance] = conteneur
                 if migrations[nom][0] == 0:
                     borne(

@@ -43,7 +43,8 @@ CONNEXION_BORNEE = {"timeout": 30, "command_timeout": 30}
 
 REQUETE_VERSIONS = "SELECT version_num FROM alembic_version"
 # Ressources routées par Traefik quand elles diffèrent de la seule ressource du squelette.
-PREFIXES_ROUTES = {"catalogue": ("events", "venues", "shows")}
+# BIL-021 : billets route aussi /api/v1/tickets (Mes billets).
+PREFIXES_ROUTES = {"catalogue": ("events", "venues", "shows"), "billets": ("seats", "tickets")}
 Observation = Callable[[], Awaitable[str]]
 Alembic = Callable[[str, str], Awaitable[None]]
 

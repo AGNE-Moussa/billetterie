@@ -118,8 +118,9 @@ def test_aucun_squelette_ne_publie_de_port_sur_l_hote(
 # ticketing.show.scheduled, il n'en est plus un non plus. BIL-008 (décisions du squelette) :
 # commandes publie ticketing.order.confirmed et ticketing.order.expired par l'outbox. BIL-011 :
 # paiements consomme ticketing.show.cancelled et ticketing.ticket.rejected, publie
-# ticketing.payment.refunded par l'outbox.
-@pytest.mark.sauf_services("catalogue", "billets", "commandes", "paiements")
+# ticketing.payment.refunded par l'outbox. BIL-009 : notifications consomme
+# ticketing.order.confirmed et ticketing.ticket.issued.
+@pytest.mark.sauf_services("catalogue", "billets", "commandes", "paiements", "notifications")
 def test_les_squelettes_ne_dependent_pas_de_rabbitmq(config_locale: Any, squelette: Any) -> None:
     for conteneur in _conteneurs(squelette):
         definition = _definition(config_locale, conteneur)

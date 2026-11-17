@@ -179,6 +179,8 @@ def billets(
                 DockerContainer(str(image))
                 .with_env("DATABASE_URL", url_base)
                 .with_env("REDIS_URL", "redis://redis:6379/0")
+                # BIL-009 (décision Q6) : clé de signature des QR obligatoire, générée.
+                .with_env("QR_CLE_SIGNATURE", secrets.token_urlsafe(32))
                 .with_env("CONSUL_URL", "http://consul:8500")
                 .with_env("INSTANCE", INSTANCE)
                 .with_env("JWKS_URL", URL_JWKS)
