@@ -9,6 +9,7 @@ démonstration n'est pas chargé ou si son secret manque. Le verrou posé n'est 
 route (décision Q2) : la place reste prise 10 min, le test prend la première place disponible.
 """
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,8 @@ import pytest
 
 pytestmark = pytest.mark.smoke
 
-GATEWAY = "http://localhost"
+# Plateforme locale par défaut ; démo en ligne : URL_PLATEFORME=https://<domaine> (BIL-017).
+GATEWAY = os.environ.get("URL_PLATEFORME", "http://localhost").rstrip("/")
 RACINE = Path(__file__).resolve().parents[2]
 SOIREE_JAZZ = "6b1f0c2e-4d5a-4e8b-9c11-0d0e0b000005"
 

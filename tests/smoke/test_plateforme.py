@@ -9,6 +9,7 @@ par la CI. Chaque test est ignoré si le composant qu'il interroge ne répond pa
 client `services` est demandé à Keycloak avec le secret lu dans `.env`, jamais écrit ici.
 """
 
+import os
 from pathlib import Path
 
 import httpx
@@ -16,7 +17,8 @@ import pytest
 
 pytestmark = pytest.mark.smoke
 
-GATEWAY = "http://localhost"
+# Plateforme locale par défaut ; démo en ligne : URL_PLATEFORME=https://<domaine> (BIL-017).
+GATEWAY = os.environ.get("URL_PLATEFORME", "http://localhost").rstrip("/")
 CONSUL = "http://127.0.0.1:8500"
 PROMETHEUS = "http://127.0.0.1:9090"
 RACINE = Path(__file__).resolve().parents[2]

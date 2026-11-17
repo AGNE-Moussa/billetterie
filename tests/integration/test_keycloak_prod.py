@@ -126,6 +126,7 @@ def test_keycloak_de_prod_refuse_une_redirection_hors_du_domaine(
         )
 
     assert etrangere.status_code == 400
-    assert "Invalid parameter: redirect_uri" in etrangere.text
+    # Realm en français (thème ovation, locale fr par défaut).
+    assert "Paramètre invalide : redirect_uri" in etrangere.text
     assert du_domaine.status_code == 200, du_domaine.text[:300]
     assert 'id="kc-form-login"' in du_domaine.text
