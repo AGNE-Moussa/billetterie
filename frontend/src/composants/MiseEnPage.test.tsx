@@ -84,7 +84,12 @@ function ordreAttendu(connecte: boolean): HTMLElement[] {
     screen.getByRole("link", { name: "Aller au contenu" }),
     ...liens.map((libelle) => screen.getByRole("link", { name: libelle })),
     screen.getByRole("button", { name: "Thème sombre" }),
-    screen.getByRole("button", { name: connecte ? "Se déconnecter" : "Se connecter" }),
+    ...(connecte
+      ? [screen.getByRole("button", { name: "Se déconnecter" })]
+      : [
+          screen.getByRole("button", { name: "Créer un compte" }),
+          screen.getByRole("button", { name: "Se connecter" }),
+        ]),
     screen.getByRole("button", { name: "Action du contenu de test" }),
   ];
 }
@@ -214,21 +219,24 @@ it("test_un_lien_de_navigation_s_active_a_entree_et_deplace_le_focus_sur_le_cont
 });
 
 it.each([
+  { cas: "Créer un compte" as const },
   { cas: "Se connecter" as const },
   { cas: "Se déconnecter" as const },
   { cas: "bascule de thème" as const },
 ])("test_les_boutons_de_l_en_tete_s_activent_a_entree_et_a_espace ($cas)", async ({ cas }) => {
   const user = userEvent.setup();
   const seConnecter = vi.fn(() => Promise.resolve(true));
+  const creerCompte = vi.fn(() => Promise.resolve(true));
   const seDeconnecter = vi.fn(() => Promise.resolve());
   const session: Session =
     cas === "Se déconnecter"
-      ? { ...SESSION_CLIENT, seConnecter, seDeconnecter }
-      : { ...SESSION_NON_CONNECTEE, seConnecter, seDeconnecter };
+      ? { ...SESSION_CLIENT, seConnecter, creerCompte, seDeconnecter }
+      : { ...SESSION_NON_CONNECTEE, seConnecter, creerCompte, seDeconnecter };
   rendreMiseEnPage(session, <h1>Contenu de test</h1>);
   const nom = cas === "bascule de thème" ? "Thème sombre" : cas;
   const bouton = within(screen.getByRole("banner")).getByRole("button", { name: nom });
-  const action = cas === "Se connecter" ? seConnecter : seDeconnecter;
+  const action =
+    cas === "Se connecter" ? seConnecter : cas === "Créer un compte" ? creerCompte : seDeconnecter;
   const etatApres = () =>
     cas === "bascule de thème"
       ? document.documentElement.getAttribute("data-theme")

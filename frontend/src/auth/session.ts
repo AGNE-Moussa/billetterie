@@ -23,6 +23,11 @@ export interface Session {
    * la redirection n'a pas pu être lancée (Keycloak injoignable).
    */
   seConnecter(pageDeRetour?: string): Promise<boolean>;
+  /**
+   * Comme `seConnecter`, mais ouvre directement l'inscription de Keycloak (`prompt=create`) ;
+   * le nouveau compte reçoit le rôle `customer` (groupe par défaut `clients` du realm).
+   */
+  creerCompte(pageDeRetour?: string): Promise<boolean>;
   /** Oublie l'utilisateur et ferme la session Keycloak (`signoutRedirect`). */
   seDeconnecter(): Promise<void>;
   /**
@@ -40,6 +45,7 @@ export const SESSION_NON_CONNECTEE: Session = {
   roles: [],
   sessionExpiree: false,
   seConnecter: () => Promise.resolve(false),
+  creerCompte: () => Promise.resolve(false),
   seDeconnecter: () => Promise.resolve(),
   terminerConnexion: () => Promise.reject(new Error("Aucun fournisseur d'authentification")),
 };

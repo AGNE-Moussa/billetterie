@@ -425,7 +425,23 @@ it("test_se_connecter_redirige_vers_keycloak_en_code_avec_pkce_s256", async () =
   expect(adresse.searchParams.get("code_challenge")).toBeTruthy();
   expect(adresse.searchParams.get("state")).toBeTruthy();
   expect(adresse.searchParams.get("redirect_uri")).toBe(`${ORIGINE}/connexion/rappel`);
+  expect(adresse.searchParams.get("prompt")).toBeNull();
   expect(redirections).toHaveLength(1);
+});
+
+it("test_creer_un_compte_ouvre_l_inscription_keycloak_avec_prompt_create", async () => {
+  simulerKeycloak();
+  const { userManager, redirections } = userManagerDeLApplication();
+  rendreAvecPageDeTest(userManager, "/");
+
+  await utilisateurUi().click(await screen.findByRole("button", { name: "Créer un compte" }));
+
+  await waitFor(() => expect(redirections).toHaveLength(1));
+  const adresse = new URL(redirections[0] ?? "");
+  expect(`${adresse.origin}${adresse.pathname}`).toBe(POINT_AUTORISATION);
+  expect(adresse.searchParams.get("prompt")).toBe("create");
+  expect(adresse.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(adresse.searchParams.get("redirect_uri")).toBe(`${ORIGINE}/connexion/rappel`);
 });
 
 it("test_la_page_de_rappel_annonce_la_connexion_en_cours", async () => {

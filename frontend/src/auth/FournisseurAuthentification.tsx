@@ -170,11 +170,15 @@ export function FournisseurAuthentification({
     })();
   }, [userManager, pathname, appliquer, oublier]);
 
-  const seConnecter = useCallback(
-    async (page?: string) => {
+  const rediriger = useCallback(
+    async (page: string | undefined, inscription: boolean) => {
       const retour = page === undefined ? "/" : cheminInterne(page);
       try {
-        await userManager.signinRedirect({ state: { pageDeRetour: retour } });
+        await userManager.signinRedirect({
+          state: { pageDeRetour: retour },
+          // OpenID Connect `prompt=create` : Keycloak ouvre le formulaire d'inscription.
+          ...(inscription ? { prompt: "create" } : {}),
+        });
         return true;
       } catch {
         // Keycloak injoignable : l'utilisateur reste non connecté et peut réessayer.
@@ -183,6 +187,9 @@ export function FournisseurAuthentification({
     },
     [userManager],
   );
+
+  const seConnecter = useCallback((page?: string) => rediriger(page, false), [rediriger]);
+  const creerCompte = useCallback((page?: string) => rediriger(page, true), [rediriger]);
 
   const seDeconnecter = useCallback(async () => {
     setEtat((precedent) => ({ ...precedent, sessionExpiree: false }));
@@ -218,10 +225,11 @@ export function FournisseurAuthentification({
       roles: utilisateur === null ? [] : rolesDuJeton(utilisateur.access_token),
       sessionExpiree: etat.sessionExpiree,
       seConnecter,
+      creerCompte,
       seDeconnecter,
       terminerConnexion,
     };
-  }, [etat, seConnecter, seDeconnecter, terminerConnexion]);
+  }, [etat, seConnecter, creerCompte, seDeconnecter, terminerConnexion]);
 
   return <ContexteSession.Provider value={session}>{children}</ContexteSession.Provider>;
 }

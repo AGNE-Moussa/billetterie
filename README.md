@@ -282,6 +282,15 @@ Tous les mots de passe et secrets sont dans votre `.env`, jamais dans le dépôt
 | `services` | scopes de service | appels entre services | `KEYCLOAK_SERVICES_SECRET` |
 | `KEYCLOAK_ADMIN` | administrateur Keycloak | console `/auth/admin` | `KEYCLOAK_ADMIN_PASSWORD` |
 
+### Créer un compte client
+
+Un visiteur crée son compte depuis le bouton « Créer un compte » de l'en-tête : formulaire
+Keycloak aux couleurs d'Ovation (prénom, nom, adresse e-mail, mot de passe de 10 caractères au
+moins). L'adresse e-mail sert d'identifiant et doit être confirmée par le lien reçu par e-mail :
+en local, les e-mails arrivent dans Mailpit (http://127.0.0.1:8025). Le nouveau compte reçoit le
+rôle `customer` (groupe par défaut `clients` du realm) ; « Mot de passe oublié ? » envoie un lien
+de la même façon. Les comptes de test ci-dessus se connectent toujours avec leur identifiant.
+
 Le revendeur appelle l'API sur l'hôte des partenaires, http://partenaires.localhost
 (`HOTE_PARTENAIRES`, mêmes chemins `/api/v1/...`, quota de 5 requêtes par seconde par jeton,
 429 au-delà) ; son jeton est refusé sur http://localhost (403 `ROLE_MANQUANT`). Il ne voit que
