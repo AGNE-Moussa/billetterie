@@ -204,10 +204,45 @@ export interface components {
        */
       cree_le: string;
     };
+    /**
+     * EvenementResume
+     * @description Élément de la recherche : l'événement et son aperçu (cartes du catalogue).
+     */
+    EvenementResume: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Nom */
+      nom: string;
+      /** Description */
+      description: string;
+      /**
+       * Cree Le
+       * Format: date-time
+       */
+      cree_le: string;
+      /**
+       * Prochaine Seance
+       * @description Début de la prochaine séance à venir, non annulée ; null s'il n'y en a pas.
+       */
+      prochaine_seance: string | null;
+      /**
+       * Ville
+       * @description Ville de la prochaine séance ; null sans séance à venir.
+       */
+      ville: string | null;
+      /**
+       * Prix Min
+       * @description Prix le plus bas, en centimes, parmi les catégories des séances à venir non annulées ; null sans séance à venir.
+       */
+      prix_min: number | null;
+    };
     /** EvenementPage */
     EvenementPage: {
       /** Elements */
-      elements: components["schemas"]["Evenement"][];
+      elements: components["schemas"]["EvenementResume"][];
       /** Page */
       page: number;
       /** Size */
@@ -415,6 +450,7 @@ export interface components {
 }
 export type EvenementCreation = components["schemas"]["EvenementCreation"];
 export type Evenement = components["schemas"]["Evenement"];
+export type EvenementResume = components["schemas"]["EvenementResume"];
 export type EvenementPage = components["schemas"]["EvenementPage"];
 export type CategorieCreation = components["schemas"]["CategorieCreation"];
 export type Rang = components["schemas"]["Rang"];

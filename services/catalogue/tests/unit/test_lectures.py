@@ -1,5 +1,6 @@
 """Lectures publiques du catalogue (CA1, E2, E3 du plan BIL-004), sans base ni Keycloak."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -325,3 +326,31 @@ async def test_un_filtre_par_categorie_n_existe_pas(anonyme: httpx.AsyncClient, 
     assert avec_categorie.status_code == 200, avec_categorie.text
     assert avec_categorie.json() == sans_filtre.json()
     assert avec_categorie.json()["total"] == 2
+
+
+async def test_la_recherche_donne_la_prochaine_seance_a_venir_sa_ville_et_le_prix_le_plus_bas(
+    anonyme: httpx.AsyncClient, depot: Any
+) -> None:
+    maintenant = datetime.now(UTC)
+    evenement = depot.semer_evenement()
+    sans_seance = depot.semer_evenement("Sans séance")
+    paris, lyon, lille = (depot.semer_lieu(ville=v) for v in ("Paris", "Lyon", "Lille"))
+    depot.semer_seance(evenement, paris, maintenant - timedelta(days=1))  # passée : ignorée
+    annulee = depot.semer_seance(evenement, lille, maintenant + timedelta(days=1))
+    depot.semer_seance_annulee(annulee)  # annulée : ignorée
+    prochaine = depot.semer_seance(evenement, lyon, maintenant + timedelta(days=3))
+    plus_tard = depot.semer_seance(evenement, paris, maintenant + timedelta(days=9))
+    depot.seances[plus_tard.id] = replace(
+        plus_tard, categories=[replace(plus_tard.categories[0], prix=1900)]
+    )
+
+    reponse = await anonyme.get(ROUTE_EVENEMENTS)
+
+    assert reponse.status_code == 200, reponse.text
+    par_id = {element["id"]: element for element in reponse.json()["elements"]}
+    carte = par_id[str(evenement.id)]
+    assert datetime.fromisoformat(carte["prochaine_seance"]) == prochaine.debut
+    assert carte["ville"] == "Lyon"
+    assert carte["prix_min"] == 1900
+    vide = par_id[str(sans_seance.id)]
+    assert (vide["prochaine_seance"], vide["ville"], vide["prix_min"]) == (None, None, None)

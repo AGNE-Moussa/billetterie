@@ -992,11 +992,58 @@ components:
       - description
       - cree_le
       title: Evenement
+    EvenementResume:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nom:
+          type: string
+          title: Nom
+        description:
+          type: string
+          title: Description
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+        prochaine_seance:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Prochaine Seance
+          description: Début de la prochaine séance à venir, non annulée ; null s'il n'y en a pas.
+        ville:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ville
+          description: Ville de la prochaine séance ; null sans séance à venir.
+        prix_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Prix Min
+          description: Prix le plus bas, en centimes, parmi les catégories des séances à venir non
+            annulées ; null sans séance à venir.
+      type: object
+      required:
+      - id
+      - nom
+      - description
+      - cree_le
+      - prochaine_seance
+      - ville
+      - prix_min
+      title: EvenementResume
+      description: 'Élément de la recherche : l''événement et son aperçu (cartes du catalogue).'
     EvenementPage:
       properties:
         elements:
           items:
-            $ref: '#/components/schemas/Evenement'
+            $ref: '#/components/schemas/EvenementResume'
           type: array
           title: Elements
         page:

@@ -5,7 +5,7 @@ import { useId } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { listerEvenements, type Lecture } from "../../api/catalogue";
-import type { EvenementPage } from "../../api/genere/catalogue";
+import type { EvenementPage, EvenementResume } from "../../api/genere/catalogue";
 import { convertirErreur } from "../../api/problemes";
 import { BandeauModeDegrade } from "../../composants/BandeauModeDegrade";
 import { Bouton } from "../../composants/Bouton";
@@ -25,6 +25,7 @@ import {
   versRequete,
   type FiltresCatalogue,
 } from "./filtres";
+import { formaterDateHeure, formaterEuros } from "../../format";
 import { FormulaireFiltres } from "./FormulaireFiltres";
 import styles from "./PageCatalogue.module.css";
 
@@ -188,6 +189,7 @@ function Resultats({
                 </Link>
               }
             >
+              <ApercuEvenement evenement={evenement} />
               <p className={styles.description}>{evenement.description}</p>
             </Carte>
           </li>
@@ -201,5 +203,31 @@ function Resultats({
         occupe={occupe}
       />
     </>
+  );
+}
+
+/** Prochaine séance (date, ville) et prix d'appel d'une carte ; « bientôt » sans séance à venir. */
+function ApercuEvenement({ evenement }: { evenement: EvenementResume }) {
+  if (evenement.prochaine_seance === null) {
+    return <p className={styles.aucuneDate}>Nouvelles dates bientôt annoncées</p>;
+  }
+  return (
+    <ul className={styles.apercu} aria-label="En bref">
+      <li>
+        <span className={styles.masque}>Prochaine séance : </span>
+        <time dateTime={evenement.prochaine_seance}>
+          {formaterDateHeure(evenement.prochaine_seance)}
+        </time>
+      </li>
+      {evenement.ville !== null ? (
+        <li>
+          <span className={styles.masque}>Ville : </span>
+          {evenement.ville}
+        </li>
+      ) : null}
+      {evenement.prix_min !== null ? (
+        <li className={styles.prix}>À partir de {formaterEuros(evenement.prix_min)}</li>
+      ) : null}
+    </ul>
   );
 }

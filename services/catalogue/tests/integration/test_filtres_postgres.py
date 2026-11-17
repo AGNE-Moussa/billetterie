@@ -190,3 +190,29 @@ async def test_le_total_compte_les_evenements_filtres_et_non_la_page(
 
     assert page["total"] == 2
     assert len(page["elements"]) == 1
+
+
+async def test_chaque_element_porte_sa_prochaine_seance_sa_ville_et_son_prix_le_plus_bas(
+    client_public: httpx.AsyncClient, creer_jeu: CreerJeu
+) -> None:
+    jeu = await creer_jeu()
+
+    page = await _rechercher(client_public)
+
+    par_nom = {element["nom"]: element for element in page["elements"]}
+    seances = (await client_public.get(f"/api/v1/events/{par_nom[CONCERT]['id']}/shows")).json()[
+        "elements"
+    ]
+    prix_concert = min(c["prix"] for s in seances for c in s["categories"])
+    concert, theatre, exposition = par_nom[CONCERT], par_nom[THEATRE], par_nom[EXPOSITION]
+    # Concert : deux séances (J+10 Villetest, J+40 Autreville), la plus proche l'emporte.
+    assert datetime.fromisoformat(concert["prochaine_seance"]) == jeu.debuts[10]
+    assert concert["ville"] == "Villetest"
+    assert concert["prix_min"] == prix_concert
+    assert datetime.fromisoformat(theatre["prochaine_seance"]) == jeu.debuts[20]
+    assert theatre["ville"] == "Autreville"
+    assert (exposition["prochaine_seance"], exposition["ville"], exposition["prix_min"]) == (
+        None,
+        None,
+        None,
+    )

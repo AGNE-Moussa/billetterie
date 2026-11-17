@@ -9,7 +9,7 @@ import functools
 import logging
 import uuid
 from collections.abc import Callable, Coroutine, Sequence
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import ColumnElement, Select, exists, func, insert, or_, select, update
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from catalogue.domaine.catalogue import (
     EVENEMENT_SEANCE_ANNULEE,
     EVENEMENT_SEANCE_PROGRAMMEE,
+    ApercuEvenement,
     Categorie,
     Evenement,
     FiltresEvenements,
@@ -170,6 +171,41 @@ class DepotCatalogueSql:
     async def compter_evenements(self, filtres: FiltresEvenements) -> int:
         requete = select(func.count()).select_from(EvenementLigne).where(*_conditions(filtres))
         return (await self._session.execute(requete)).scalar_one()
+
+    @_base_requise
+    async def apercus_evenements(
+        self, evenement_ids: list[uuid.UUID], maintenant: datetime
+    ) -> dict[uuid.UUID, ApercuEvenement]:
+        # Deux requêtes pour toute la page (jamais une par événement) : la prochaine séance
+        # (DISTINCT ON PostgreSQL, la plus proche par événement) et le prix minimal.
+        a_venir = [
+            SeanceLigne.evenement_id.in_(evenement_ids),
+            SeanceLigne.annulee.is_(False),
+            SeanceLigne.debut >= maintenant,
+        ]
+        prochaines = await self._session.execute(
+            select(SeanceLigne.evenement_id, SeanceLigne.debut, LieuLigne.ville)
+            .join(LieuLigne, LieuLigne.id == SeanceLigne.lieu_id)
+            .where(*a_venir)
+            .order_by(SeanceLigne.evenement_id, SeanceLigne.debut, SeanceLigne.id)
+            .distinct(SeanceLigne.evenement_id)
+        )
+        minimums = await self._session.execute(
+            select(SeanceLigne.evenement_id, func.min(CategorieLigne.prix))
+            .join(CategorieLigne, CategorieLigne.seance_id == SeanceLigne.id)
+            .where(*a_venir)
+            .group_by(SeanceLigne.evenement_id)
+        )
+        # Compréhension, pas dict(résultat) : un Result a une méthode keys() (noms de colonnes).
+        prix = {evenement_id: minimum for evenement_id, minimum in minimums.tuples()}
+        return {
+            evenement_id: ApercuEvenement(
+                prochaine_seance=debut.astimezone(UTC),
+                ville=ville,
+                prix_min=prix.get(evenement_id),
+            )
+            for evenement_id, debut, ville in prochaines.tuples()
+        }
 
     # --- lieux ----------------------------------------------------------------------------
 

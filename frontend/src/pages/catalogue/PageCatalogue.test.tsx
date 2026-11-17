@@ -16,7 +16,10 @@ const EVENEMENT = {
   nom: "Concert de test",
   description: "Description synthétique du concert de test.",
   cree_le: "2026-10-01T10:00:00+02:00",
-};
+  prochaine_seance: "2026-12-12T20:00:00+01:00",
+  ville: "Lyon",
+  prix_min: 2500,
+} satisfies EvenementPage["elements"][number];
 
 function page(elements: EvenementPage["elements"], total = elements.length, numero = 1) {
   return { elements, page: numero, size: 20, total } satisfies EvenementPage;
@@ -72,6 +75,29 @@ function resultats() {
 
 beforeEach(() => {
   appels = [];
+});
+
+it("test_chaque_carte_affiche_la_prochaine_seance_la_ville_et_le_prix_d_appel", async () => {
+  const SANS_DATE = {
+    ...EVENEMENT,
+    id: "0b6f5a3e-1c2d-4e5f-8a9b-000000000002",
+    nom: "Exposition sans date",
+    prochaine_seance: null,
+    ville: null,
+    prix_min: null,
+  };
+  simulerEvenements(() => HttpResponse.json<EvenementPage>(page([EVENEMENT, SANS_DATE])));
+  rendreA("/");
+
+  const carte = (await screen.findByRole("article", { name: EVENEMENT.nom })) as HTMLElement;
+  const apercu = within(carte).getByRole("list", { name: "En bref" });
+  expect(within(apercu).getByText("Lyon")).toBeInTheDocument();
+  expect(within(apercu).getByText(/^À partir de 25,00\s€$/)).toBeInTheDocument();
+  expect(apercu.querySelector("time")).toHaveAttribute("dateTime", EVENEMENT.prochaine_seance);
+
+  const sansDate = screen.getByRole("article", { name: SANS_DATE.nom });
+  expect(within(sansDate).getByText("Nouvelles dates bientôt annoncées")).toBeInTheDocument();
+  expect(within(sansDate).queryByRole("list", { name: "En bref" })).not.toBeInTheDocument();
 });
 
 it("test_filtrer_reporte_les_filtres_dans_l_url_et_les_transmet_a_l_api", async () => {

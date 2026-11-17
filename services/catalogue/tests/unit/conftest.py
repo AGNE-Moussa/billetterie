@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from catalogue.api.dependances import obtenir_cache, obtenir_depot, obtenir_maintenant
 from catalogue.config import Parametres
 from catalogue.domaine.catalogue import (
+    ApercuEvenement,
     Categorie,
     DepotCatalogue,
     Evenement,
@@ -186,6 +187,29 @@ class DepotEnMemoire:
     async def compter_evenements(self, filtres: FiltresEvenements) -> int:
         self._lire()
         return len(self._filtrer(filtres))
+
+    async def apercus_evenements(
+        self, evenement_ids: list[UUID], maintenant: datetime
+    ) -> dict[UUID, ApercuEvenement]:
+        # Hors du compteur `lectures` : complète la page déjà lue, comme la requête SQL.
+        self._verifier()
+        apercus: dict[UUID, ApercuEvenement] = {}
+        for evenement_id in evenement_ids:
+            a_venir = sorted(
+                (
+                    s
+                    for s in self.seances.values()
+                    if s.evenement_id == evenement_id and not s.annulee and s.debut >= maintenant
+                ),
+                key=lambda s: (s.debut, s.id),
+            )
+            if a_venir:
+                apercus[evenement_id] = ApercuEvenement(
+                    prochaine_seance=a_venir[0].debut,
+                    ville=self.lieux[a_venir[0].lieu_id].ville,
+                    prix_min=min(c.prix for s in a_venir for c in s.categories),
+                )
+        return apercus
 
     async def ajouter_lieu(self, nom: str, adresse: str, ville: str) -> Lieu:
         self._verifier()

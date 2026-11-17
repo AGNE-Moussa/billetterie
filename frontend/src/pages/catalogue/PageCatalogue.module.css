@@ -465,3 +465,33 @@
     padding: var(--espace-4);
   }
 }
+
+/* Aperçu d'une carte : date de la prochaine séance, ville, prix d'appel. */
+.apercu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-1) var(--espace-3);
+  margin: 0 0 var(--espace-2);
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.apercu > li + li::before {
+  content: "·";
+  margin-inline-end: var(--espace-3);
+  color: var(--couleur-bordure);
+}
+
+.prix {
+  font-weight: 700;
+  color: var(--couleur-principale);
+}
+
+.aucuneDate {
+  margin: 0 0 var(--espace-2);
+  font-size: 0.9rem;
+  font-style: italic;
+  color: var(--couleur-texte-attenue);
+}
