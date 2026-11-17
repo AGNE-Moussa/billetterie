@@ -1,6 +1,10 @@
 {
   "realm": "billetterie",
-  "displayName": "Billetterie",
+  "displayName": "Ovation",
+  "loginTheme": "ovation",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["fr"],
+  "defaultLocale": "fr",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,

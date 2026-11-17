@@ -207,6 +207,8 @@ services:
       KEYCLOAK_URL_FRONT: ${KEYCLOAK_URL_FRONT:-http://localhost}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Thème de la page de connexion (loginTheme du realm).
+      - ./infra/keycloak/themes/ovation:/opt/keycloak/themes/ovation:ro
     depends_on:
       postgres:
         condition: service_healthy

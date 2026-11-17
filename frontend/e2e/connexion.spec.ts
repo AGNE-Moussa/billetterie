@@ -2,7 +2,11 @@
 // l'accueil, contre la plateforme démarrée par `make up` et le vrai Keycloak.
 import { expect, test } from "@playwright/test";
 
-import { UTILISATEURS_DE_TEST, seConnecterSurKeycloak } from "./utilisateursDeTest";
+import {
+  LIBELLE_IDENTIFIANT,
+  UTILISATEURS_DE_TEST,
+  seConnecterSurKeycloak,
+} from "./utilisateursDeTest";
 
 for (const utilisateur of UTILISATEURS_DE_TEST) {
   test(`test_chaque_utilisateur_de_test_se_connecte_puis_se_deconnecte_depuis_l_accueil[${utilisateur.nom}]`, async ({
@@ -27,6 +31,6 @@ for (const utilisateur of UTILISATEURS_DE_TEST) {
 
     // Session Keycloak fermée : un nouveau clic réaffiche le formulaire au lieu de reconnecter.
     await seConnecter.click();
-    await expect(page.getByLabel("Username or email")).toBeVisible();
+    await expect(page.getByLabel(LIBELLE_IDENTIFIANT)).toBeVisible();
   });
 }
