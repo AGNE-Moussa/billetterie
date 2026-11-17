@@ -14,7 +14,7 @@ import anyio
 import pytest
 
 from commun.admission import verifier_admission
-from file_attente.infra.file_redis import FileRedis, cle_attente
+from file_attente.infra.file_redis import FileRedis, cle_attente, cle_sequence
 
 pytestmark = pytest.mark.anyio
 
@@ -90,6 +90,26 @@ async def test_une_vague_admet_les_premiers_entres_sans_perte_ni_doublon(salle: 
         await asyncio.sleep(0.3)  # verrou de la tâche (intervalle 0,2 s) expiré
 
     assert admis_par_vague == [subs[:2], subs[:4], subs]
+
+
+async def test_la_vague_qui_vide_la_file_supprime_la_sequence_et_l_ordre_repart(
+    salle: Any, observateur: Any
+) -> None:
+    sequence = cle_sequence(salle.seance_id)
+    for sub in ("client-0", "client-1", "client-2"):
+        assert (await salle.entrer(sub)).status_code == 201, sub
+    tache = salle.tache(intervalle=0.2)
+
+    assert await tache.cycle() is True  # 2 admis, client-2 reste : la séquence est gardée
+    assert await observateur.cles(sequence) == [sequence]
+    await asyncio.sleep(0.3)  # verrou de la tâche expiré
+    assert await tache.cycle() is True  # file vidée
+    assert await observateur.cles(sequence) == []
+
+    # Nouvelle file : l'ordre d'arrivée reste respecté avec une numérotation repartie de 1.
+    for sub in ("client-3", "client-4"):
+        assert (await salle.entrer(sub)).status_code == 201, sub
+    assert [(await salle.lire(s)).json()["position"] for s in ("client-3", "client-4")] == [1, 2]
 
 
 async def test_un_admis_recoit_le_meme_jeton_valable_a_chaque_lecture(salle: Any) -> None:
