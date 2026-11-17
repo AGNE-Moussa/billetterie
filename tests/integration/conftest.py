@@ -213,16 +213,31 @@ def secrets_realm() -> dict[str, str]:
 
 @pytest.fixture(scope="module")
 def valeurs_env_prod() -> dict[str, str]:
-    """Fichier d'environnement de démo synthétique : jamais de Neon, jamais le vrai domaine."""
+    """Fichier d'environnement de démo synthétique (BIL-017) : jamais le vrai domaine."""
     return {
         "DOMAINE": DOMAINE_DEMO,
         "IMAGE_TAG": "sha-0000000",
-        "ECHO_DATABASE_URL": (
-            f"postgresql+asyncpg://echo:{secrets.token_urlsafe(16)}@base.exemple.test:5432/echo"
-        ),
-        "KEYCLOAK_DB_URL": "jdbc:postgresql://base.exemple.test:5432/keycloak?sslmode=require",
-        "KEYCLOAK_DB_USERNAME": "keycloak",
-        "KEYCLOAK_DB_PASSWORD": secrets.token_urlsafe(16),
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": secrets.token_urlsafe(16),
+        **{
+            f"{service}_DB_PASSWORD": secrets.token_urlsafe(16)
+            for service in (
+                "ECHO",
+                "KEYCLOAK",
+                "CATALOGUE",
+                "BILLETS",
+                "COMMANDES",
+                "PAIEMENTS",
+                "NOTIFICATIONS",
+            )
+        },
+        "QR_CLE_SIGNATURE": secrets.token_urlsafe(32),
+        "ADMISSION_CLE_SIGNATURE": secrets.token_urlsafe(32),
+        "SMTP_HOTE": "smtp-relay.exemple.test",
+        "SMTP_UTILISATEUR": "relais@exemple.test",
+        "SMTP_MOT_DE_PASSE": secrets.token_urlsafe(16),
+        "SMTP_EXPEDITEUR": "no-reply@exemple.test",
+        "URL_FRONT_VERCEL": "https://ovation-demo.exemple.test",
         "KEYCLOAK_URL_FRONT": f"https://{DOMAINE_DEMO}",
         "KEYCLOAK_ADMIN": "admin.demo",
         "KEYCLOAK_ADMIN_PASSWORD": secrets.token_urlsafe(16),

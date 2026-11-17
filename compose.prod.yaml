@@ -1,78 +1,111 @@
-# Plateforme de démonstration (BIL-F29) : VPS unique, HTTPS Let's Encrypt, bases Neon.
-# Déployée par .github/workflows/deploiement.yml dans /opt/billetterie, variables lues dans
-# .env.prod (écrit par le workflow, jamais commité ; modèle : .env.prod.example).
+# Plateforme de démonstration en ligne (BIL-017) : une VM (Oracle Cloud Always Free, ARM),
+# HTTPS Let's Encrypt, toutes les données sur la VM (PostgreSQL, Redis, RabbitMQ).
+# Variables lues dans .env.prod, écrit sur la VM par scripts/vps-env.sh (jamais commité ;
+# modèle : .env.prod.example). Pas à pas : docs/deploiement.md.
 #
-#   docker compose -f compose.prod.yaml --env-file .env.prod pull
-#   docker compose -f compose.prod.yaml --env-file .env.prod run --rm echo-migrations
-#   docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait
+#   Images de GHCR (CI)        : docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait
+#   Images construites sur la VM : ajouter -f compose.prod.build.yaml et --build (scripts/deployer-vps.sh)
 #
-# Différences avec compose.yaml : ni PostgreSQL (Neon), ni Redis, ni observabilité, ni mailpit ;
-# images tirées de GHCR (aucun build) ; seul Traefik publie des ports (80 et 443) ; chaque
-# conteneur a une limite mémoire (total 2368 Mio, budget 3072 Mio).
+# Différences avec compose.yaml : une instance par service, ni observabilité ni Mailpit (e-mails
+# par un relais SMTP authentifié, Brevo) ; seul Traefik publie des ports (80 et 443) ; chaque
+# conteneur a une limite mémoire et redémarre seul.
 
 name: billetterie
 
-# Journaux bornés : le disque du VPS est petit.
+# Journaux bornés : le disque de la VM n'est pas extensible gratuitement.
 x-journaux: &journaux
   driver: json-file
   options:
     max-size: "10m"
     max-file: "3"
 
+# Variables communes des services Python (routes HTTPS, jetons émis pour le domaine public).
+x-env-service: &env-service
+  CONSUL_URL: http://consul:8500
+  # Routes Consul sur le point d'entrée HTTPS (commun.registre.tags_traefik).
+  TRAEFIK_POINT_ENTREE: websecure
+  HOTE_PARTENAIRES: partenaires.${DOMAINE:?à définir dans .env.prod}
+  RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env.prod}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env.prod}@rabbitmq:5672/
+  # Pas de Tempo en démo : OTEL_EXPORTER_OTLP_ENDPOINT absente, aucune trace exportée.
+  JWT_EMETTEUR: https://${DOMAINE:?à définir dans .env.prod}/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}
+  JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/certs
+
+# Migrations : une seule exécution, avant les instances.
+x-migrations: &migrations
+  command: ["alembic", "upgrade", "head"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+  deploy:
+    resources:
+      limits:
+        memory: 256m
+  logging: *journaux
+  networks: [billetterie]
+
+# Instance d'un service : attend ses migrations, Consul, RabbitMQ et Redis.
+x-instance: &instance
+  depends_on: &dependances-instance
+    consul:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  deploy:
+    resources:
+      limits:
+        memory: 384m
+  restart: unless-stopped
+  logging: *journaux
+  networks: [billetterie]
+
 services:
-  traefik:
-    image: traefik:v3.5.3
-    # demarrer-prod.sh complète traefik.prod.yml (domaine, ACME) puis lance Traefik.
-    command: ["sh", "/etc/traefik/demarrer-prod.sh"]
+  # --- Données ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.10-alpine
     environment:
-      DOMAINE: ${DOMAINE:?à définir dans .env.prod}
-      ACME_EMAIL: ${ACME_EMAIL:?à définir dans .env.prod}
-      # Staging (https://acme-staging-v02.api.letsencrypt.org/directory) au premier
-      # déploiement, puis production (https://acme-v02.api.letsencrypt.org/directory).
-      ACME_CA_SERVER: ${ACME_CA_SERVER:?à définir dans .env.prod}
-      # Front et API ont la même origine : seule celle du domaine est autorisée.
-      CORS_ORIGINS: https://${DOMAINE:?à définir dans .env.prod}
+      POSTGRES_USER: ${POSTGRES_USER:?à définir dans .env.prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à définir dans .env.prod}
+      # Lus par infra/postgres/init/01-bases.sh : un utilisateur et une base par service.
+      ECHO_DB_PASSWORD: ${ECHO_DB_PASSWORD:?à définir dans .env.prod}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?à définir dans .env.prod}
+      CATALOGUE_DB_PASSWORD: ${CATALOGUE_DB_PASSWORD:?à définir dans .env.prod}
+      BILLETS_DB_PASSWORD: ${BILLETS_DB_PASSWORD:?à définir dans .env.prod}
+      COMMANDES_DB_PASSWORD: ${COMMANDES_DB_PASSWORD:?à définir dans .env.prod}
+      PAIEMENTS_DB_PASSWORD: ${PAIEMENTS_DB_PASSWORD:?à définir dans .env.prod}
+      NOTIFICATIONS_DB_PASSWORD: ${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env.prod}
     volumes:
-      - ./infra/traefik/demarrer-prod.sh:/etc/traefik/demarrer-prod.sh:ro
-      - ./infra/traefik/traefik.prod.yml:/etc/traefik/traefik.prod.yml:ro
-      - ./infra/traefik/dynamique.yml:/etc/traefik/dynamique.yml:ro
-      - ./infra/traefik/plugins-local:/plugins-local:ro
-      - traefik-acme:/acme
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      consul:
-        condition: service_healthy
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 1024m
     restart: unless-stopped
     logging: *journaux
     networks: [billetterie]
 
-  consul:
-    image: hashicorp/consul:1.21.5
-    # Un seul nœud, état en mémoire : les services se réinscrivent à leur démarrage.
-    command: ["agent", "-dev", "-client=0.0.0.0", "-config-dir=/consul/definitions"]
+  redis:
+    image: redis:7.4.6-alpine
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      # Keycloak et le front, routés sur le point d'entrée websecure.
-      - ./infra/consul/prod:/consul/definitions:ro
+      - redis-data:/data
     healthcheck:
-      test: ["CMD", "consul", "members"]
-      interval: 10s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
       timeout: 3s
       retries: 10
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 256m
     restart: unless-stopped
     logging: *journaux
     networks: [billetterie]
@@ -94,7 +127,69 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384m
+          memory: 512m
+    restart: unless-stopped
+    logging: *journaux
+    networks: [billetterie]
+
+  # --- Infrastructure ---------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.5.3
+    # demarrer-prod.sh complète traefik.prod.yml (domaine, ACME) puis lance Traefik.
+    command: ["sh", "/etc/traefik/demarrer-prod.sh"]
+    environment:
+      DOMAINE: ${DOMAINE:?à définir dans .env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?à définir dans .env.prod}
+      ACME_CA_SERVER: ${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      # Le domaine, et le front sur Vercel s'il est déployé (URL_FRONT_VERCEL).
+      CORS_ORIGINS: https://${DOMAINE:?à définir dans .env.prod}${URL_FRONT_VERCEL:+,${URL_FRONT_VERCEL}}
+    volumes:
+      - ./infra/traefik/demarrer-prod.sh:/etc/traefik/demarrer-prod.sh:ro
+      - ./infra/traefik/traefik.prod.yml:/etc/traefik/traefik.prod.yml:ro
+      - ./infra/traefik/dynamique.yml:/etc/traefik/dynamique.yml:ro
+      - ./infra/traefik/plugins-local:/plugins-local:ro
+      - traefik-acme:/acme
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      consul:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+    logging: *journaux
+    networks:
+      billetterie:
+        # Commandes appelle Billets, Catalogue et Paiements par https://<domaine> : ces alias
+        # le résolvent vers Traefik sans sortir de la VM (certificat Let's Encrypt valide).
+        aliases:
+          - ${DOMAINE:?à définir dans .env.prod}
+          - partenaires.${DOMAINE:?à définir dans .env.prod}
+
+  consul:
+    image: hashicorp/consul:1.21.5
+    # Un seul nœud, état en mémoire : les services se réinscrivent à leur démarrage.
+    command: ["agent", "-dev", "-client=0.0.0.0", "-config-dir=/consul/definitions"]
+    volumes:
+      # Keycloak et le front, routés sur le point d'entrée websecure.
+      - ./infra/consul/prod:/consul/definitions:ro
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     restart: unless-stopped
     logging: *journaux
     networks: [billetterie]
@@ -102,13 +197,12 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.1
     # Mode production ; le realm versionné est importé s'il n'existe pas encore (un changement
-    # de domaine sur un realm déjà importé se fait à la main dans la console).
+    # sur un realm déjà importé se fait par kcadm ou la console, voir docs/deploiement.md).
     command: ["start", "--import-realm"]
     environment:
       KC_DB: postgres
-      # Base Neon keycloak, URL JDBC avec sslmode=require.
-      KC_DB_URL: ${KEYCLOAK_DB_URL:?à définir dans .env.prod}
-      KC_DB_USERNAME: ${KEYCLOAK_DB_USERNAME:?à définir dans .env.prod}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?à définir dans .env.prod}
       KC_HTTP_RELATIVE_PATH: /auth
       # TLS terminé par Traefik : HTTP en clair sur le réseau interne seulement.
@@ -117,8 +211,7 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
-      # Heap bornée sous la limite du conteneur (métaspace et piles en plus).
-      JAVA_OPTS_KC_HEAP: -Xms256m -Xmx640m
+      JAVA_OPTS_KC_HEAP: -Xms256m -Xmx768m
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?à définir dans .env.prod}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?à définir dans .env.prod}
       # Remplacent les ${...} de infra/keycloak/realm-billetterie.json à l'import.
@@ -127,10 +220,21 @@ services:
       KEYCLOAK_MDP_CLIENT: ${KEYCLOAK_MDP_CLIENT:?à définir dans .env.prod}
       KEYCLOAK_MDP_ADMIN: ${KEYCLOAK_MDP_ADMIN:?à définir dans .env.prod}
       KEYCLOAK_URL_FRONT: https://${DOMAINE:?à définir dans .env.prod}
+      KEYCLOAK_URL_FRONT_VERCEL: ${URL_FRONT_VERCEL:-https://${DOMAINE}}
+      # E-mails de Keycloak (confirmation d'inscription, mot de passe oublié) par Brevo.
+      KEYCLOAK_SMTP_HOTE: ${SMTP_HOTE:?à définir dans .env.prod}
+      KEYCLOAK_SMTP_PORT: ${SMTP_PORT:-587}
+      KEYCLOAK_SMTP_EXPEDITEUR: ${SMTP_EXPEDITEUR:?à définir dans .env.prod}
+      KEYCLOAK_SMTP_UTILISATEUR: ${SMTP_UTILISATEUR:?à définir dans .env.prod}
+      KEYCLOAK_SMTP_MOT_DE_PASSE: ${SMTP_MOT_DE_PASSE:?à définir dans .env.prod}
+      KEYCLOAK_SMTP_AUTH: "true"
+      KEYCLOAK_SMTP_STARTTLS: "true"
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
-      # Thème de la page de connexion (loginTheme du realm).
       - ./infra/keycloak/themes/ovation:/opt/keycloak/themes/ovation:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       # L'image n'a ni curl ni wget : requête HTTP faite par bash sur le port de gestion.
       test:
@@ -142,11 +246,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 60s
+      start_period: 90s
     deploy:
       resources:
         limits:
-          memory: 1024m
+          memory: 1536m
     restart: unless-stopped
     logging: *journaux
     networks: [billetterie]
@@ -154,11 +258,11 @@ services:
   verificateur:
     image: ghcr.io/agne-moussa/billetterie-verificateur:${IMAGE_TAG:?à définir dans .env.prod}
     environment:
-      # Émetteur public des jetons (KC_HOSTNAME) ; clés lues par le réseau interne.
       JWT_EMETTEUR: https://${DOMAINE:?à définir dans .env.prod}/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}
       JWT_AUDIENCE: billetterie-api
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/certs
-      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-}
+      # Mêmes routes publiques qu'en local (lectures du catalogue et des places).
+      ROUTES_PUBLIQUES: ${ROUTES_PUBLIQUES:-GET /api/v1/events,GET /api/v1/venues,GET /api/v1/shows,GET /api/v1/seats}
     deploy:
       resources:
         limits:
@@ -167,47 +271,146 @@ services:
     logging: *journaux
     networks: [billetterie]
 
-  # --- Service echo : une instance ---------------------------------------------------------
-  # Migrations lancées par le workflow avant up -d, puis de nouveau (sans effet) par up -d.
+  # --- Services métier : migrations, puis une instance --------------------------------------
   echo-migrations:
+    <<: *migrations
     image: ghcr.io/agne-moussa/billetterie-echo:${IMAGE_TAG:?à définir dans .env.prod}
-    command: ["alembic", "upgrade", "head"]
     environment: &echo-env
-      # Base Neon echo : postgresql+asyncpg://...?ssl=require (asyncpg, pas sslmode).
-      DATABASE_URL: ${ECHO_DATABASE_URL:?à définir dans .env.prod}
-      CONSUL_URL: http://consul:8500
-      # Routes Consul sur le point d'entrée HTTPS (commun.registre.tags_traefik).
-      TRAEFIK_POINT_ENTREE: websecure
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env.prod}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env.prod}@rabbitmq:5672/
-      # Pas de Tempo en démo : OTEL_EXPORTER_OTLP_ENDPOINT absente, aucune trace exportée.
-      JWT_EMETTEUR: https://${DOMAINE:?à définir dans .env.prod}/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}
-      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/certs
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-    logging: *journaux
-    networks: [billetterie]
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://echo:${ECHO_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/echo
 
   echo:
+    <<: *instance
     image: ghcr.io/agne-moussa/billetterie-echo:${IMAGE_TAG:?à définir dans .env.prod}
     environment:
       <<: *echo-env
       INSTANCE: echo
     depends_on:
+      <<: *dependances-instance
       echo-migrations:
         condition: service_completed_successfully
-      consul:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-    restart: unless-stopped
-    logging: *journaux
-    networks: [billetterie]
+
+  catalogue-migrations:
+    <<: *migrations
+    image: ghcr.io/agne-moussa/billetterie-catalogue:${IMAGE_TAG:?à définir dans .env.prod}
+    environment: &catalogue-env
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://catalogue:${CATALOGUE_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/catalogue
+      REDIS_URL: redis://redis:6379/0
+
+  catalogue:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-catalogue:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *catalogue-env
+      INSTANCE: catalogue
+    depends_on:
+      <<: *dependances-instance
+      catalogue-migrations:
+        condition: service_completed_successfully
+
+  billets-migrations:
+    <<: *migrations
+    image: ghcr.io/agne-moussa/billetterie-billets:${IMAGE_TAG:?à définir dans .env.prod}
+    environment: &billets-env
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://billets:${BILLETS_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/billets
+      REDIS_URL: redis://redis:6379/0
+      QR_CLE_SIGNATURE: ${QR_CLE_SIGNATURE:?à définir dans .env.prod}
+
+  billets:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-billets:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *billets-env
+      INSTANCE: billets
+    depends_on:
+      <<: *dependances-instance
+      billets-migrations:
+        condition: service_completed_successfully
+
+  commandes-migrations:
+    <<: *migrations
+    image: ghcr.io/agne-moussa/billetterie-commandes:${IMAGE_TAG:?à définir dans .env.prod}
+    environment: &commandes-env
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://commandes:${COMMANDES_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/commandes
+      # Appels à Billets, Catalogue et Paiements par la gateway, en HTTPS sur le domaine
+      # (alias réseau de Traefik), avec le jeton du client Keycloak services.
+      URL_GATEWAY: https://${DOMAINE:?à définir dans .env.prod}
+      URL_JETON: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env.prod}/protocol/openid-connect/token
+      SERVICES_CLIENT_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env.prod}
+      REDIS_URL: redis://redis:6379/0
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
+
+  commandes:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-commandes:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *commandes-env
+      INSTANCE: commandes
+    depends_on:
+      <<: *dependances-instance
+      commandes-migrations:
+        condition: service_completed_successfully
+
+  # File d'attente : ni base ni migrations (tout est dans Redis).
+  file-attente:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-file-attente:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *env-service
+      INSTANCE: file-attente
+      REDIS_URL: redis://redis:6379/0
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
+      TAILLE_VAGUE: ${TAILLE_VAGUE:-50}
+      INTERVALLE_VAGUES: ${INTERVALLE_VAGUES:-10}
+      DUREE_ADMISSION: ${DUREE_ADMISSION:-600}
+
+  paiements-migrations:
+    <<: *migrations
+    image: ghcr.io/agne-moussa/billetterie-paiements:${IMAGE_TAG:?à définir dans .env.prod}
+    environment: &paiements-env
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://paiements:${PAIEMENTS_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/paiements
+
+  paiements:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-paiements:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *paiements-env
+      INSTANCE: paiements
+    depends_on:
+      <<: *dependances-instance
+      paiements-migrations:
+        condition: service_completed_successfully
+
+  notifications-migrations:
+    <<: *migrations
+    image: ghcr.io/agne-moussa/billetterie-notifications:${IMAGE_TAG:?à définir dans .env.prod}
+    environment: &notifications-env
+      <<: *env-service
+      DATABASE_URL: postgresql+asyncpg://notifications:${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env.prod}@postgres:5432/notifications
+      # Relais SMTP authentifié (Brevo) : STARTTLS sur le port 587.
+      SMTP_HOTE: ${SMTP_HOTE:?à définir dans .env.prod}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_STARTTLS: "true"
+      SMTP_UTILISATEUR: ${SMTP_UTILISATEUR:?à définir dans .env.prod}
+      SMTP_MOT_DE_PASSE: ${SMTP_MOT_DE_PASSE:?à définir dans .env.prod}
+      SMTP_EXPEDITEUR: ${SMTP_EXPEDITEUR:?à définir dans .env.prod}
+
+  notifications:
+    <<: *instance
+    image: ghcr.io/agne-moussa/billetterie-notifications:${IMAGE_TAG:?à définir dans .env.prod}
+    environment:
+      <<: *notifications-env
+      INSTANCE: notifications
+    depends_on:
+      <<: *dependances-instance
+      notifications-migrations:
+        condition: service_completed_successfully
 
   # --- Front : Nginx non privilégié (port 8080), routé sur / hors /api et /auth -------------
   frontend:
@@ -230,6 +433,8 @@ networks:
     name: billetterie
 
 volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
   # Certificats Let's Encrypt (acme.json) : conservés d'un déploiement à l'autre.
   traefik-acme:
-  rabbitmq-data:

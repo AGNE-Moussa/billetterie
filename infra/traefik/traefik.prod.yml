@@ -23,6 +23,9 @@ entryPoints:
         # Les routeurs n'ont que des règles PathPrefix : le domaine du certificat est donné ici.
         domains:
           - main: "${DOMAINE}"
+            # Hôte des revendeurs (BIL-012, HOTE_PARTENAIRES=partenaires.<domaine>).
+            sans:
+              - "partenaires.${DOMAINE}"
   # Ping (healthcheck du conteneur) ; jamais publié par compose.prod.yaml.
   traefik:
     address: ":8080"

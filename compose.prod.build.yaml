@@ -1,0 +1,28 @@
+# Surcouche de compose.prod.yaml : construit les images sur la VM (ARM) au lieu de les tirer de
+# GHCR. Chemin manuel de scripts/deployer-vps.sh, tant que GitHub Actions est indisponible.
+#
+#   docker compose -f compose.prod.yaml -f compose.prod.build.yaml --env-file .env.prod up -d --build --wait
+#
+# Une image par service, construite une seule fois (sur son service de migrations) : l'instance
+# réutilise le même nom d'image (ghcr.io/...:${IMAGE_TAG}, IMAGE_TAG=local sur la VM).
+
+services:
+  echo-migrations:
+    build: { context: ., dockerfile: services/echo/Dockerfile }
+  catalogue-migrations:
+    build: { context: ., dockerfile: services/catalogue/Dockerfile }
+  billets-migrations:
+    build: { context: ., dockerfile: services/billets/Dockerfile }
+  commandes-migrations:
+    build: { context: ., dockerfile: services/commandes/Dockerfile }
+  paiements-migrations:
+    build: { context: ., dockerfile: services/paiements/Dockerfile }
+  notifications-migrations:
+    build: { context: ., dockerfile: services/notifications/Dockerfile }
+  file-attente:
+    build: { context: ., dockerfile: services/file-attente/Dockerfile }
+  verificateur:
+    build: { context: ., dockerfile: infra/verificateur/Dockerfile }
+  # Le front garde /api et /auth relatifs : même origine que l'API sur la VM.
+  frontend:
+    build: { context: frontend, dockerfile: Dockerfile }

@@ -17,13 +17,15 @@
   "passwordPolicy": "length(10) and notUsername and notEmail",
   "loginWithEmailAllowed": true,
   "smtpServer": {
-    "host": "mailpit",
-    "port": "1025",
-    "from": "no-reply@ovation.exemple.test",
+    "host": "${KEYCLOAK_SMTP_HOTE:mailpit}",
+    "port": "${KEYCLOAK_SMTP_PORT:1025}",
+    "from": "${KEYCLOAK_SMTP_EXPEDITEUR:no-reply@ovation.exemple.test}",
     "fromDisplayName": "Ovation",
-    "auth": "false",
+    "auth": "${KEYCLOAK_SMTP_AUTH:false}",
+    "user": "${KEYCLOAK_SMTP_UTILISATEUR:}",
+    "password": "${KEYCLOAK_SMTP_MOT_DE_PASSE:}",
     "ssl": "false",
-    "starttls": "false"
+    "starttls": "${KEYCLOAK_SMTP_STARTTLS:false}"
   },
   "groups": [
     {
@@ -763,11 +765,11 @@
           }
         }
       ],
-      "redirectUris": ["${KEYCLOAK_URL_FRONT}/*"],
-      "webOrigins": ["${KEYCLOAK_URL_FRONT}"],
+      "redirectUris": ["${KEYCLOAK_URL_FRONT}/*", "${KEYCLOAK_URL_FRONT_VERCEL:http://localhost:5173}/*"],
+      "webOrigins": ["${KEYCLOAK_URL_FRONT}", "${KEYCLOAK_URL_FRONT_VERCEL:http://localhost:5173}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${KEYCLOAK_URL_FRONT}/*"
+        "post.logout.redirect.uris": "${KEYCLOAK_URL_FRONT}/*##${KEYCLOAK_URL_FRONT_VERCEL:http://localhost:5173}/*"
       }
     },
     {
