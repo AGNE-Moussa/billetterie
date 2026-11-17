@@ -2,7 +2,8 @@
 #   traefik.http.routers.<nom>.middlewares=standard@file     (API des clients du front)
 #   traefik.http.routers.<nom>.middlewares=partenaires@file  (API des revendeurs)
 #   traefik.http.routers.<nom>.middlewares=public@file       (Keycloak et fichiers du front)
-# Aucune route ici : chaque service déclare la sienne dans ses tags.
+# Chaque service déclare sa route dans ses tags ; seul le routeur de repli 503 (`repli-api`, en
+# fin de fichier) est déclaré ici.
 # standard et partenaires vérifient le jeton : un service est protégé par défaut, ses routes
 # publiques se déclarent dans ROUTES_PUBLIQUES du vérificateur.
 
@@ -87,3 +88,33 @@ http:
     public:
       chain:
         middlewares: [correlation, cors, limite-generale]
+
+    # Repli : toute requête /api reçoit le 503 Problem Details du vérificateur.
+    repli-indisponible:
+      replacePath:
+        path: /indisponible
+
+    # Marque les réponses du repli : un client (ou un test qui attend la découverte d'une route)
+    # distingue « service sans instance » d'une réponse du service lui-même.
+    repli-marque:
+      headers:
+        customResponseHeaders:
+          X-Gateway-Repli: "true"
+
+  # Routeur de repli, seule route déclarée ici. Priorité 1 : il ne sert que lorsqu'aucun routeur
+  # de service ne correspond, c'est-à-dire quand le service n'a plus d'instance saine dans
+  # Consul (son routeur disparaît). Le client reçoit alors 503 SERVICE_INDISPONIBLE au lieu du
+  # 404 de Traefik. Le front (priorité 1 aussi) exclut /api : les deux règles ne se recouvrent
+  # pas. Sans entryPoints : actif sur web (local) comme sur websecure (démo).
+  routers:
+    repli-api:
+      rule: PathPrefix(`/api`)
+      priority: 1
+      middlewares: [public, repli-marque, repli-indisponible]
+      service: indisponible
+
+  services:
+    indisponible:
+      loadBalancer:
+        servers:
+          - url: http://verificateur:8000

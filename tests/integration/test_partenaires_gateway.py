@@ -148,10 +148,14 @@ async def _exposer(service: str, instances: list[str], *, partenaires: bool) -> 
 async def _attendre_route(
     client: httpx.AsyncClient, route: str, entetes: dict[str, str], delai: float = 45.0
 ) -> None:
-    """Attend que Traefik ait découvert la route (404 tant qu'elle n'existe pas)."""
+    """Attend que Traefik ait découvert la route.
+
+    404, ou repli 503 marqué X-Gateway-Repli, tant qu'elle n'existe pas.
+    """
     limite = time.monotonic() + delai
     while time.monotonic() < limite:
-        if (await client.get(route, headers=entetes)).status_code != 404:
+        reponse = await client.get(route, headers=entetes)
+        if reponse.status_code != 404 and "x-gateway-repli" not in reponse.headers:
             return
         await anyio.sleep(1)
     raise AssertionError(f"Route {route} jamais découverte par Traefik")
