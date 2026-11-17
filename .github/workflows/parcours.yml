@@ -1,0 +1,71 @@
+name: Parcours Newman
+
+# Parcours complet postman/billetterie.json (make parcours) contre la plateforme entière, démarrée
+# dans le runner. Trop long et trop lourd pour chaque pull request (une douzaine de conteneurs,
+# Keycloak) : lancé à la main (onglet Actions) et chaque nuit sur main. Décision de suivi du
+# bilan BIL-024 ; la proposition venait de BIL-014.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # 3 h UTC
+
+concurrency:
+  group: parcours-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  parcours:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      # .env jetable propre au runner : chaque secret est tiré au hasard et masqué dans les
+      # journaux ; rien n'est lu dans les secrets du dépôt, rien n'est conservé après le job.
+      - name: Générer un .env jetable
+        run: |
+          secret() { local valeur; valeur="$(openssl rand -hex 24)"; echo "::add-mask::$valeur"; echo "$valeur"; }
+          {
+            echo "POSTGRES_USER=postgres"
+            for nom in POSTGRES_PASSWORD ECHO_DB_PASSWORD CATALOGUE_DB_PASSWORD BILLETS_DB_PASSWORD \
+              COMMANDES_DB_PASSWORD PAIEMENTS_DB_PASSWORD NOTIFICATIONS_DB_PASSWORD QR_CLE_SIGNATURE \
+              ADMISSION_CLE_SIGNATURE RABBITMQ_DEFAULT_PASS KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD \
+              KEYCLOAK_SERVICES_SECRET KEYCLOAK_REVENDEUR_SECRET KEYCLOAK_MDP_CLIENT KEYCLOAK_MDP_ADMIN \
+              GRAFANA_ADMIN_PASSWORD; do
+              echo "$nom=$(secret)"
+            done
+            echo "RABBITMQ_DEFAULT_USER=billetterie"
+            echo "KEYCLOAK_ADMIN=admin"
+            echo "KEYCLOAK_REALM=billetterie"
+            echo "CORS_ORIGINS=http://localhost"
+          } > .env
+
+      - name: Démarrer la plateforme
+        run: docker compose up -d --wait --build
+
+      - name: Charger le jeu de démonstration
+        run: make demo
+
+      - name: Jouer le parcours complet
+        run: bash scripts/demo.sh parcours
+
+      - name: Garder les journaux de Newman
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-parcours
+          path: postman/resultats/
+          if-no-files-found: ignore
+
+      - name: Journaux des conteneurs en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Arrêter la plateforme
+        if: always()
+        run: docker compose down --volumes
