@@ -2,13 +2,37 @@
   "realm": "billetterie",
   "displayName": "Ovation",
   "loginTheme": "ovation",
+  "emailTheme": "ovation",
   "internationalizationEnabled": true,
   "supportedLocales": ["fr"],
   "defaultLocale": "fr",
   "enabled": true,
   "sslRequired": "external",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "duplicateEmailsAllowed": false,
+  "passwordPolicy": "length(10) and notUsername and notEmail",
   "loginWithEmailAllowed": true,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "no-reply@ovation.exemple.test",
+    "fromDisplayName": "Ovation",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
+  },
+  "groups": [
+    {
+      "name": "clients",
+      "path": "/clients",
+      "realmRoles": ["customer"]
+    }
+  ],
+  "defaultGroups": ["/clients"],
   "bruteForceProtected": true,
   "accessTokenLifespan": 300,
   "roles": {

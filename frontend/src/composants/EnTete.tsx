@@ -1,5 +1,5 @@
-// En-tête commun à toutes les pages : la marque (logo, non focalisable), puis « Se connecter »
-// sans session ; connecté, le preferred_username et « Se déconnecter » ; « Votre session a
+// En-tête commun à toutes les pages : la marque (logo, non focalisable), puis « Créer un compte »
+// et « Se connecter » sans session ; connecté, le preferred_username et « Se déconnecter » ; « Votre session a
 // expiré » après un échec du renouvellement. La mise en page y place la navigation et la bascule
 // de thème (`children`), avant la connexion dans l'ordre de tabulation.
 import type { ReactNode } from "react";
@@ -14,8 +14,10 @@ export interface ProprietesEnTete {
 }
 
 export function EnTete({ children }: ProprietesEnTete) {
-  const { statut, nomUtilisateur, sessionExpiree, seConnecter, seDeconnecter } = useSession();
   const { pathname, search, hash } = useLocation();
+  const { statut, nomUtilisateur, sessionExpiree, seConnecter, creerCompte, seDeconnecter } =
+    useSession();
+  const ici = `${pathname}${search}${hash}`;
 
   return (
     <header className={styles.entete}>
@@ -46,13 +48,18 @@ export function EnTete({ children }: ProprietesEnTete) {
             </>
           ) : null}
           {statut === "non-connecte" ? (
-            <button
-              type="button"
-              className={styles.action}
-              onClick={() => void seConnecter(`${pathname}${search}${hash}`)}
-            >
-              Se connecter
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.secondaire}
+                onClick={() => void creerCompte(ici)}
+              >
+                Créer un compte
+              </button>{" "}
+              <button type="button" className={styles.action} onClick={() => void seConnecter(ici)}>
+                Se connecter
+              </button>
+            </>
           ) : null}
         </div>
       </div>

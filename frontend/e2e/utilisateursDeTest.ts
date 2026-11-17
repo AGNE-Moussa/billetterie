@@ -36,8 +36,11 @@ export function motDePasse(utilisateur: UtilisateurDeTest): string {
   return valeur;
 }
 
-/** Libellé du champ identifiant du thème « ovation » (infra/keycloak/themes/ovation). */
-export const LIBELLE_IDENTIFIANT = "Adresse e-mail ou identifiant";
+/**
+ * Champ identifiant du thème « ovation » : l'adresse e-mail (registrationEmailAsUsername) ; le
+ * nom d'utilisateur des comptes de test (client.test) y reste accepté.
+ */
+export const LIBELLE_IDENTIFIANT = "Adresse e-mail";
 
 /** Remplit et envoie le formulaire de connexion Keycloak (champs par libellé, bouton par rôle). */
 export async function seConnecterSurKeycloak(

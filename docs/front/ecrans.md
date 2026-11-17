@@ -7,7 +7,8 @@ fidélité : la structure compte, pas le pixel. Parcours : `parcours.md` ; route
 ## Règles communes
 
 - Chaque écran est rendu dans le `<main>` de `MiseEnPage` (en-tête, navigation, pied de page) ;
-  les maquettes ne montrent que ce `<main>`.
+  les maquettes ne montrent que ce `<main>`. En-tête sans session : « Créer un compte »
+  (inscription Keycloak, `prompt=create`, e-mail confirmé, rôle `customer`) et « Se connecter ».
 - États : chargement `Chargement`, vide `Vide`, erreur `Erreur` (titre et détail du Problem
   Details, décision sur `code`), succès. Composants de BIL-F28 (`Carte`, `TableauPagine`,
   `ChampFormulaire`, `Bouton`, `DialogueConfirmation`) ; notifications pour les retours d'action.
