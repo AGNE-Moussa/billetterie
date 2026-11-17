@@ -59,7 +59,18 @@ def creer_app(
                     # Consommateurs ticketing.order.confirmed et ticketing.ticket.issued
                     # (BIL-009) ; sans URL, aucun. Le service ne publie rien : pas de relais.
                     broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
-                    envoyeur = EnvoyeurSmtp(config.smtp_hote, config.smtp_port, config.smtp_delai)
+                    envoyeur = EnvoyeurSmtp(
+                        config.smtp_hote,
+                        config.smtp_port,
+                        config.smtp_delai,
+                        utilisateur=config.smtp_utilisateur,
+                        mot_de_passe=(
+                            config.smtp_mot_de_passe.get_secret_value()
+                            if config.smtp_mot_de_passe is not None
+                            else None
+                        ),
+                        starttls=config.smtp_starttls,
+                    )
                     abonner_consommateurs(
                         broker, app.state.sessions, envoyeur, config.smtp_expediteur
                     )

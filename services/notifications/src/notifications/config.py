@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Attente maximale d'un échange SMTP, en secondes (décision Q10 de BIL-009).
@@ -32,6 +32,11 @@ class Parametres(BaseSettings):
     # est remis en file.
     smtp_delai: float = Field(default=DELAI_SMTP_PAR_DEFAUT, gt=0)
     smtp_expediteur: str = EXPEDITEUR_PAR_DEFAUT
+    # Relais authentifié de la démo en ligne (Brevo, port 587) : STARTTLS puis identifiants.
+    # Vides en local (Mailpit n'en demande pas).
+    smtp_utilisateur: str | None = None
+    smtp_mot_de_passe: SecretStr | None = None
+    smtp_starttls: bool = False
     # Revérification des jetons (commun.auth) : mêmes valeurs que le vérificateur de la gateway.
     jwt_emetteur: str = "http://localhost/auth/realms/billetterie"
     jwt_audience: str = "billetterie-api"

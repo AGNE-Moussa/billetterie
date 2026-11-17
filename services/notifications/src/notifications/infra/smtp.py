@@ -11,6 +11,7 @@ le code SMTP, sans chaînage : la trace journalisée par le broker ne les montre
 """
 
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 import anyio
@@ -27,14 +28,33 @@ def _sans_donnee_personnelle(erreur: smtplib.SMTPException) -> EnvoiSmtpRefuse:
 
 
 class EnvoyeurSmtp:
-    def __init__(self, hote: str, port: int, delai: float) -> None:
+    """Envoi SMTP. Sans identifiant : serveur ouvert (Mailpit en local). Avec identifiant
+    (relais Brevo de la démo) : STARTTLS, certificat vérifié, puis authentification."""
+
+    def __init__(
+        self,
+        hote: str,
+        port: int,
+        delai: float,
+        *,
+        utilisateur: str | None = None,
+        mot_de_passe: str | None = None,
+        starttls: bool = False,
+    ) -> None:
         self._hote = hote
         self._port = port
         self._delai = delai
+        self._utilisateur = utilisateur
+        self._mot_de_passe = mot_de_passe
+        self._starttls = starttls
 
     def _envoyer_bloquant(self, message: EmailMessage) -> None:
         try:
             with smtplib.SMTP(self._hote, self._port, timeout=self._delai) as serveur:
+                if self._starttls:
+                    serveur.starttls(context=ssl.create_default_context())
+                if self._utilisateur is not None and self._mot_de_passe is not None:
+                    serveur.login(self._utilisateur, self._mot_de_passe)
                 serveur.send_message(message)
         except smtplib.SMTPException as erreur:
             raise _sans_donnee_personnelle(erreur) from None
