@@ -44,6 +44,10 @@
             "type": "string",
             "format": "uuid"
           }
+        },
+        "remboursement_du": {
+          "type": "boolean",
+          "description": "Vrai si Paiements a accepté le paiement de cette commande avant son expiration (réponse perdue, place perdue, séance annulée) : le débit est à rembourser par le ticket de remboursement. Absent ou faux sinon."
         }
       },
       "required": [

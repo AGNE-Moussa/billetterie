@@ -1,0 +1,233 @@
+// E01 Catalogue des événements (route /, BIL-019) : filtres et page dans l'URL, liste paginée
+// de cartes, états chargement, vide et erreur, bandeau du mode dégradé.
+import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useId } from "react";
+import { Link, useSearchParams } from "react-router";
+
+import { listerEvenements, type Lecture } from "../../api/catalogue";
+import type { EvenementPage, EvenementResume } from "../../api/genere/catalogue";
+import { convertirErreur } from "../../api/problemes";
+import { BandeauModeDegrade } from "../../composants/BandeauModeDegrade";
+import { Bouton } from "../../composants/Bouton";
+import { Carte } from "../../composants/Carte";
+import { Chargement } from "../../composants/Chargement";
+import { Erreur } from "../../composants/Erreur";
+import { NOM_MARQUE } from "../../composants/Logo";
+import { Pagination } from "../../composants/Pagination";
+import { Vide } from "../../composants/Vide";
+import { VisuelEvenement } from "../../composants/VisuelEvenement";
+import {
+  FILTRES_VIDES,
+  filtresActifs,
+  lireFiltres,
+  lirePage,
+  versParametres,
+  versRequete,
+  type FiltresCatalogue,
+} from "./filtres";
+import { formaterDateHeure, formaterEuros } from "../../format";
+import { FormulaireFiltres } from "./FormulaireFiltres";
+import styles from "./PageCatalogue.module.css";
+
+/** État de navigation transmis à la fiche : son lien « Retour » garde les filtres. */
+export interface EtatRetourCatalogue {
+  retourCatalogue: string;
+}
+
+export function PageCatalogue() {
+  const [parametres, setParametres] = useSearchParams();
+  const filtres = lireFiltres(parametres);
+  const page = lirePage(parametres);
+  const recherche = versParametres(filtres, page).toString();
+  const idResultats = useId();
+
+  const requete = useQuery({
+    queryKey: ["catalogue", "evenements", versRequete(filtres, page)],
+    queryFn: () => listerEvenements(versRequete(filtres, page)),
+    placeholderData: keepPreviousData,
+  });
+
+  const appliquer = (nouveaux: FiltresCatalogue) => {
+    // Nouveaux filtres : retour à la première page.
+    setParametres(versParametres(nouveaux));
+  };
+  const effacer = () => setParametres(versParametres(FILTRES_VIDES));
+  const changerPage = (numero: number) => setParametres(versParametres(filtres, numero));
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.hero}>
+        <div className={styles.heroDecor} aria-hidden="true" />
+        <div className={styles.heroInterieur}>
+          <p className={styles.surtitre}>{NOM_MARQUE} · Billetterie de spectacles</p>
+          <h1 className={styles.heroTitre}>Événements</h1>
+          <p className={styles.accroche}>
+            Concerts, théâtre, humour : trouvez la séance qui vous ressemble et choisissez votre
+            place, siège par siège, sur le plan de salle.
+          </p>
+          <div className={styles.panneauRecherche}>
+            <FormulaireFiltres
+              key={versParametres(filtres).toString()}
+              initiaux={filtres}
+              surFiltrer={appliquer}
+              surEffacer={effacer}
+            />
+          </div>
+        </div>
+      </div>
+      <section aria-labelledby={idResultats} className={styles.resultats}>
+        <h2 id={idResultats} className={styles.titreResultats}>
+          Résultats
+        </h2>
+        <Resultats
+          requete={requete}
+          filtresEnCours={filtresActifs(filtres)}
+          recherche={recherche}
+          surEffacer={effacer}
+          surChangerPage={changerPage}
+        />
+      </section>
+    </div>
+  );
+}
+
+interface ProprietesResultats {
+  requete: UseQueryResult<Lecture<EvenementPage>>;
+  filtresEnCours: boolean;
+  recherche: string;
+  surEffacer: () => void;
+  surChangerPage: (numero: number) => void;
+}
+
+function Resultats({
+  requete,
+  filtresEnCours,
+  recherche,
+  surEffacer,
+  surChangerPage,
+}: ProprietesResultats) {
+  const { data, error, isPending, isFetching, isPlaceholderData, refetch } = requete;
+
+  if (error !== null) {
+    // 422 (filtres invalides, `du` après `au`) : affiché sous les filtres, à corriger. Autre
+    // erreur (503 BASE_INDISPONIBLE, panne) : « Réessayer ».
+    const { code } = convertirErreur(error);
+    return (
+      <div className={styles.etat}>
+        <Erreur probleme={error} />
+        {code === "REQUETE_INVALIDE" ? null : (
+          <Bouton variante="secondaire" occupe={isFetching} surClic={() => void refetch()}>
+            Réessayer
+          </Bouton>
+        )}
+      </div>
+    );
+  }
+  if (isPending) {
+    return <Chargement libelle="Chargement des événements…" forme="cartes" nombre={6} />;
+  }
+
+  const { donnees, perimee } = data;
+  const { elements, total } = donnees;
+  if (elements.length === 0) {
+    if (total > 0) {
+      return (
+        <>
+          {perimee ? <BandeauModeDegrade /> : null}
+          <Vide
+            message="Cette page n'existe pas."
+            action={
+              <Bouton variante="secondaire" surClic={() => surChangerPage(1)}>
+                Revenir à la première page
+              </Bouton>
+            }
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        {perimee ? <BandeauModeDegrade /> : null}
+        {filtresEnCours ? (
+          <Vide
+            message="Aucun événement ne correspond à ces filtres."
+            action={
+              <Bouton variante="secondaire" surClic={surEffacer}>
+                Effacer les filtres
+              </Bouton>
+            }
+          />
+        ) : (
+          <Vide message="Aucun événement à l'affiche pour l'instant." />
+        )}
+      </>
+    );
+  }
+
+  const etatRetour: EtatRetourCatalogue = {
+    retourCatalogue: recherche === "" ? "" : `?${recherche}`,
+  };
+  const occupe = isFetching && isPlaceholderData;
+  return (
+    <>
+      {perimee ? <BandeauModeDegrade /> : null}
+      <p className={styles.nombre}>{total === 1 ? "1 événement" : `${String(total)} événements`}</p>
+      <ul className={styles.liste} aria-busy={occupe ? true : undefined}>
+        {elements.map((evenement) => (
+          <li key={evenement.id}>
+            <Carte
+              titre={evenement.nom}
+              niveauTitre={3}
+              visuel={<VisuelEvenement graine={evenement.id} nom={evenement.nom} />}
+              actions={
+                <Link
+                  to={`/evenements/${evenement.id}`}
+                  state={etatRetour}
+                  className={styles.lienAction}
+                >
+                  Voir les séances<span className={styles.masque}> de {evenement.nom}</span>
+                </Link>
+              }
+            >
+              <ApercuEvenement evenement={evenement} />
+              <p className={styles.description}>{evenement.description}</p>
+            </Carte>
+          </li>
+        ))}
+      </ul>
+      <Pagination
+        page={donnees.page}
+        size={donnees.size}
+        total={total}
+        surChangerPage={surChangerPage}
+        occupe={occupe}
+      />
+    </>
+  );
+}
+
+/** Prochaine séance (date, ville) et prix d'appel d'une carte ; « bientôt » sans séance à venir. */
+function ApercuEvenement({ evenement }: { evenement: EvenementResume }) {
+  if (evenement.prochaine_seance === null) {
+    return <p className={styles.aucuneDate}>Nouvelles dates bientôt annoncées</p>;
+  }
+  return (
+    <ul className={styles.apercu} aria-label="En bref">
+      <li>
+        <span className={styles.masque}>Prochaine séance : </span>
+        <time dateTime={evenement.prochaine_seance}>
+          {formaterDateHeure(evenement.prochaine_seance)}
+        </time>
+      </li>
+      {evenement.ville !== null ? (
+        <li>
+          <span className={styles.masque}>Ville : </span>
+          {evenement.ville}
+        </li>
+      ) : null}
+      {evenement.prix_min !== null ? (
+        <li className={styles.prix}>À partir de {formaterEuros(evenement.prix_min)}</li>
+      ) : null}
+    </ul>
+  );
+}

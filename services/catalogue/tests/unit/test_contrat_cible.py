@@ -1,10 +1,17 @@
-"""Le contrat de catalogue reprend le contrat cible BIL-002, sans annulation ni modification
-(CA1, décisions Q1 et Q2 du ticket BIL-004)."""
+"""Le contrat de catalogue reprend le contrat cible BIL-002 (CA1, décisions Q1 et Q2 du ticket
+BIL-004), annulation de séance comprise depuis BIL-011 (E1)."""
 
+import secrets
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
+
+from catalogue.config import Parametres
+from catalogue.principal import creer_app
+from commun.contrat import differences_contrat
+from commun.faux_jetons import EmetteurDeTest
 
 RACINE = Path(__file__).resolve().parents[4]
 CONTRAT_SERVICE = RACINE / "services" / "catalogue" / "openapi.yaml"
@@ -26,7 +33,9 @@ def _operations(contrat: dict[str, Any]) -> dict[str, tuple[str, str, dict[str, 
     }
 
 
-def test_le_contrat_de_catalogue_reprend_les_routes_du_contrat_cible_sans_annulation() -> None:
+def test_le_contrat_de_catalogue_reprend_annulerSeance_du_contrat_cible() -> None:  # noqa: N802
+    """BIL-011 (E1) : annulerSeance recopiée du contrat cible, 503 BASE_INDISPONIBLE compris ;
+    toutes les opérations du contrat cible sont reprises à l'identique."""
     service = _operations(_charger(CONTRAT_SERVICE))
     cible = _operations(_charger(CONTRAT_CIBLE))
 
@@ -35,7 +44,27 @@ def test_le_contrat_de_catalogue_reprend_les_routes_du_contrat_cible_sans_annula
 
     assert absentes == []
     assert differentes == []
-    assert "annulerSeance" not in service
-    assert not any(chemin.endswith("/cancellation") for chemin, _, _ in service.values())
+    assert "annulerSeance" in service
+    assert "annulerSeance" in cible
+    assert service["annulerSeance"] == cible["annulerSeance"]
+    chemin, methode, operation = service["annulerSeance"]
+    assert chemin == "/api/v1/events/{evenement_id}/shows/{seance_id}/cancellation"
+    assert methode == "post"
+    assert set(operation["responses"]) >= {"200", "401", "403", "404", "409", "422", "503"}
+    assert "BASE_INDISPONIBLE" in operation["responses"]["503"]["description"]
     assert {methode for _, methode, _ in service.values()} <= {"get", "post"}
-    assert len(service) == 11
+    assert len(service) == 12
+
+
+@pytest.mark.contract
+def test_le_schema_genere_par_fastapi_est_conforme_au_contrat() -> None:
+    url = f"postgresql+asyncpg://catalogue:{secrets.token_urlsafe(16)}@127.0.0.1:5432/catalogue"
+    app = creer_app(
+        Parametres(database_url=url, consul_actif=False),
+        verificateur_jetons=EmetteurDeTest().verificateur(),
+    )
+
+    differences = differences_contrat(_charger(CONTRAT_SERVICE), app.openapi())
+
+    assert not differences, "catalogue diverge de openapi.yaml :\n" + "\n".join(differences)
+    assert "annulerSeance" in _operations(app.openapi())

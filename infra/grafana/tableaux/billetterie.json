@@ -520,6 +520,56 @@
           "tableType": "traces"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Répartition par instance (requêtes/s)",
+      "description": "Requêtes traitées par chaque instance (identifiant Consul), hors /health et /metrics : Traefik répartit la charge entre billets-1 et billets-2, commandes-1 et commandes-2 (BIL-013).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service, instance) (rate(http_server_duree_secondes_count{service=~\"$service\"}[1m]))",
+          "legendFormat": "{{instance}}"
+        }
+      ]
     }
   ],
   "templating": {

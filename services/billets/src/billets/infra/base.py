@@ -1,4 +1,4 @@
-"""Moteur SQLAlchemy et tables de billets (docs/modele-donnees.md, migration 0003).
+"""Moteur SQLAlchemy et tables de billets (docs/modele-donnees.md, migrations 0003 et 0004).
 
 Les tables de messagerie (outbox, messages_traites) viennent de commun.outbox (migration 0002).
 """
@@ -76,6 +76,17 @@ class BilletLigne(Base):
     statut: Mapped[str] = mapped_column(String(10))
     qr_code: Mapped[str] = mapped_column(Text)
     emis_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SeanceAnnuleeLigne(Base):
+    """Séance annulée (migration 0004) ; consultée à l'émission, l'ordre des messages n'étant
+    pas garanti. Remplie par ticketing.show.cancelled (hors BIL-009)."""
+
+    __tablename__ = "seances_annulees"
+
+    # Référence Catalogue.
+    seance_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    annulee_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class BaseIndisponible(ErreurMetier):

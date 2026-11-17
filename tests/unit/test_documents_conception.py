@@ -38,7 +38,9 @@ def test_chaque_contrat_cible_est_un_openapi_valide(contrat: Path) -> None:
 
 
 def test_chaque_service_metier_a_son_contrat_cible() -> None:
-    assert sorted(c.stem for c in CONTRATS) == SERVICES_METIER
+    # Le document des revendeurs (BIL-012, décision Q7) n'est pas un service.
+    contrats_de_service = sorted(c.stem for c in CONTRATS if c.stem != "partenaires")
+    assert contrats_de_service == SERVICES_METIER
 
 
 def test_chaque_evenement_de_la_conception_a_son_schema() -> None:

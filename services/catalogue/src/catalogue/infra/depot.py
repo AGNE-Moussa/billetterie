@@ -9,15 +9,17 @@ import functools
 import logging
 import uuid
 from collections.abc import Callable, Coroutine, Sequence
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, exists, func, insert, or_, select
+from sqlalchemy import ColumnElement, Select, exists, func, insert, or_, select, update
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalogue.domaine.catalogue import (
+    EVENEMENT_SEANCE_ANNULEE,
     EVENEMENT_SEANCE_PROGRAMMEE,
+    ApercuEvenement,
     Categorie,
     Evenement,
     FiltresEvenements,
@@ -25,6 +27,7 @@ from catalogue.domaine.catalogue import (
     NouvelleSeance,
     Rang,
     Seance,
+    donnees_seance_annulee,
     donnees_seance_programmee,
 )
 from catalogue.infra.base import (
@@ -169,6 +172,41 @@ class DepotCatalogueSql:
         requete = select(func.count()).select_from(EvenementLigne).where(*_conditions(filtres))
         return (await self._session.execute(requete)).scalar_one()
 
+    @_base_requise
+    async def apercus_evenements(
+        self, evenement_ids: list[uuid.UUID], maintenant: datetime
+    ) -> dict[uuid.UUID, ApercuEvenement]:
+        # Deux requêtes pour toute la page (jamais une par événement) : la prochaine séance
+        # (DISTINCT ON PostgreSQL, la plus proche par événement) et le prix minimal.
+        a_venir = [
+            SeanceLigne.evenement_id.in_(evenement_ids),
+            SeanceLigne.annulee.is_(False),
+            SeanceLigne.debut >= maintenant,
+        ]
+        prochaines = await self._session.execute(
+            select(SeanceLigne.evenement_id, SeanceLigne.debut, LieuLigne.ville)
+            .join(LieuLigne, LieuLigne.id == SeanceLigne.lieu_id)
+            .where(*a_venir)
+            .order_by(SeanceLigne.evenement_id, SeanceLigne.debut, SeanceLigne.id)
+            .distinct(SeanceLigne.evenement_id)
+        )
+        minimums = await self._session.execute(
+            select(SeanceLigne.evenement_id, func.min(CategorieLigne.prix))
+            .join(CategorieLigne, CategorieLigne.seance_id == SeanceLigne.id)
+            .where(*a_venir)
+            .group_by(SeanceLigne.evenement_id)
+        )
+        # Compréhension, pas dict(résultat) : un Result a une méthode keys() (noms de colonnes).
+        prix = {evenement_id: minimum for evenement_id, minimum in minimums.tuples()}
+        return {
+            evenement_id: ApercuEvenement(
+                prochaine_seance=debut.astimezone(UTC),
+                ville=ville,
+                prix_min=prix.get(evenement_id),
+            )
+            for evenement_id, debut, ville in prochaines.tuples()
+        }
+
     # --- lieux ----------------------------------------------------------------------------
 
     @_base_requise
@@ -307,6 +345,27 @@ class DepotCatalogueSql:
             .where(SeanceLigne.evenement_id == evenement_id)
         )
         return (await self._session.execute(requete)).scalar_one()
+
+    @_base_requise
+    async def annuler_seance(self, seance: Seance) -> bool:
+        """Passage conditionnel `annulee = false` → true et outbox dans une transaction (H3)."""
+        # La condition `annulee = false` départage deux annulations simultanées : la seconde
+        # attend le verrou de ligne de la première, relit la ligne commitée et ne change rien.
+        resultat = await self._session.execute(
+            update(SeanceLigne)
+            .where(SeanceLigne.id == seance.id, SeanceLigne.annulee.is_(False))
+            .values(annulee=True)
+            .returning(SeanceLigne.id)
+        )
+        if resultat.first() is None:
+            await self._session.rollback()
+            return False
+        await publier_plus_tard(
+            self._session,
+            EvenementPublie.creer(EVENEMENT_SEANCE_ANNULEE, donnees_seance_annulee(seance)),
+        )
+        await self._session.commit()
+        return True
 
     async def _seances(self, requete: Select[Any]) -> list[Seance]:
         """Séances de la requête, dans son ordre, avec leurs catégories et leurs rangs."""

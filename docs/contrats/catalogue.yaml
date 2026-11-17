@@ -461,6 +461,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/shows/{seance_id}:
     get:
       tags:

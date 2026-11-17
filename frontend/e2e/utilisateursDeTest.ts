@@ -36,12 +36,15 @@ export function motDePasse(utilisateur: UtilisateurDeTest): string {
   return valeur;
 }
 
+/** Libellé du champ identifiant du thème « ovation » (infra/keycloak/themes/ovation). */
+export const LIBELLE_IDENTIFIANT = "Adresse e-mail ou identifiant";
+
 /** Remplit et envoie le formulaire de connexion Keycloak (champs par libellé, bouton par rôle). */
 export async function seConnecterSurKeycloak(
   page: Page,
   utilisateur: UtilisateurDeTest,
 ): Promise<void> {
-  await page.getByLabel("Username or email").fill(utilisateur.nom);
-  await page.getByLabel("Password", { exact: true }).fill(motDePasse(utilisateur));
-  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.getByLabel(LIBELLE_IDENTIFIANT).fill(utilisateur.nom);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(motDePasse(utilisateur));
+  await page.getByRole("button", { name: "Se connecter" }).click();
 }

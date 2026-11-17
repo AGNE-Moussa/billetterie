@@ -1,0 +1,183 @@
+/*
+ * Page de connexion « Ovation » : reprend les jetons de frontend/src/theme/theme.css (magenta et
+ * violet sur prune profond). Fond « scène » toujours sombre, carte claire ou sombre selon la
+ * préférence du système (classe pf-v5-theme-dark posée par keycloak.v2, darkMode=true).
+ * Polices système uniquement : aucune ressource externe.
+ */
+:root {
+  --ovation-principale: #b0127a;
+  --ovation-principale-survol: #8c0d61;
+  --ovation-texte: #1b1426;
+  --ovation-texte-attenue: #5a5068;
+  --ovation-surface: #ffffff;
+  --ovation-bordure: #8d819b;
+  --ovation-lien: #a8106f;
+  --ovation-focus: #c2410c;
+  --ovation-police: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --ovation-police-titre: "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed",
+    "Arial Narrow", system-ui, sans-serif;
+
+  --pf-v5-global--FontFamily--text: var(--ovation-police);
+  --pf-v5-global--FontFamily--heading: var(--ovation-police-titre);
+  --pf-v5-global--primary-color--100: var(--ovation-principale);
+  --pf-v5-global--primary-color--200: var(--ovation-principale-survol);
+  --pf-v5-global--link--Color: var(--ovation-lien);
+  --pf-v5-global--link--Color--hover: var(--ovation-principale-survol);
+}
+
+.pf-v5-theme-dark {
+  --ovation-principale: #ff6ec7;
+  --ovation-principale-survol: #ff9bd8;
+  --ovation-texte: #f4eff9;
+  --ovation-texte-attenue: #bbb0c8;
+  --ovation-surface: #1a1424;
+  --ovation-bordure: #7a6c8c;
+  --ovation-lien: #ff8fd3;
+  --ovation-focus: #fdba74;
+}
+
+/* Fond « scène » : halos magenta et violet, comme le bandeau d'accueil du site. */
+html,
+body#keycloak-bg,
+.pf-v5-c-login {
+  min-height: 100vh;
+  background:
+    radial-gradient(60rem 30rem at 15% 0%, rgb(212 20 127 / 45%), transparent 60%),
+    radial-gradient(50rem 30rem at 90% 20%, rgb(91 46 224 / 45%), transparent 60%),
+    linear-gradient(180deg, #1a0f29 0%, #120a1c 100%) fixed;
+  font-family: var(--ovation-police);
+}
+
+.pf-v5-c-login__container {
+  max-width: 28rem;
+  padding-inline: 1rem;
+}
+
+/* En-tête : billet stylisé (même dessin que frontend/src/composants/Logo.tsx) et nom. */
+#kc-header {
+  display: flex;
+  justify-content: center;
+  margin-block: 2.5rem 1.5rem;
+}
+
+#kc-header-wrapper {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-family: var(--ovation-police-titre);
+  font-size: 2rem;
+  font-weight: 800;
+  font-stretch: condensed;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-transform: none;
+}
+
+#kc-header-wrapper::before {
+  content: "";
+  display: block;
+  width: 52px;
+  height: 36px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 32'%3E%3Cdefs%3E%3ClinearGradient id='d' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff4fae'/%3E%3Cstop offset='.55' stop-color='%23a63be6'/%3E%3Cstop offset='1' stop-color='%235b2ee0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform='rotate(-8 24 16)'%3E%3Cpath d='M6 4h36a2 2 0 0 1 2 2v6a4 4 0 0 0 0 8v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a4 4 0 0 0 0-8V6a2 2 0 0 1 2-2z' fill='url(%23d)'/%3E%3Cpath d='M33 7v18' stroke='%23fff' stroke-opacity='.7' stroke-width='1.6' stroke-dasharray='2 2.4' stroke-linecap='round'/%3E%3Cpath d='M18.5 9.5l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E")
+    center / contain no-repeat;
+  filter: drop-shadow(0 3px 6px rgb(176 18 122 / 45%));
+}
+
+/* Carte du formulaire. */
+.pf-v5-c-login__main {
+  --pf-v5-c-login__main--BackgroundColor: var(--ovation-surface);
+  background-color: var(--ovation-surface);
+  color: var(--ovation-texte);
+  border-radius: 1rem;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 35%);
+  overflow: hidden;
+}
+
+/* Liseré dégradé de la marque en haut de la carte. */
+.pf-v5-c-login__main::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: linear-gradient(120deg, #d4147f 0%, #8f2bd9 55%, #5b2ee0 100%);
+}
+
+#kc-page-title {
+  font-family: var(--ovation-police-titre);
+  font-weight: 800;
+  font-size: 1.6rem;
+  color: var(--ovation-texte);
+}
+
+.pf-v5-c-form__label-text,
+.pf-v5-c-check__label {
+  color: var(--ovation-texte);
+  font-weight: 600;
+}
+
+.pf-v5-c-login__main-footer-band,
+.pf-v5-c-login__main-footer,
+#kc-registration {
+  color: var(--ovation-texte-attenue);
+}
+
+/* Champs : bordure visible (3:1), arrondis du site, focus orange comme sur le front. */
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderRadius: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.pf-v5-c-form-control > input:focus-visible,
+.pf-v5-c-button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--ovation-focus);
+  outline-offset: 2px;
+}
+
+/* Bouton principal : pilule au dégradé de la marque, comme « Réserver » sur le site. */
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--ovation-principale);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ovation-principale-survol);
+  --pf-v5-c-button--m-primary--Color: #ffffff;
+  background: linear-gradient(120deg, #b0127a 0%, #7a23c4 100%);
+  border-radius: 999px;
+  font-weight: 700;
+  padding-block: 0.75rem;
+  box-shadow: 0 6px 16px rgb(176 18 122 / 35%);
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 180ms;
+}
+
+.pf-v5-c-button.pf-m-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgb(176 18 122 / 45%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-v5-c-button.pf-m-primary {
+    transition: none;
+  }
+
+  .pf-v5-c-button.pf-m-primary:hover {
+    transform: none;
+  }
+}
+
+a {
+  color: var(--ovation-lien);
+}
+
+/* Messages d'erreur ou d'information au-dessus du formulaire. */
+.pf-v5-c-alert {
+  border-radius: 0.5rem;
+}
+
+@media (max-width: 30rem) {
+  #kc-header {
+    margin-block: 1.5rem 1rem;
+  }
+
+  #kc-header-wrapper {
+    font-size: 1.6rem;
+  }
+}

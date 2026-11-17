@@ -2,7 +2,8 @@
 #   traefik.http.routers.<nom>.middlewares=standard@file     (API des clients du front)
 #   traefik.http.routers.<nom>.middlewares=partenaires@file  (API des revendeurs)
 #   traefik.http.routers.<nom>.middlewares=public@file       (Keycloak et fichiers du front)
-# Aucune route ici : chaque service déclare la sienne dans ses tags.
+# Chaque service déclare sa route dans ses tags ; seul le routeur de repli 503 (`repli-api`, en
+# fin de fichier) est déclaré ici.
 # standard et partenaires vérifient le jeton : un service est protégé par défaut, ses routes
 # publiques se déclarent dans ROUTES_PUBLIQUES du vérificateur.
 
@@ -43,9 +44,18 @@ http:
     # Vérification du JWT par infra/verificateur avant le routage (401 sans jeton valide).
     # Traefik retire de la requête les en-têtes listés avant d'y recopier ceux du vérificateur :
     # un client ne peut pas fournir lui-même un X-User-Id.
+    # Chaîne standard : le vérificateur refuse un jeton partner (403 ROLE_MANQUANT), un
+    # revendeur ne contourne pas son quota (BIL-012, décision Q2).
     verification-jeton:
       forwardAuth:
         address: http://verificateur:8000/verifier
+        authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
+
+    # Chaîne partenaires : seul un jeton partner passe (403 ROLE_MANQUANT sinon) ; sans jeton,
+    # une route publique passe comme sur la chaîne standard.
+    verification-jeton-partenaires:
+      forwardAuth:
+        address: http://verificateur:8000/verifier/partenaires
         authResponseHeaders: [X-User-Id, X-User-Roles, X-Client-Id]
 
     # Instance injoignable (tuée, pas encore retirée de Consul) : la requête est rejouée vers
@@ -67,10 +77,44 @@ http:
     partenaires:
       chain:
         middlewares:
-          [correlation, cors, verification-jeton, limite-partenaires, nouvelles-tentatives]
+          - correlation
+          - cors
+          - verification-jeton-partenaires
+          - limite-partenaires
+          - nouvelles-tentatives
 
     # Sans vérification : Keycloak délivre les jetons, il ne peut pas en exiger un ; les
     # fichiers du front se chargent avant toute connexion.
     public:
       chain:
         middlewares: [correlation, cors, limite-generale]
+
+    # Repli : toute requête /api reçoit le 503 Problem Details du vérificateur.
+    repli-indisponible:
+      replacePath:
+        path: /indisponible
+
+    # Marque les réponses du repli : un client (ou un test qui attend la découverte d'une route)
+    # distingue « service sans instance » d'une réponse du service lui-même.
+    repli-marque:
+      headers:
+        customResponseHeaders:
+          X-Gateway-Repli: "true"
+
+  # Routeur de repli, seule route déclarée ici. Priorité 1 : il ne sert que lorsqu'aucun routeur
+  # de service ne correspond, c'est-à-dire quand le service n'a plus d'instance saine dans
+  # Consul (son routeur disparaît). Le client reçoit alors 503 SERVICE_INDISPONIBLE au lieu du
+  # 404 de Traefik. Le front (priorité 1 aussi) exclut /api : les deux règles ne se recouvrent
+  # pas. Sans entryPoints : actif sur web (local) comme sur websecure (démo).
+  routers:
+    repli-api:
+      rule: PathPrefix(`/api`)
+      priority: 1
+      middlewares: [public, repli-marque, repli-indisponible]
+      service: indisponible
+
+  services:
+    indisponible:
+      loadBalancer:
+        servers:
+          - url: http://verificateur:8000

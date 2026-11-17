@@ -1,4 +1,5 @@
-"""Règles des migrations de billets (E4 du plan BIL-006 ; rules/migrations.md), sans base."""
+"""Règles des migrations de billets (E4 du plan BIL-006, E5 du plan BIL-009 ;
+rules/migrations.md), sans base."""
 
 import ast
 import re
@@ -13,6 +14,8 @@ CONTRAINTES = {
     "fk_billets_place",
     "uq_billets_place",
     "ck_billets_statut",
+    # Décision Q3 de BIL-009 : séances annulées, consultées à l'émission.
+    "pk_seances_annulees",
 }
 FABRIQUES = {"PrimaryKeyConstraint", "UniqueConstraint", "ForeignKeyConstraint", "CheckConstraint"}
 
@@ -40,7 +43,7 @@ def test_les_migrations_de_billets_suivent_les_regles() -> None:
     nommees: set[str] = set()
 
     assert numeros == [f"{n:04d}" for n in range(1, len(fichiers) + 1)], numeros
-    assert len(fichiers) >= 3, numeros
+    assert len(fichiers) >= 4, numeros
     precedente: str | None = None
     for fichier in fichiers:
         arbre = ast.parse(fichier.read_text(encoding="utf-8"))

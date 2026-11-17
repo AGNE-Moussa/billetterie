@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from catalogue.api.dependances import obtenir_cache, obtenir_depot, obtenir_maintenant
 from catalogue.config import Parametres
 from catalogue.domaine.catalogue import (
+    ApercuEvenement,
     Categorie,
     DepotCatalogue,
     Evenement,
@@ -57,6 +58,8 @@ class DepotEnMemoire:
         # `liste_commencee`, puis attend `bloquer_listes`.
         self.bloquer_listes: anyio.Event | None = None
         self.liste_commencee: anyio.Event | None = None
+        # BIL-011 : séances dont l'annulation a publié ticketing.show.cancelled, dans l'ordre.
+        self.annulations_publiees: list[UUID] = []
 
     def _verifier(self) -> None:
         if self.injoignable:
@@ -185,6 +188,29 @@ class DepotEnMemoire:
         self._lire()
         return len(self._filtrer(filtres))
 
+    async def apercus_evenements(
+        self, evenement_ids: list[UUID], maintenant: datetime
+    ) -> dict[UUID, ApercuEvenement]:
+        # Hors du compteur `lectures` : complète la page déjà lue, comme la requête SQL.
+        self._verifier()
+        apercus: dict[UUID, ApercuEvenement] = {}
+        for evenement_id in evenement_ids:
+            a_venir = sorted(
+                (
+                    s
+                    for s in self.seances.values()
+                    if s.evenement_id == evenement_id and not s.annulee and s.debut >= maintenant
+                ),
+                key=lambda s: (s.debut, s.id),
+            )
+            if a_venir:
+                apercus[evenement_id] = ApercuEvenement(
+                    prochaine_seance=a_venir[0].debut,
+                    ville=self.lieux[a_venir[0].lieu_id].ville,
+                    prix_min=min(c.prix for s in a_venir for c in s.categories),
+                )
+        return apercus
+
     async def ajouter_lieu(self, nom: str, adresse: str, ville: str) -> Lieu:
         self._verifier()
         return self.semer_lieu(nom, adresse, ville)
@@ -238,6 +264,23 @@ class DepotEnMemoire:
         self._lire()
         return len(self._seances_de(evenement_id))
 
+    async def annuler_seance(self, seance: Seance) -> bool:
+        """Passage conditionnel `annulee = false` → true ; chaque passage réussi « publie »
+        ticketing.show.cancelled (noté dans `annulations_publiees`, BIL-011 H3)."""
+        self._verifier()
+        actuelle = self.seances.get(seance.id)
+        if actuelle is None or actuelle.annulee:
+            return False
+        self.seances[seance.id] = replace(actuelle, annulee=True)
+        self.annulations_publiees.append(seance.id)
+        return True
+
+    def semer_seance_annulee(self, seance: Seance) -> Seance:
+        """Séance déjà annulée, posée sans passer par le domaine (aucun événement noté)."""
+        annulee = replace(seance, annulee=True)
+        self.seances[seance.id] = annulee
+        return annulee
+
 
 class CacheEnMemoire:
     """Double du port `CacheCatalogue` : expiration sur une horloge pilotée par `avancer`.
@@ -288,6 +331,11 @@ class CacheEnMemoire:
         await self._entrer()
         self.generations[famille] = self.generations.get(famille, 0) + 1
         return self.generations[famille]
+
+    async def supprimer(self, *cles: str) -> None:
+        await self._entrer()
+        for cle in cles:
+            self._valeurs.pop(cle, None)
 
 
 @dataclass(frozen=True)

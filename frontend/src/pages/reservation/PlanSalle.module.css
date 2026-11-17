@@ -1,0 +1,167 @@
+/* Plan de salle (E03) : scène incurvée en haut, sièges arrondis colorés par catégorie, défilement
+   horizontal sur mobile. Chaque état reste distinct sans la couleur seule : libre (teinte claire
+   et bordure pleine), indisponible (grisé, bordure pointillée, numéro barré), sélectionné (plein,
+   anneau épais). */
+
+.conteneur {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espace-6);
+  overflow-x: auto;
+  padding: var(--espace-2) var(--espace-2) var(--espace-4);
+}
+
+/* Scène : arc lumineux, bord bas incurvé vers le public. */
+.scene {
+  position: relative;
+  flex-shrink: 0;
+  width: min(100%, 34rem);
+  min-width: 16rem;
+  padding: var(--espace-3) var(--espace-8) var(--espace-6);
+  margin: 0;
+  font-family: var(--police-titre);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  font-stretch: condensed;
+  color: #ffffff;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  background: linear-gradient(180deg, #2a1640 0%, #5b2ee0 55%, #b0127a 100%);
+  border-radius: 0.5rem 0.5rem 50% 50% / 0.5rem 0.5rem 100% 100%;
+  box-shadow:
+    0 14px 40px -8px rgb(176 18 122 / 55%),
+    inset 0 -6px 14px rgb(255 255 255 / 18%);
+}
+
+.grille {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.rang {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.nomRang {
+  min-width: 2rem;
+  padding-right: var(--espace-2);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--couleur-texte-attenue);
+  text-align: right;
+}
+
+.cellule {
+  display: inline-flex;
+}
+
+/* Siège : dossier arrondi en haut, assise plus plate en bas. */
+.place {
+  --couleur-categorie: var(--categorie-0);
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--couleur-texte);
+  cursor: pointer;
+  background-color: color-mix(in srgb, var(--couleur-categorie) 18%, var(--couleur-surface));
+  border: 2px solid var(--couleur-categorie);
+  border-radius: 0.75rem 0.75rem 0.35rem 0.35rem;
+  transition:
+    transform var(--transition),
+    box-shadow var(--transition),
+    background-color var(--transition);
+}
+
+.place[data-categorie="1"] {
+  --couleur-categorie: var(--categorie-1);
+}
+
+.place[data-categorie="2"] {
+  --couleur-categorie: var(--categorie-2);
+}
+
+.place[data-categorie="3"] {
+  --couleur-categorie: var(--categorie-3);
+}
+
+.place[data-categorie="4"] {
+  --couleur-categorie: var(--categorie-4);
+}
+
+.place[data-categorie="5"] {
+  --couleur-categorie: var(--categorie-5);
+}
+
+.place[data-etat="libre"]:not([aria-disabled="true"]):hover {
+  background-color: color-mix(in srgb, var(--couleur-categorie) 35%, var(--couleur-surface));
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--couleur-categorie) 35%, transparent);
+  transform: translateY(-2px);
+}
+
+.place[data-etat="indisponible"] {
+  color: var(--couleur-texte-attenue);
+  text-decoration: line-through;
+  cursor: not-allowed;
+  background-color: var(--couleur-surface-2);
+  border-style: dashed;
+  border-color: var(--couleur-bordure);
+  opacity: 0.8;
+}
+
+.place[data-etat="selectionnee"] {
+  color: var(--couleur-fond);
+  background-color: var(--couleur-categorie);
+  border-color: var(--couleur-categorie);
+  box-shadow:
+    0 0 0 2px var(--couleur-surface),
+    0 0 0 4px var(--couleur-categorie);
+  transform: translateY(-2px);
+}
+
+.place[aria-disabled="true"]:not([data-etat="indisponible"]) {
+  cursor: default;
+}
+
+/* Légende (rendue par la page) : mêmes pastilles que les places. */
+.legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2) var(--espace-6);
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  font-size: 0.9375rem;
+  list-style: none;
+}
+
+.legende + .legende {
+  margin-block-start: var(--espace-2);
+}
+
+.legende li {
+  display: flex;
+  gap: var(--espace-2);
+  align-items: center;
+}
+
+.pastille {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0;
+  cursor: default;
+}
+
+.legende .place.pastille,
+.legende .place.pastille:hover {
+  box-shadow: none;
+  transform: none;
+}

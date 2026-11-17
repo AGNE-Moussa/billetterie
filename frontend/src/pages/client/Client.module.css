@@ -1,0 +1,105 @@
+/* E05 à E08 : badges de statut, billets en cartes « ticket », lignes d'information. */
+
+.statut {
+  display: inline-flex;
+  gap: var(--espace-1);
+  align-items: center;
+  width: fit-content;
+  padding: 0.15rem var(--espace-3);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--couleur-texte);
+  white-space: nowrap;
+  background-color: var(--couleur-surface-2);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-pilule);
+}
+
+.statut::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  content: "";
+  background-color: currentcolor;
+  border-radius: 50%;
+}
+
+.statut[data-statut="CONFIRMEE"],
+.statut[data-statut="EMIS"] {
+  color: var(--couleur-succes);
+  background-color: var(--couleur-succes-douce);
+  border-color: color-mix(in srgb, var(--couleur-succes) 50%, transparent);
+}
+
+.statut[data-statut="EN_ATTENTE"] {
+  color: var(--couleur-avertissement);
+  background-color: color-mix(in srgb, var(--couleur-avertissement) 12%, var(--couleur-surface));
+  border-color: color-mix(in srgb, var(--couleur-avertissement) 50%, transparent);
+}
+
+.statut[data-statut="EXPIREE"],
+.statut[data-statut="REMBOURSEE"],
+.statut[data-statut="ANNULE"] {
+  color: var(--couleur-erreur);
+  background-color: var(--couleur-erreur-douce);
+  border-color: color-mix(in srgb, var(--couleur-erreur) 50%, transparent);
+}
+
+/* Surcouche du visuel d'un billet (E07) : place en grand, façon ticket. */
+.placeVisuel {
+  align-self: flex-start;
+  padding: var(--espace-1) var(--espace-3);
+  margin-block-start: auto;
+  font-family: var(--police-titre);
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-stretch: condensed;
+  color: #ffffff;
+  background-color: rgb(10 5 18 / 55%);
+  border: 1px dashed rgb(255 255 255 / 55%);
+  border-radius: var(--rayon);
+}
+
+.infos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.infos p {
+  margin: 0;
+}
+
+.attenue {
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+/* Billets en cartes : bord perforé entre le visuel et le texte. */
+.billets > li > article > :first-child {
+  border-block-end: 3px dashed var(--couleur-bordure-douce);
+}
+
+.lienBillet {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
+  min-height: 2.5rem;
+  padding: var(--espace-2) var(--espace-4);
+  font-weight: 700;
+  color: var(--couleur-sur-principale);
+  text-decoration: none;
+  background-color: var(--couleur-principale);
+  border-radius: var(--rayon-pilule);
+}
+
+.lienBillet:hover {
+  background-color: var(--couleur-principale-survol);
+}
+
+/* En-tête de la commande (E05). */
+.enteteCommande {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+}

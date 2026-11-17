@@ -15,6 +15,7 @@ paths:
 - Erreurs : Problem Details (`reponse_probleme(...)`), code stable en MAJUSCULES, métier en
   anglais (`SEAT_ALREADY_TAKEN`), technique en français (`REQUETE_INVALIDE`, `*_INDISPONIBLE`).
 - Centimes (entiers), UUID, dates ISO 8601 avec fuseau, énumérations MAJUSCULES sans accent.
+  Revendeurs : pas de route dédiée, opération recopiée dans `docs/contrats/partenaires.yaml` + 429.
 
 ```python
 # Bon
@@ -24,7 +25,6 @@ paths:
     status_code=201,
     responses={**REPONSES_AUTH, 409: reponse_probleme("Place déjà prise (SEAT_ALREADY_TAKEN).")},
 )
-
 # Mauvais
 @router.post("/createOrder")  # verbe dans l'URL, pas de version, erreurs non déclarées
 ```

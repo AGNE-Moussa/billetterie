@@ -246,6 +246,8 @@ def plateforme(
             .with_env("DATABASE_URL", url_reseau)
             .with_env("CONSUL_URL", "http://consul:8500")
             .with_env("REDIS_URL", URL_REDIS_RESEAU)
+            # BIL-009 (décision Q6) : clé de signature des QR obligatoire, générée.
+            .with_env("QR_CLE_SIGNATURE", secrets.token_urlsafe(32))
             .with_env("INSTANCE", nom)
             .with_network(reseau)
             .with_network_aliases(nom)
@@ -284,7 +286,10 @@ def _journaux(plateforme: Plateforme, journal: Any) -> str:
 async def _attendre_route(
     client: httpx.AsyncClient, plateforme: Plateforme, journal: Any, delai: float = DELAI_ETAPE
 ) -> None:
-    """Attend que Traefik ait découvert la route de santé (404 tant qu'elle n'existe pas)."""
+    """Attend que Traefik ait découvert la route de santé.
+
+    404, ou repli 503 marqué X-Gateway-Repli, tant qu'elle n'existe pas.
+    """
     debut = time.monotonic()
     dernier = "aucune réponse"
     while time.monotonic() < debut + delai:
@@ -293,7 +298,7 @@ async def _attendre_route(
         except httpx.HTTPError as erreur:
             dernier = f"erreur {erreur!r}"
         else:
-            if reponse.status_code != 404:
+            if reponse.status_code != 404 and "x-gateway-repli" not in reponse.headers:
                 return
             dernier = f"{reponse.status_code} {reponse.text[:200]!r}"
         await anyio.sleep(1)

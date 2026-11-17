@@ -1,13 +1,29 @@
 .bascule {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
   padding: var(--espace-2) var(--espace-3);
   font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
   color: var(--couleur-texte);
   cursor: pointer;
   background-color: transparent;
   border: 1px solid var(--couleur-bordure);
-  border-radius: var(--rayon);
+  border-radius: var(--rayon-pilule);
+  transition: background-color var(--transition);
+}
+
+.bascule:hover {
+  background-color: var(--couleur-surface-2);
 }
 
 .bascule[aria-pressed="true"] {
-  background-color: var(--couleur-surface);
+  background-color: var(--couleur-surface-2);
+  border-color: var(--couleur-accent);
+}
+
+.icone {
+  flex-shrink: 0;
+  color: var(--couleur-accent);
 }

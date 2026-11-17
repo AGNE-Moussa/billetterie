@@ -95,6 +95,67 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/payments/{commande_id}:
+    get:
+      tags:
+      - paiements
+      summary: Lire le paiement d'une commande (scope payments:write ; client services seulement)
+      description: Lecture sans effet, utilisée par Commandes avant d'expirer une commande déjà
+        envoyée à Paiements, pour savoir si un remboursement est dû ; ne crée jamais de paiement.
+      operationId: lirePaiement
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: commande_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Commande Id
+      responses:
+        '200':
+          description: Paiement de la commande.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paiement'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucun paiement pour cette commande (PAYMENT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Paramètre de chemin invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
 components:
   schemas:
     PaiementCreation:

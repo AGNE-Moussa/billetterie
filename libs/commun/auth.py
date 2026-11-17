@@ -45,21 +45,28 @@ REPONSES_AUTH: dict[int | str, dict[str, Any]] = {
 
 @dataclass(frozen=True)
 class Appelant:
-    """Qui appelle la route : utilisateur (ou compte de service), rôles, scopes et client."""
+    """Qui appelle la route : utilisateur (ou compte de service), rôles, scopes et client.
+
+    `email` : claim `email` du jeton, None s'il est absent (revendeur, compte de service ;
+    décision Q22 du plan BIL-008).
+    """
 
     identifiant: str
     roles: frozenset[str]
     scopes: frozenset[str]
     client: str
+    email: str | None = None
 
     @classmethod
     def depuis_claims(cls, claims: dict[str, Any]) -> "Appelant":
         roles = claims.get("realm_access", {}).get("roles", [])
+        email = claims.get("email")
         return cls(
             identifiant=str(claims["sub"]),
             roles=frozenset(str(role) for role in roles),
             scopes=frozenset(str(claims.get("scope", "")).split()),
             client=str(claims.get("azp", "")),
+            email=str(email) if email else None,
         )
 
 

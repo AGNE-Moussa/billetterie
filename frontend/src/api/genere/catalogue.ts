@@ -98,6 +98,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/events/{evenement_id}/shows/{seance_id}/cancellation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Annuler une séance (scope events:write ; admin)
+     * @description Publie ticketing.show.cancelled ; toutes les commandes de la séance sont remboursées automatiquement (règle métier 5) et ses billets annulés.
+     */
+    post: operations["annulerSeance"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shows/{seance_id}": {
     parameters: {
       query?: never;
@@ -184,10 +204,45 @@ export interface components {
        */
       cree_le: string;
     };
+    /**
+     * EvenementResume
+     * @description Élément de la recherche : l'événement et son aperçu (cartes du catalogue).
+     */
+    EvenementResume: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Nom */
+      nom: string;
+      /** Description */
+      description: string;
+      /**
+       * Cree Le
+       * Format: date-time
+       */
+      cree_le: string;
+      /**
+       * Prochaine Seance
+       * @description Début de la prochaine séance à venir, non annulée ; null s'il n'y en a pas.
+       */
+      prochaine_seance: string | null;
+      /**
+       * Ville
+       * @description Ville de la prochaine séance ; null sans séance à venir.
+       */
+      ville: string | null;
+      /**
+       * Prix Min
+       * @description Prix le plus bas, en centimes, parmi les catégories des séances à venir non annulées ; null sans séance à venir.
+       */
+      prix_min: number | null;
+    };
     /** EvenementPage */
     EvenementPage: {
       /** Elements */
-      elements: components["schemas"]["Evenement"][];
+      elements: components["schemas"]["EvenementResume"][];
       /** Page */
       page: number;
       /** Size */
@@ -395,6 +450,7 @@ export interface components {
 }
 export type EvenementCreation = components["schemas"]["EvenementCreation"];
 export type Evenement = components["schemas"]["Evenement"];
+export type EvenementResume = components["schemas"]["EvenementResume"];
 export type EvenementPage = components["schemas"]["EvenementPage"];
 export type CategorieCreation = components["schemas"]["CategorieCreation"];
 export type Rang = components["schemas"]["Rang"];
@@ -763,6 +819,83 @@ export interface operations {
         };
       };
       /** @description Base injoignable et donnée absente du cache (BASE_INDISPONIBLE). */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+    };
+  };
+  annulerSeance: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        evenement_id: string;
+        seance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Séance annulée. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Seance"];
+        };
+      };
+      /** @description Jeton absent, invalide ou expiré (JETON_*). */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT). */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description La séance est déjà annulée (SHOW_ALREADY_CANCELLED) ou déjà commencée (SHOW_ALREADY_STARTED). */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Identifiant invalide (REQUETE_INVALIDE). */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Base injoignable (BASE_INDISPONIBLE). */
       503: {
         headers: {
           [name: string]: unknown;

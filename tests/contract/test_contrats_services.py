@@ -12,16 +12,22 @@ from commun.contrat import differences_contrat
 RACINE = Path(__file__).resolve().parents[2]
 CONTRATS = sorted(RACINE.glob("services/*/openapi.yaml"))
 # Réglages exigés par un service en plus de la base. BIL-006 (décision Q20) : REDIS_URL est
-# obligatoire pour billets ; aucun appel Redis pendant la génération du schéma.
-OPTIONS: dict[str, dict[str, str]] = {"billets": {"redis_url": "redis://127.0.0.1:6379/0"}}
+# obligatoire pour billets, puis pour commandes (BIL-010, H6) ; aucun appel Redis pendant la
+# génération du schéma.
+OPTIONS: dict[str, dict[str, str]] = {
+    "billets": {"redis_url": "redis://127.0.0.1:6379/0", "qr_cle_signature": "cle-de-test-" * 3},
+    "commandes": {"redis_url": "redis://127.0.0.1:6379/0"},
+}
 
 
 @pytest.mark.contract
 @pytest.mark.parametrize("contrat", CONTRATS, ids=[c.parent.name for c in CONTRATS])
 def test_le_code_de_chaque_service_respecte_son_contrat(contrat: Path) -> None:
     nom = contrat.parent.name
-    principal = importlib.import_module(f"{nom}.principal")
-    config = importlib.import_module(f"{nom}.config")
+    # Dossier `file-attente`, paquet Python `file_attente` (BIL-015).
+    paquet = nom.replace("-", "_")
+    principal = importlib.import_module(f"{paquet}.principal")
+    config = importlib.import_module(f"{paquet}.config")
     url = f"postgresql+asyncpg://{nom}:{secrets.token_urlsafe(16)}@127.0.0.1:5432/{nom}"
     app = principal.creer_app(config.Parametres(database_url=url, **OPTIONS.get(nom, {})))
 

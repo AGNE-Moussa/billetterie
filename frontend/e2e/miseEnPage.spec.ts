@@ -6,20 +6,32 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { CLIENT_TEST, seConnecterSurKeycloak } from "./utilisateursDeTest";
 
 interface ElementAttendu {
-  role: "link" | "button";
+  role: "link" | "button" | "searchbox";
   nom: string;
 }
 
 const ALLER_AU_CONTENU: ElementAttendu = { role: "link", nom: "Aller au contenu" };
-// Liens livrés par l'application (src/navigation.ts) : « Accueil » seul, public.
-const ACCUEIL: ElementAttendu = { role: "link", nom: "Accueil" };
+// Liens livrés par l'application (src/navigation.ts) : « Événements », public (BIL-019) ; « Mes
+// commandes » et « Mes billets », rôle customer (BIL-021), donc visibles pour client.test.
+const ACCUEIL: ElementAttendu = { role: "link", nom: "Événements" };
+const MES_COMMANDES: ElementAttendu = { role: "link", nom: "Mes commandes" };
+const MES_BILLETS: ElementAttendu = { role: "link", nom: "Mes billets" };
 const BASCULE_THEME: ElementAttendu = { role: "button", nom: "Thème sombre" };
 const SE_DECONNECTER: ElementAttendu = { role: "button", nom: "Se déconnecter" };
 const SE_CONNECTER: ElementAttendu = { role: "button", nom: "Se connecter" };
+// Premier élément focalisable du contenu de l'accueil (catalogue, BIL-019) : la recherche.
+const RECHERCHE: ElementAttendu = { role: "searchbox", nom: "Rechercher" };
 
-// Ordre visuel du cas composant : évitement, navigation, bascule de thème, connexion, puis le
-// contenu (la page d'accueil n'a pas d'élément focalisable) et le pied de page (sans lien).
-const ORDRE_CONNECTE = [ALLER_AU_CONTENU, ACCUEIL, BASCULE_THEME, SE_DECONNECTER] as const;
+// Ordre visuel : évitement, navigation, bascule de thème, connexion, puis le contenu (filtres du
+// catalogue, à partir de « Rechercher ») et le pied de page (sans lien).
+const ORDRE_CONNECTE = [
+  ALLER_AU_CONTENU,
+  ACCUEIL,
+  MES_COMMANDES,
+  MES_BILLETS,
+  BASCULE_THEME,
+  SE_DECONNECTER,
+] as const;
 const ORDRE_NON_CONNECTE = [ALLER_AU_CONTENU, ACCUEIL, BASCULE_THEME, SE_CONNECTER] as const;
 
 function localiser(page: Page, element: ElementAttendu): Locator {
@@ -81,6 +93,10 @@ test("test_la_mise_en_page_se_parcourt_entierement_au_clavier", async ({ page })
       message: "focus dans main après « Aller au contenu »",
     })
     .toBe(true);
+
+  // Tab depuis le contenu : premier champ du catalogue (« Rechercher »), contour visible.
+  await page.keyboard.press("Tab");
+  await verifierFocusVisible(page, RECHERCHE);
 
   // Depuis le contenu, Maj+Tab revient dans l'en-tête : « Se déconnecter » puis la bascule.
   await page.keyboard.press("Shift+Tab");

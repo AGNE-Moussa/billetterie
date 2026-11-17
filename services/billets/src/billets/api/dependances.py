@@ -12,9 +12,10 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billets.config import Parametres
+from billets.domaine.consultation import DepotBillets
 from billets.domaine.places import DepotPlaces, DureesVerrou
 from billets.domaine.verrous import MagasinVerrous, VerrouIndisponible
-from billets.infra.depot import DepotPlacesSql
+from billets.infra.depot import DepotBilletsSql, DepotPlacesSql
 
 
 def obtenir_parametres(requete: Request) -> Parametres:
@@ -30,6 +31,12 @@ async def obtenir_session(requete: Request) -> AsyncIterator[AsyncSession]:
 
 def obtenir_depot(session: Annotated[AsyncSession, Depends(obtenir_session)]) -> DepotPlaces:
     return DepotPlacesSql(session)
+
+
+def obtenir_depot_billets(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+) -> DepotBillets:
+    return DepotBilletsSql(session)
 
 
 def obtenir_verrous(requete: Request) -> MagasinVerrous:
@@ -57,6 +64,7 @@ def obtenir_maintenant() -> datetime:
 ParametresDep = Annotated[Parametres, Depends(obtenir_parametres)]
 SessionDep = Annotated[AsyncSession, Depends(obtenir_session)]
 DepotDep = Annotated[DepotPlaces, Depends(obtenir_depot)]
+DepotBilletsDep = Annotated[DepotBillets, Depends(obtenir_depot_billets)]
 VerrousDep = Annotated[MagasinVerrous, Depends(obtenir_verrous)]
 DureesDep = Annotated[DureesVerrou, Depends(obtenir_durees)]
 MaintenantDep = Annotated[datetime, Depends(obtenir_maintenant)]

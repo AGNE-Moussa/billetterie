@@ -43,7 +43,8 @@ CONNEXION_BORNEE = {"timeout": 30, "command_timeout": 30}
 
 REQUETE_VERSIONS = "SELECT version_num FROM alembic_version"
 # Ressources routées par Traefik quand elles diffèrent de la seule ressource du squelette.
-PREFIXES_ROUTES = {"catalogue": ("events", "venues", "shows")}
+# BIL-021 : billets route aussi /api/v1/tickets (Mes billets).
+PREFIXES_ROUTES = {"catalogue": ("events", "venues", "shows"), "billets": ("seats", "tickets")}
 Observation = Callable[[], Awaitable[str]]
 Alembic = Callable[[str, str], Awaitable[None]]
 
@@ -160,7 +161,14 @@ def alembic(
 # obligatoire pour billets ; la connexion est paresseuse et /health ne lit pas Redis (Q21),
 # l'hôte n'a donc pas besoin d'exister.
 REGLAGES_PROPRES: dict[str, dict[str, Any]] = {
-    "billets": {"redis_url": "redis://redis-absent.exemple.test:6379/0"},
+    # BIL-009 (décision Q6) : QR_CLE_SIGNATURE obligatoire ; clé synthétique, non réaliste.
+    "billets": {
+        "redis_url": "redis://redis-absent.exemple.test:6379/0",
+        "qr_cle_signature": "cle-de-test-" * 3,
+    },
+    # BIL-010 (H6) : REDIS_URL obligatoire pour commandes (verrou de la tâche d'expiration) ;
+    # Redis injoignable, le cycle est sauté (décision Q2), le service démarre quand même.
+    "commandes": {"redis_url": "redis://redis-absent.exemple.test:6379/0"},
 }
 
 
@@ -193,8 +201,12 @@ async def client_sans_consul(squelette: Any, database_url: str) -> AsyncIterator
 # Décision Q18 du plan BIL-004 : catalogue quitte l'état de squelette (ses tables et sa
 # migration sont couvertes par services/catalogue/tests/integration/) ; il reste dans les cas
 # de santé et de Consul ci-dessous. BIL-006 (décisions du squelette) : billets aussi, ses
-# migrations sont couvertes par services/billets/tests/integration/.
-SQUELETTES_VIDES = pytest.mark.sauf_services("catalogue", "billets")
+# migrations sont couvertes par services/billets/tests/integration/. BIL-008 (décisions du
+# squelette) : commandes et paiements aussi, leurs migrations sont couvertes par
+# services/commandes/tests/integration/ et services/paiements/tests/integration/.
+SQUELETTES_VIDES = pytest.mark.sauf_services(
+    "catalogue", "billets", "commandes", "paiements", "notifications"
+)
 
 
 @SQUELETTES_VIDES

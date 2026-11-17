@@ -23,6 +23,13 @@ donnent aux agents IA un cadre stable ; elles sont déclinées en rules dans `.c
 - **Ressource d'un autre appelant** : une ressource qui existe mais n'appartient pas à l'appelant
   (commande, billet) répond `404 <RESSOURCE>_NOT_FOUND`, comme une ressource inexistante, jamais
   `403` : la réponse ne révèle pas son existence.
+- **API partenaires** (BIL-012) : aucune route propre aux revendeurs ; ils appellent les routes
+  des services (rôle `partner`, Client Credentials), et leurs commandes sont filtrées par
+  l'appelant. Leur documentation publiée, `docs/contrats/partenaires.yaml`, regroupe les
+  opérations qui leur sont ouvertes, recopiées à l'identique des contrats de service, plus la
+  réponse `429` du quota par jeton de la gateway (chaîne `partenaires@file`). Ce `429` vient de
+  Traefik, sans Problem Details, et reste hors des contrats de service. Une route ouverte aux
+  revendeurs s'ajoute aux deux contrats.
 - **Données** : une base par service, aucune jointure entre services ; on référence un objet d'un
   autre service par son UUID ; montants en centimes.
 - **Événements** : nom au passé `ticketing.<entité>.<fait>` ; charge utile versionnée ;

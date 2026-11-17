@@ -9,6 +9,7 @@ dependencies = [
     "billetterie-commun",
     "fastapi>=0.149.0",
     "pydantic-settings>=2.16.0",
+    "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.5",
     "uvicorn>=0.54.0",
 ]

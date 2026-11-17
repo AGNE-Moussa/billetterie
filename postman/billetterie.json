@@ -1,0 +1,1707 @@
+{
+  "info": {
+    "name": "Billetterie : parcours complet",
+    "description": "Parcours de démonstration de bout en bout (BIL-014) : jetons, organisateur, catalogue, réservation puis paiement, suivi, billets, rafale d'achats, revendeur, annulation. Chaque exécution crée sa propre séance : rejouable sans make reset. Lancer : make parcours (Newman en Docker, réseau billetterie). Secrets passés à l'exécution (--env-var mdp_client=... mdp_admin=... revendeur_secret=...), jamais écrits ici. Depuis Postman sur le poste : base_url=http://localhost, base_partenaires=http://partenaires.localhost.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Jetons",
+      "description": "client.test et admin.test : Authorization Code + PKCE sur le client public frontend, comme le front (formulaire Keycloak rempli par la collection). Revendeur : Client Credentials. Mots de passe et secret passés par --env-var, jamais écrits ici.",
+      "item": [
+        {
+          "name": "Ouvrir la page de connexion (client.test)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// PKCE (RFC 7636) : code_verifier aléatoire, code_challenge = BASE64URL(SHA-256(verifier)).",
+                  "const b64url = (mots) => mots.toString(CryptoJS.enc.Base64).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');",
+                  "const verifier = b64url(CryptoJS.lib.WordArray.random(48));",
+                  "pm.collectionVariables.set('pkce_verifier', verifier);",
+                  "pm.collectionVariables.set('pkce_challenge', b64url(CryptoJS.SHA256(verifier)));",
+                  "pm.collectionVariables.set('pkce_state', b64url(CryptoJS.lib.WordArray.random(12)));",
+                  "pm.collectionVariables.set('redirect_uri_q', encodeURIComponent(pm.variables.get('redirect_uri')));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : page de connexion Keycloak' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const action = (pm.response.text().match(/<form[^>]*id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"/) || [])[1];",
+                  "pm.test('formulaire de connexion trouvé', () => pm.expect(action).to.be.a('string'));",
+                  "// Keycloak écrit l'adresse publique (KC_HOSTNAME = http://localhost/auth) dans l'action ;",
+                  "// depuis le réseau Docker, on la rejoue sur base_url (même Traefik, même Keycloak).",
+                  "const brute = (action || '').replace(/&amp;/g, '&');",
+                  "const base = pm.variables.get('base_url');",
+                  "pm.collectionVariables.set('kc_action', brute.startsWith('/') ? base + brute : brute.replace(/^https?:\\/\\/[^/]+/, base));",
+                  "// Cookies de session Keycloak (attribut Secure : le pot à cookies ne les renverrait pas",
+                  "// en HTTP) recopiés à la main dans l'en-tête Cookie de l'étape suivante.",
+                  "const cookies = pm.response.headers.all().filter((h) => h.key.toLowerCase() === 'set-cookie').map((h) => h.value.split(';')[0]);",
+                  "pm.collectionVariables.set('kc_cookies', cookies.join('; '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/auth?client_id=frontend&response_type=code&redirect_uri={{redirect_uri_q}}&scope=openid&state={{pkce_state}}&code_challenge={{pkce_challenge}}&code_challenge_method=S256"
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Se connecter (client.test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('302 : client.test connecté' + (pm.response.code === 302 ? '' : ' (reçu ' + pm.response.code + ' : mdp_client renseigné ?)'), () => pm.response.to.have.status(302));",
+                  "const location = pm.response.headers.get('Location') || '';",
+                  "const lire = (nom) => decodeURIComponent((location.match(new RegExp('[?&]' + nom + '=([^&#]+)')) || [])[1] || '');",
+                  "pm.test('state renvoyé inchangé', () => pm.expect(lire('state')).to.eql(pm.collectionVariables.get('pkce_state')));",
+                  "pm.test('code d\\'autorisation reçu', () => pm.expect(lire('code')).to.not.be.empty);",
+                  "pm.collectionVariables.set('kc_code', lire('code'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{kc_cookies}}"
+              }
+            ],
+            "url": "{{kc_action}}",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "client.test"
+                },
+                {
+                  "key": "password",
+                  "value": "{{mdp_client}}"
+                },
+                {
+                  "key": "credentialId",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Échanger le code contre un jeton (client.test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : jeton de client.test' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const jeton = pm.response.json().access_token;",
+                  "const p = jeton.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "const charge = JSON.parse(atob(p + '='.repeat((4 - (p.length % 4)) % 4)));",
+                  "pm.test('rôle customer', () => pm.expect(charge.realm_access.roles).to.include('customer'));",
+                  "pm.test('scope orders:write', () => pm.expect(charge.scope.split(' ')).to.include('orders:write'));",
+                  "pm.collectionVariables.set('jeton_client', jeton);",
+                  "['kc_action', 'kc_cookies', 'kc_code', 'pkce_verifier'].forEach((v) => pm.collectionVariables.unset(v));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "frontend"
+                },
+                {
+                  "key": "code",
+                  "value": "{{kc_code}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirect_uri}}"
+                },
+                {
+                  "key": "code_verifier",
+                  "value": "{{pkce_verifier}}"
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Ouvrir la page de connexion (admin.test)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// PKCE (RFC 7636) : code_verifier aléatoire, code_challenge = BASE64URL(SHA-256(verifier)).",
+                  "const b64url = (mots) => mots.toString(CryptoJS.enc.Base64).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');",
+                  "const verifier = b64url(CryptoJS.lib.WordArray.random(48));",
+                  "pm.collectionVariables.set('pkce_verifier', verifier);",
+                  "pm.collectionVariables.set('pkce_challenge', b64url(CryptoJS.SHA256(verifier)));",
+                  "pm.collectionVariables.set('pkce_state', b64url(CryptoJS.lib.WordArray.random(12)));",
+                  "pm.collectionVariables.set('redirect_uri_q', encodeURIComponent(pm.variables.get('redirect_uri')));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : page de connexion Keycloak' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const action = (pm.response.text().match(/<form[^>]*id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"/) || [])[1];",
+                  "pm.test('formulaire de connexion trouvé', () => pm.expect(action).to.be.a('string'));",
+                  "// Keycloak écrit l'adresse publique (KC_HOSTNAME = http://localhost/auth) dans l'action ;",
+                  "// depuis le réseau Docker, on la rejoue sur base_url (même Traefik, même Keycloak).",
+                  "const brute = (action || '').replace(/&amp;/g, '&');",
+                  "const base = pm.variables.get('base_url');",
+                  "pm.collectionVariables.set('kc_action', brute.startsWith('/') ? base + brute : brute.replace(/^https?:\\/\\/[^/]+/, base));",
+                  "// Cookies de session Keycloak (attribut Secure : le pot à cookies ne les renverrait pas",
+                  "// en HTTP) recopiés à la main dans l'en-tête Cookie de l'étape suivante.",
+                  "const cookies = pm.response.headers.all().filter((h) => h.key.toLowerCase() === 'set-cookie').map((h) => h.value.split(';')[0]);",
+                  "pm.collectionVariables.set('kc_cookies', cookies.join('; '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/auth?client_id=frontend&response_type=code&redirect_uri={{redirect_uri_q}}&scope=openid&state={{pkce_state}}&code_challenge={{pkce_challenge}}&code_challenge_method=S256"
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Se connecter (admin.test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('302 : admin.test connecté' + (pm.response.code === 302 ? '' : ' (reçu ' + pm.response.code + ' : mdp_admin renseigné ?)'), () => pm.response.to.have.status(302));",
+                  "const location = pm.response.headers.get('Location') || '';",
+                  "const lire = (nom) => decodeURIComponent((location.match(new RegExp('[?&]' + nom + '=([^&#]+)')) || [])[1] || '');",
+                  "pm.test('state renvoyé inchangé', () => pm.expect(lire('state')).to.eql(pm.collectionVariables.get('pkce_state')));",
+                  "pm.test('code d\\'autorisation reçu', () => pm.expect(lire('code')).to.not.be.empty);",
+                  "pm.collectionVariables.set('kc_code', lire('code'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{kc_cookies}}"
+              }
+            ],
+            "url": "{{kc_action}}",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "admin.test"
+                },
+                {
+                  "key": "password",
+                  "value": "{{mdp_admin}}"
+                },
+                {
+                  "key": "credentialId",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Échanger le code contre un jeton (admin.test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : jeton de admin.test' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const jeton = pm.response.json().access_token;",
+                  "const p = jeton.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "const charge = JSON.parse(atob(p + '='.repeat((4 - (p.length % 4)) % 4)));",
+                  "pm.test('rôle admin', () => pm.expect(charge.realm_access.roles).to.include('admin'));",
+                  "pm.test('scope events:write', () => pm.expect(charge.scope.split(' ')).to.include('events:write'));",
+                  "pm.collectionVariables.set('jeton_admin', jeton);",
+                  "['kc_action', 'kc_cookies', 'kc_code', 'pkce_verifier'].forEach((v) => pm.collectionVariables.unset(v));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "frontend"
+                },
+                {
+                  "key": "code",
+                  "value": "{{kc_code}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirect_uri}}"
+                },
+                {
+                  "key": "code_verifier",
+                  "value": "{{pkce_verifier}}"
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false,
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "Jeton du revendeur (Client Credentials)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : jeton du revendeur (revendeur_secret renseigné ?)' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('jeton_revendeur', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{base_url}}/auth/realms/{{realm}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "revendeur-test"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{revendeur_secret}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Organisateur : programmer une séance",
+      "description": "admin.test crée un lieu, un événement et une séance de 30 places (rangs A et B) propres à cette exécution : la collection ne dépend pas du jeu de démonstration et ne l'abîme pas.",
+      "item": [
+        {
+          "name": "Créer un événement sans jeton",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('401 : jeton exigé par la gateway' + (pm.response.code === 401 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nom\": \"Refusé\", \"description\": \"Sans jeton\"}"
+            }
+          }
+        },
+        {
+          "name": "Créer un événement avec le jeton du client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('403 : réservé à l\\'organisateur (admin)' + (pm.response.code === 403 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nom\": \"Refusé\", \"description\": \"Rôle customer\"}"
+            }
+          }
+        },
+        {
+          "name": "Créer un lieu",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('suffixe', pm.variables.replaceIn('{{$guid}}').slice(0, 8));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('201 : lieu créé' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('lieu_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_admin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/venues",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nom\": \"Salle Newman {{suffixe}}\", \"adresse\": \"1 rue de l'Exemple\", \"ville\": \"Testville\"}"
+            }
+          }
+        },
+        {
+          "name": "Créer un événement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('201 : événement créé' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('evenement_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_admin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nom\": \"Concert Newman {{suffixe}}\", \"description\": \"Événement synthétique de la collection BIL-014\"}"
+            }
+          }
+        },
+        {
+          "name": "Programmer une séance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Dans 30 jours : jamais SHOW_START_IN_PAST, ni SHOW_ALREADY_STARTED à l'annulation.",
+                  "pm.collectionVariables.set('debut', new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('201 : séance programmée' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(201));",
+                  "const seance = pm.response.json();",
+                  "pm.test('séance non annulée, deux catégories', () => { pm.expect(seance.annulee).to.be.false; pm.expect(seance.categories).to.have.length(2); });",
+                  "pm.collectionVariables.set('seance_id', seance.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_admin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events/{{evenement_id}}/shows",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"lieu_id\": \"{{lieu_id}}\", \"debut\": \"{{debut}}\", \"categories\": [{\"nom\": \"Carré or\", \"prix\": 5000, \"rangs\": [{\"rang\": \"A\", \"nombre_places\": 10}]}, {\"nom\": \"Balcon\", \"prix\": 2500, \"rangs\": [{\"rang\": \"B\", \"nombre_places\": 20}]}]}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Catalogue et places (sans jeton)",
+      "description": "Lectures publiques à la gateway. Les places sont créées par Billets à la réception de ticketing.show.scheduled (asynchrone) : la dernière requête attend qu'elles existent.",
+      "item": [
+        {
+          "name": "Rechercher l'événement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : recherche' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('événement trouvé', () => pm.expect(pm.response.json().elements.map((e) => e.id)).to.include(pm.collectionVariables.get('evenement_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/events?q=Newman%20{{suffixe}}"
+          }
+        },
+        {
+          "name": "Lire l'événement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : détail de l\\'événement' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('nom', () => pm.expect(pm.response.json().nom).to.include('Newman'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/events/{{evenement_id}}"
+          }
+        },
+        {
+          "name": "Lister les séances de l'événement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : séances' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('la séance programmée y figure', () => pm.expect(pm.response.json().elements.map((s) => s.id)).to.include(pm.collectionVariables.get('seance_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/events/{{evenement_id}}/shows"
+          }
+        },
+        {
+          "name": "Lire la séance par son identifiant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : séance' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('deux catégories', () => pm.expect(pm.response.json().categories).to.have.length(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/shows/{{seance_id}}"
+          }
+        },
+        {
+          "name": "Attendre les places de la séance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_places') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().total === 30);",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_places', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_places', 0);",
+                  "  pm.test('30 places créées par Billets' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "  if (pret) {",
+                  "    const libres = pm.response.json().elements.filter((p) => p.disponible).map((p) => p.id);",
+                  "    pm.test('30 places libres', () => pm.expect(libres).to.have.length(30));",
+                  "    pm.collectionVariables.set('places_libres', JSON.stringify(libres));",
+                  "    pm.collectionVariables.set('place_1', libres[0]);",
+                  "    pm.collectionVariables.set('place_2', libres[1]);",
+                  "    pm.collectionVariables.set('place_refusee', libres[2]);",
+                  "    pm.collectionVariables.set('prochaine_place', 3);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/seats?seance_id={{seance_id}}&size=100"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Client : réserver puis payer",
+      "description": "Commande sans carte (EN_ATTENTE, places verrouillées), rejeu idempotent, place disputée par un autre acheteur, paiement, paiement refusé.",
+      "item": [
+        {
+          "name": "Réserver deux places sans carte",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('cle_idempotence', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('201 : commande créée' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(201));",
+                  "const commande = pm.response.json();",
+                  "pm.test('EN_ATTENTE, deux lignes, 2 × 50,00 €', () => { pm.expect(commande.statut).to.eql('EN_ATTENTE'); pm.expect(commande.lignes).to.have.length(2); pm.expect(commande.montant_total).to.eql(10000); });",
+                  "pm.test('places verrouillées jusqu\\'à expire_le, dans le futur', () => pm.expect(new Date(commande.expire_le).getTime()).to.be.above(Date.now()));",
+                  "pm.collectionVariables.set('commande_id', commande.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_1}}\", \"{{place_2}}\"]}"
+            }
+          }
+        },
+        {
+          "name": "Rejouer la réservation avec la même Idempotency-Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : rejeu : commande déjà créée' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('même commande, aucun doublon', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('commande_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_1}}\", \"{{place_2}}\"]}"
+            }
+          }
+        },
+        {
+          "name": "Voir les places réservées indisponibles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : disponibilité' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const places = pm.response.json().elements;",
+                  "const dispo = (id) => places.find((p) => p.id === id).disponible;",
+                  "pm.test('les deux places sont verrouillées', () => { pm.expect(dispo(pm.collectionVariables.get('place_1'))).to.be.false; pm.expect(dispo(pm.collectionVariables.get('place_2'))).to.be.false; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/seats?seance_id={{seance_id}}&size=100"
+          }
+        },
+        {
+          "name": "Un autre acheteur vise la même place",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('cle_idempotence_dispute', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('409 : place jamais vendue deux fois' + (pm.response.code === 409 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(409));",
+                  "pm.test('code métier SEAT_ALREADY_TAKEN', () => pm.expect(code).to.eql('SEAT_ALREADY_TAKEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence_dispute}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_1}}\"], \"carte_test\": \"{{carte_acceptee}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Payer la commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : commande payée' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('CONFIRMEE', () => pm.expect(pm.response.json().statut).to.eql('CONFIRMEE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders/{{commande_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"carte_test\": \"{{carte_acceptee}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Payer une seconde fois",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('409 : aucun double débit' + (pm.response.code === 409 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(409));",
+                  "pm.test('code métier ORDER_NOT_PENDING', () => pm.expect(code).to.eql('ORDER_NOT_PENDING'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders/{{commande_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"carte_test\": \"{{carte_acceptee}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Commander avec une carte refusée",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('cle_idempotence_refus', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('402 : paiement refusé, place libérée' + (pm.response.code === 402 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(402));",
+                  "pm.test('code métier PAYMENT_REFUSED', () => pm.expect(code).to.eql('PAYMENT_REFUSED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence_refus}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_refusee}}\"], \"carte_test\": \"{{carte_refusee}}\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Client : suivre sa commande et ses billets",
+      "description": "Billets émis à la réception de ticketing.order.confirmed (asynchrone) : la liste attend les deux billets.",
+      "item": [
+        {
+          "name": "Suivre la commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : commande' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('CONFIRMEE', () => pm.expect(pm.response.json().statut).to.eql('CONFIRMEE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders/{{commande_id}}"
+          }
+        },
+        {
+          "name": "Lister ses commandes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : commandes du client' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('la commande y figure', () => pm.expect(pm.response.json().elements.map((c) => c.id)).to.include(pm.collectionVariables.get('commande_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders?size=100"
+          }
+        },
+        {
+          "name": "Attendre les billets de la commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_billets') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().elements.length === 2);",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_billets', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_billets', 0);",
+                  "  pm.test('deux billets émis' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "  if (pret) {",
+                  "    const billets = pm.response.json().elements;",
+                  "    pm.test('deux billets EMIS', () => billets.forEach((b) => pm.expect(b.statut).to.eql('EMIS')));",
+                  "    pm.collectionVariables.set('billet_id', billets[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/tickets?commande_id={{commande_id}}"
+          }
+        },
+        {
+          "name": "Lire un billet et son QR code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : billet' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const billet = pm.response.json();",
+                  "pm.test('QR code signé présent', () => pm.expect(billet.qr_code).to.be.a('string').and.not.be.empty);",
+                  "pm.test('billet de la commande', () => pm.expect(billet.commande_id).to.eql(pm.collectionVariables.get('commande_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/tickets/{{billet_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Rafale d'achats",
+      "description": "rafale_taille achats d'une place chacun, payés aussitôt, enchaînés (scénario « une instance de Billets arrêtée » : scripts/demo.sh billets). Plafond de 10 billets par séance et par client : rafale_taille ne dépasse pas 7.",
+      "item": [
+        {
+          "name": "Acheter une place de la rafale",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const libres = JSON.parse(pm.collectionVariables.get('places_libres'));",
+                  "const indice = Number(pm.collectionVariables.get('prochaine_place'));",
+                  "pm.collectionVariables.set('place_rafale', libres[indice]);",
+                  "pm.collectionVariables.set('cle_idempotence_rafale', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const numero = Number(pm.collectionVariables.get('rafale_faits') || 0) + 1;",
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('achat ' + numero + ' de la rafale : 201 CONFIRMEE' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => { pm.response.to.have.status(201); pm.expect(pm.response.json().statut).to.eql('CONFIRMEE'); });",
+                  "pm.collectionVariables.set('prochaine_place', Number(pm.collectionVariables.get('prochaine_place')) + 1);",
+                  "if (numero < Number(pm.variables.get('rafale_taille'))) {",
+                  "  pm.collectionVariables.set('rafale_faits', numero);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.collectionVariables.set('rafale_faits', 0);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence_rafale}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_rafale}}\"], \"carte_test\": \"{{carte_acceptee}}\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Revendeur partenaire",
+      "description": "Même parcours que postman/partenaires.json (BIL-012), sur la séance de cette exécution, plus l'isolation : le revendeur ne voit jamais la commande du client, et son jeton est refusé sur l'hôte standard.",
+      "item": [
+        {
+          "name": "Revendeur : rechercher l'événement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : catalogue lisible par le revendeur' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('événement trouvé', () => pm.expect(pm.response.json().elements.map((e) => e.id)).to.include(pm.collectionVariables.get('evenement_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/events?q=Newman%20{{suffixe}}"
+          }
+        },
+        {
+          "name": "Revendeur : lister les places",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : places lisibles' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const libres = pm.response.json().elements.filter((p) => p.disponible);",
+                  "pm.test('au moins une place libre', () => pm.expect(libres.length).to.be.above(0));",
+                  "pm.collectionVariables.set('place_revendeur', libres[libres.length - 1].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/seats?seance_id={{seance_id}}&size=100"
+          }
+        },
+        {
+          "name": "Revendeur : commander et payer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('cle_idempotence_revendeur', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('201 : commande du revendeur' + (pm.response.code === 201 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(201));",
+                  "const commande = pm.response.json();",
+                  "pm.test('CONFIRMEE, sans champ interne canal', () => { pm.expect(commande.statut).to.eql('CONFIRMEE'); pm.expect(commande).to.not.have.property('canal'); });",
+                  "pm.collectionVariables.set('commande_revendeur_id', commande.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_revendeur}}\"], \"carte_test\": \"{{carte_acceptee}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Revendeur : lire sa commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : commande lisible par son revendeur' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders/{{commande_revendeur_id}}"
+          }
+        },
+        {
+          "name": "Revendeur : lister ses commandes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : commandes du revendeur' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().elements.map((c) => c.id);",
+                  "pm.test('sa commande y figure, pas celle du client', () => { pm.expect(ids).to.include(pm.collectionVariables.get('commande_revendeur_id')); pm.expect(ids).to.not.include(pm.collectionVariables.get('commande_id')); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders?size=100"
+          }
+        },
+        {
+          "name": "Revendeur : lire la commande du client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('404 : commande d\\'un autre appelant invisible' + (pm.response.code === 404 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(404));",
+                  "pm.test('code métier ORDER_NOT_FOUND', () => pm.expect(code).to.eql('ORDER_NOT_FOUND'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders/{{commande_id}}"
+          }
+        },
+        {
+          "name": "Revendeur : attendre son billet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_billet_revendeur') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().elements.length === 1);",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_billet_revendeur', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_billet_revendeur', 0);",
+                  "  pm.test('billet du revendeur émis' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/tickets?commande_id={{commande_revendeur_id}}"
+          }
+        },
+        {
+          "name": "Revendeur : jeton présenté sur l'hôte standard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('403 : quota des revendeurs non contournable' + (pm.response.code === 403 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(403));",
+                  "pm.test('code métier ROLE_MANQUANT', () => pm.expect(code).to.eql('ROLE_MANQUANT'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Organisateur : annuler la séance",
+      "description": "Règle métier 5 : l'annulation rembourse toutes les commandes et annule les billets (ticketing.show.cancelled, puis ticketing.payment.refunded), de façon asynchrone.",
+      "item": [
+        {
+          "name": "Annuler la séance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('200 : séance annulée' + (pm.response.code === 200 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(200));",
+                  "pm.test('annulee', () => pm.expect(pm.response.json().annulee).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_admin}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events/{{evenement_id}}/shows/{{seance_id}}/cancellation"
+          }
+        },
+        {
+          "name": "Annuler la séance une seconde fois",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('409 : annulation unique' + (pm.response.code === 409 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(409));",
+                  "pm.test('code métier SHOW_ALREADY_CANCELLED', () => pm.expect(code).to.eql('SHOW_ALREADY_CANCELLED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_admin}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/events/{{evenement_id}}/shows/{{seance_id}}/cancellation"
+          }
+        },
+        {
+          "name": "Attendre la séance annulée dans le catalogue public",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_seance_annulee') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().annulee === true);",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_seance_annulee', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_seance_annulee', 0);",
+                  "  pm.test('séance lue annulée (cache rafraîchi)' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/shows/{{seance_id}}"
+          }
+        },
+        {
+          "name": "Commander sur la séance annulée",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('cle_idempotence_annulee', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })();",
+                  "pm.test('409 : plus aucune vente' + (pm.response.code === 409 ? '' : ' (reçu ' + pm.response.code + ' ' + code + ')'), () => pm.response.to.have.status(409));",
+                  "pm.test('code métier SHOW_CANCELLED', () => pm.expect(code).to.eql('SHOW_CANCELLED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cle_idempotence_annulee}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seance_id\": \"{{seance_id}}\", \"place_ids\": [\"{{place_refusee}}\"]}"
+            }
+          }
+        },
+        {
+          "name": "Attendre le remboursement de la commande du client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_rembourse_client') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().statut === 'REMBOURSEE');",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_rembourse_client', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_rembourse_client', 0);",
+                  "  pm.test('commande du client REMBOURSEE' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders/{{commande_id}}"
+          }
+        },
+        {
+          "name": "Attendre l'annulation du billet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_billet_annule') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().statut === 'ANNULE');",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_billet_annule', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_billet_annule', 0);",
+                  "  pm.test('billet ANNULE' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_client}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/tickets/{{billet_id}}"
+          }
+        },
+        {
+          "name": "Attendre le remboursement de la commande du revendeur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const tentative = Number(pm.collectionVariables.get('tentative_rembourse_revendeur') || 0);",
+                  "const pret = pm.response.code === 200 && (pm.response.json().statut === 'REMBOURSEE');",
+                  "const max = Number(pm.variables.get('tentatives_max'));",
+                  "if (!pret && tentative < max) {",
+                  "  pm.collectionVariables.set('tentative_rembourse_revendeur', tentative + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, Number(pm.variables.get('attente_ms')));",
+                  "} else {",
+                  "  pm.collectionVariables.set('tentative_rembourse_revendeur', 0);",
+                  "  pm.test('commande du revendeur REMBOURSEE' + (pret ? '' : ' (non atteint après ' + max + ' tentatives, dernier statut ' + pm.response.code + ')'), () => pm.expect(pret).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jeton_revendeur}}"
+              }
+            ],
+            "url": "{{base_partenaires}}/api/v1/orders/{{commande_revendeur_id}}"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost"
+    },
+    {
+      "key": "base_partenaires",
+      "value": "http://partenaires.localhost"
+    },
+    {
+      "key": "realm",
+      "value": "billetterie"
+    },
+    {
+      "key": "redirect_uri",
+      "value": "http://localhost/rappel"
+    },
+    {
+      "key": "mdp_client",
+      "value": ""
+    },
+    {
+      "key": "mdp_admin",
+      "value": ""
+    },
+    {
+      "key": "revendeur_secret",
+      "value": ""
+    },
+    {
+      "key": "carte_acceptee",
+      "value": "4242424242424242"
+    },
+    {
+      "key": "carte_refusee",
+      "value": "4000000000000002"
+    },
+    {
+      "key": "rafale_taille",
+      "value": "3"
+    },
+    {
+      "key": "tentatives_max",
+      "value": "40"
+    },
+    {
+      "key": "attente_ms",
+      "value": "1000"
+    }
+  ]
+}

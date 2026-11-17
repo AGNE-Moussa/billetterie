@@ -4,6 +4,8 @@
 # Lectures publiques (sans jeton) ; écritures réservées à l'admin (scope events:write).
 # BIL-005 : en-tête X-Cache-Stale sur les 200 des lectures servies depuis le cache Redis en mode
 # dégradé (base injoignable).
+# BIL-011 : annulerSeance recopiée du contrat cible (publie ticketing.show.cancelled), avec le
+# 503 BASE_INDISPONIBLE des autres écritures (ajouté aussi au contrat cible).
 openapi: 3.1.0
 info:
   title: Service catalogue
@@ -395,6 +397,75 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+  /api/v1/events/{evenement_id}/shows/{seance_id}/cancellation:
+    post:
+      tags:
+      - séances
+      summary: Annuler une séance (scope events:write ; admin)
+      description: Publie ticketing.show.cancelled ; toutes les commandes de la séance sont
+        remboursées automatiquement (règle métier 5) et ses billets annulés.
+      operationId: annulerSeance
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: evenement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Evenement Id
+      - name: seance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      responses:
+        '200':
+          description: Séance annulée.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seance'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: La séance est déjà annulée (SHOW_ALREADY_CANCELLED) ou déjà commencée
+            (SHOW_ALREADY_STARTED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/shows/{seance_id}:
     get:
       tags:
@@ -628,11 +699,58 @@ components:
       - description
       - cree_le
       title: Evenement
+    EvenementResume:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nom:
+          type: string
+          title: Nom
+        description:
+          type: string
+          title: Description
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+        prochaine_seance:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Prochaine Seance
+          description: Début de la prochaine séance à venir, non annulée ; null s'il n'y en a pas.
+        ville:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ville
+          description: Ville de la prochaine séance ; null sans séance à venir.
+        prix_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Prix Min
+          description: Prix le plus bas, en centimes, parmi les catégories des séances à venir non
+            annulées ; null sans séance à venir.
+      type: object
+      required:
+      - id
+      - nom
+      - description
+      - cree_le
+      - prochaine_seance
+      - ville
+      - prix_min
+      title: EvenementResume
+      description: 'Élément de la recherche : l''événement et son aperçu (cartes du catalogue).'
     EvenementPage:
       properties:
         elements:
           items:
-            $ref: '#/components/schemas/Evenement'
+            $ref: '#/components/schemas/EvenementResume'
           type: array
           title: Elements
         page:

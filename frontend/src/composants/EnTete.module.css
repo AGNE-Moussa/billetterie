@@ -1,13 +1,29 @@
+/* En-tête collant, translucide : la marque à gauche, la navigation, puis le thème et la session. */
 .entete {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 15;
   padding: var(--espace-3) var(--espace-4);
-  background-color: var(--couleur-surface);
-  border-block-end: 1px solid var(--couleur-bordure);
+  background-color: color-mix(in srgb, var(--couleur-fond) 86%, transparent);
+  border-block-end: 1px solid var(--couleur-bordure-douce);
+  backdrop-filter: saturate(160%) blur(12px);
+}
+
+/* Filet dégradé de la marque sous l'en-tête. */
+.entete::after {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: -1px;
+  height: 2px;
+  content: "";
+  background: var(--degrade-marque);
+  opacity: 0.85;
 }
 
 .interieur {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--espace-4);
+  gap: var(--espace-3) var(--espace-6);
   align-items: center;
   max-width: var(--largeur-contenu);
   margin: 0 auto;
@@ -22,21 +38,68 @@
 
 .expiree {
   margin: 0;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--couleur-erreur);
 }
 
-.action {
-  padding: var(--espace-2) var(--espace-3);
-  font: inherit;
+.utilisateur {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
   font-weight: 600;
-  color: var(--couleur-sur-principale);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: var(--degrade-marque);
+  border-radius: 50%;
+}
+
+.action,
+.secondaire {
+  padding: var(--espace-2) var(--espace-4);
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
-  background-color: var(--couleur-principale);
   border: 1px solid transparent;
-  border-radius: var(--rayon);
+  border-radius: var(--rayon-pilule);
+  transition:
+    transform var(--transition),
+    box-shadow var(--transition),
+    background-color var(--transition);
+}
+
+/* « Se connecter » mis en valeur : bouton plein au dégradé de la marque (texte blanc, AA). */
+.action {
+  color: #ffffff;
+  background: linear-gradient(120deg, #b0127a, #6a2bd1);
+  box-shadow: 0 4px 14px rgb(176 18 122 / 35%);
 }
 
 .action:hover {
-  background-color: var(--couleur-principale-survol);
+  box-shadow: 0 6px 20px rgb(176 18 122 / 45%);
+  transform: translateY(-1px);
+}
+
+.secondaire {
+  color: var(--couleur-texte);
+  background-color: transparent;
+  border-color: var(--couleur-bordure);
+}
+
+.secondaire:hover {
+  background-color: var(--couleur-surface-2);
+}
+
+@media (max-width: 40rem) {
+  .entete {
+    position: static;
+  }
 }

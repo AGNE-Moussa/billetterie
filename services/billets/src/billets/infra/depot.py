@@ -1,4 +1,6 @@
-"""Dépôt SQL des places et des billets (réalisation de `domaine.places.DepotPlaces`).
+"""Dépôts SQL des places et des billets (réalisations de `domaine.places.DepotPlaces`, de
+`domaine.emission.DepotEmission`, de `domaine.annulation.DepotAnnulation` et de
+`domaine.consultation.DepotBillets`).
 
 Toute méthode qui touche la base traduit une base injoignable (connexion refusée, délai
 dépassé, connexion coupée) en `BaseIndisponible` : 503 BASE_INDISPONIBLE, sans détail technique
@@ -9,15 +11,20 @@ import functools
 import logging
 import uuid
 from collections.abc import Callable, Coroutine, Sequence
+from datetime import datetime
 from typing import Any
 
+from sqlalchemy import Select, and_, delete, exists, func, select, update
 from sqlalchemy import exc as sa_exc
-from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from billets.domaine.annulation import STATUT_ANNULE
+from billets.domaine.consultation import BilletLu, StatutBillet
+from billets.domaine.emission import STATUT_EMIS, NouveauBillet
 from billets.domaine.places import NouvellePlace, PageResultat, Place
-from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne
+from billets.infra.base import BaseIndisponible, BilletLigne, PlaceLigne, SeanceAnnuleeLigne
+from commun.verrou_seance import verrouiller_seance
 
 journal = logging.getLogger(__name__)
 
@@ -136,3 +143,180 @@ class DepotPlacesSql:
                 .on_conflict_do_nothing(constraint="uq_places_seance_rang_numero")
             )
             await self._session.execute(requete)
+
+
+class DepotEmissionSql:
+    """Réalisation de `domaine.emission.DepotEmission`, dans la session du consommateur."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def seance_annulee(self, seance_id: uuid.UUID) -> bool:
+        requete = select(exists().where(SeanceAnnuleeLigne.seance_id == seance_id))
+        return bool(await self._session.scalar(requete))
+
+    @_base_requise
+    async def places_de_la_commande_emises(
+        self, commande_id: uuid.UUID, seance_id: uuid.UUID, place_ids: Sequence[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        if not place_ids:
+            return set()
+        requete = select(BilletLigne.place_id).where(
+            BilletLigne.commande_id == commande_id,
+            BilletLigne.seance_id == seance_id,
+            BilletLigne.place_id.in_(place_ids),
+        )
+        return set((await self._session.scalars(requete)).all())
+
+    @_base_requise
+    async def emettre(self, billets: Sequence[NouveauBillet]) -> set[uuid.UUID]:
+        if not billets:
+            return set()
+        # Ordre stable (par place) : deux commandes simultanées qui se disputent plusieurs
+        # places les prennent dans le même ordre, sans interblocage.
+        ordonnes = sorted(billets, key=lambda b: str(b.place_id))
+        # ON CONFLICT DO NOTHING sur uq_billets_place : une place prise (même par une
+        # transaction concurrente, attendue jusqu'à son commit) n'est pas insérée, sans
+        # exception. Une place inconnue (fk_billets_place) lève IntegrityError : l'exception
+        # remonte (nouvel essai puis DLQ, décision Q5).
+        requete = (
+            insert(BilletLigne)
+            .values(
+                [
+                    {
+                        "id": billet.id,
+                        "commande_id": billet.commande_id,
+                        "client": billet.client,
+                        "seance_id": billet.seance_id,
+                        "place_id": billet.place_id,
+                        "statut": billet.statut,
+                        "qr_code": billet.qr_code,
+                        "emis_le": billet.emis_le,
+                    }
+                    for billet in ordonnes
+                ]
+            )
+            .on_conflict_do_nothing(constraint="uq_billets_place")
+            .returning(BilletLigne.place_id)
+        )
+        inserees = set((await self._session.scalars(requete)).all())
+        conflits = {billet.place_id for billet in billets} - inserees
+        if conflits and inserees:
+            # Tout ou rien pour la commande (décision Q1) : les billets tout juste insérés sont
+            # retirés dans la même transaction. Pas de SAVEPOINT : ses lignes porteraient l'xmin
+            # d'une sous-transaction, et ROLLBACK TO SAVEPOINT en ouvre une nouvelle pour les
+            # écritures suivantes (ticket.rejected) ; billets, outbox et messages_traites
+            # doivent appartenir à une seule et même transaction.
+            await self._session.execute(
+                delete(BilletLigne).where(
+                    BilletLigne.id.in_([b.id for b in billets if b.place_id in inserees])
+                )
+            )
+        return conflits
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        """Verrou consultatif partagé de la séance (Q3 de BIL-011) : l'émission attend la fin
+        d'une annulation en cours, deux émissions ne s'attendent pas."""
+        await verrouiller_seance(self._session, seance_id, exclusif=False)
+
+
+class DepotAnnulationSql:
+    """Réalisation de `domaine.annulation.DepotAnnulation`, dans la session du consommateur."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @_base_requise
+    async def verrouiller_seance(self, seance_id: uuid.UUID) -> None:
+        await verrouiller_seance(self._session, seance_id, exclusif=True)
+
+    @_base_requise
+    async def inscrire_seance_annulee(self, seance_id: uuid.UUID, annulee_le: datetime) -> bool:
+        # Séance déjà inscrite (autre message) : `annulee_le` d'origine conservée.
+        requete = (
+            insert(SeanceAnnuleeLigne)
+            .values(seance_id=seance_id, annulee_le=annulee_le)
+            .on_conflict_do_nothing(index_elements=[SeanceAnnuleeLigne.seance_id])
+            .returning(SeanceAnnuleeLigne.seance_id)
+        )
+        return (await self._session.execute(requete)).first() is not None
+
+    @_base_requise
+    async def annuler_billets(self, seance_id: uuid.UUID) -> int:
+        # Passage conditionnel au statut courant (H5) ; places et billets gardés (H4).
+        requete = (
+            update(BilletLigne)
+            .where(BilletLigne.seance_id == seance_id, BilletLigne.statut == STATUT_EMIS)
+            .values(statut=STATUT_ANNULE)
+            .returning(BilletLigne.id)
+        )
+        return len((await self._session.scalars(requete)).all())
+
+
+def _billet_lu(billet: BilletLigne, rang: str, numero: int) -> BilletLu:
+    return BilletLu(
+        id=billet.id,
+        commande_id=billet.commande_id,
+        seance_id=billet.seance_id,
+        place_id=billet.place_id,
+        rang=rang,
+        numero=numero,
+        statut=StatutBillet(billet.statut),
+        qr_code=billet.qr_code,
+        emis_le=billet.emis_le,
+    )
+
+
+class DepotBilletsSql:
+    """Réalisation de `domaine.consultation.DepotBillets` : toujours filtrée par `client`."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @staticmethod
+    def _avec_place() -> Select[BilletLigne, str, int]:
+        # Rang et numéro lus dans la même requête, par jointure sur la place du billet (même
+        # séance, comme fk_billets_place).
+        return select(BilletLigne, PlaceLigne.rang, PlaceLigne.numero).join(
+            PlaceLigne,
+            and_(
+                PlaceLigne.id == BilletLigne.place_id,
+                PlaceLigne.seance_id == BilletLigne.seance_id,
+            ),
+        )
+
+    @_base_requise
+    async def lister_billets(
+        self, client: str, commande_id: uuid.UUID | None, page: int, size: int
+    ) -> PageResultat[BilletLu]:
+        filtres = [BilletLigne.client == client]
+        if commande_id is not None:
+            filtres.append(BilletLigne.commande_id == commande_id)
+        total = await self._session.scalar(
+            select(func.count()).select_from(BilletLigne).where(*filtres)
+        )
+        requete = (
+            self._avec_place()
+            .where(*filtres)
+            .order_by(BilletLigne.emis_le.desc(), BilletLigne.id)
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        lignes = (await self._session.execute(requete)).all()
+        return PageResultat(
+            elements=[_billet_lu(billet, rang, numero) for billet, rang, numero in lignes],
+            total=int(total or 0),
+        )
+
+    @_base_requise
+    async def lire_billet(self, client: str, billet_id: uuid.UUID) -> BilletLu | None:
+        requete = self._avec_place().where(
+            BilletLigne.id == billet_id, BilletLigne.client == client
+        )
+        ligne = (await self._session.execute(requete)).first()
+        if ligne is None:
+            return None
+        billet, rang, numero = ligne
+        return _billet_lu(billet, rang, numero)

@@ -1,0 +1,272 @@
+# Contrat OpenAPI 3.1 du service file-attente : la référence que le code doit respecter.
+# Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
+# Écrit au ticket BIL-015 (US8), identique au contrat cible docs/contrats/file-attente.yaml :
+# entrée d'un client dans la file d'une séance sous file et lecture de sa position ; positions
+# dans Redis, admission par vagues, jeton d'admission signé vérifié par Commandes
+# (creerCommande, en-tête X-Admission-Token). Rôle customer seulement, jeton utilisateur.
+# Séances sous file : liste de la configuration (variable d'environnement, voir BIL-015).
+openapi: 3.1.0
+info:
+  title: Service file-attente
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      tags:
+      - santé
+      summary: État de l'instance, appelé par Consul toutes les 10 s
+      operationId: sante
+      responses:
+        '200':
+          description: L'instance et Redis répondent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sante'
+        '503':
+          description: Redis ne répond pas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/queues/{seance_id}/position:
+    post:
+      tags:
+      - file-attente
+      summary: Entrer dans la file d'attente d'une séance (rôle customer)
+      description: >-
+        Place l'appelant du jeton en fin de file de la séance, si elle est sous file. Un
+        appelant déjà présent garde sa place : la requête répond 200 avec sa position actuelle
+        (EN_ATTENTE), ou son jeton d'admission s'il est déjà admis et que l'admission n'a pas
+        expiré ; rafraîchir la page ne fait donc pas perdre sa place. Après expiration de
+        l'admission, l'appelant n'est plus dans la file et rentre en fin de file.
+      operationId: entrerFile
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: seance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      responses:
+        '200':
+          description: L'appelant était déjà dans la file ; position ou admission inchangée.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionFile'
+        '201':
+          description: L'appelant entre en fin de file (statut EN_ATTENTE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionFile'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle manquant, la file est réservée aux clients (ROLE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune file pour cette séance, séance inconnue ou non sous file
+            (QUEUE_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Redis injoignable ou trop lent, position ni écrite ni lue
+            (FILE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+    get:
+      tags:
+      - file-attente
+      summary: Lire ma position dans la file d'attente d'une séance (rôle customer)
+      description: >-
+        Position de l'appelant du jeton, relue par la salle d'attente toutes les quelques
+        secondes. EN_ATTENTE : position et attente estimée. ADMIS : jeton d'admission signé,
+        à transmettre à creerCommande dans l'en-tête X-Admission-Token jusqu'à
+        admission_expire_le ; le même jeton est rendu à chaque lecture.
+      operationId: lirePositionFile
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: seance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Seance Id
+      responses:
+        '200':
+          description: Position de l'appelant (EN_ATTENTE) ou son admission (ADMIS).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionFile'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle manquant, la file est réservée aux clients (ROLE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucune file pour cette séance (QUEUE_NOT_FOUND), ou l'appelant n'y est
+            pas, jamais entré ou admission expirée (QUEUE_POSITION_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Redis injoignable ou trop lent, position ni écrite ni lue
+            (FILE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+components:
+  schemas:
+    StatutFile:
+      type: string
+      enum:
+      - EN_ATTENTE
+      - ADMIS
+      title: StatutFile
+      description: >-
+        EN_ATTENTE : l'appelant attend son tour. ADMIS : admis par une vague, il peut commander
+        avec son jeton d'admission jusqu'à admission_expire_le.
+    PositionFile:
+      properties:
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        statut:
+          $ref: '#/components/schemas/StatutFile'
+        position:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Position
+          description: Rang dans la file, 1 pour le prochain admis ; null si ADMIS.
+        attente_estimee_secondes:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+          title: Attente Estimee Secondes
+          description: Attente estimée en secondes, d'après la position, la taille et le rythme
+            des vagues d'admission ; null si ADMIS.
+        jeton_admission:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jeton Admission
+          description: Jeton d'admission signé par file-attente (séance, appelant, expiration),
+            à transmettre à creerCommande dans l'en-tête X-Admission-Token ; null si
+            EN_ATTENTE.
+        admission_expire_le:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Admission Expire Le
+          description: Fin de validité du jeton d'admission ; null si EN_ATTENTE.
+      type: object
+      required:
+      - seance_id
+      - statut
+      - position
+      - attente_estimee_secondes
+      - jeton_admission
+      - admission_expire_le
+      title: PositionFile
+    Probleme:
+      properties:
+        type:
+          type: string
+          title: Type
+          default: about:blank
+        title:
+          type: string
+          title: Title
+        status:
+          type: integer
+          title: Status
+        detail:
+          type: string
+          title: Detail
+        code:
+          type: string
+          title: Code
+          description: Code métier stable, par exemple ECHO_INTROUVABLE.
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+          description: Identifiant de corrélation de la requête (X-Correlation-Id).
+        erreurs:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Erreurs
+          description: Détail des champs invalides (code REQUETE_INVALIDE).
+      type: object
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Probleme
+    Sante:
+      properties:
+        statut:
+          type: string
+          title: Statut
+          examples:
+          - ok
+      type: object
+      required:
+      - statut
+      title: Sante
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie.
+      scheme: bearer

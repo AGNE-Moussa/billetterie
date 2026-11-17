@@ -3,37 +3,79 @@
  * `light-dark(<clair>, <sombre>)`, et suit `color-scheme`. Le thème appliqué est l'attribut
  * `data-theme` de <html>, posé par main.tsx avant le premier rendu puis par FournisseurTheme ;
  * sans cet attribut (script pas encore exécuté), la préférence du système s'applique.
+ *
+ * Identité « Ovation » : magenta et violet sur des neutres prune profonds, comme une salle dont
+ * les lumières baissent. Contrastes vérifiés AA (texte 4,5:1, éléments d'interface 3:1) dans les
+ * deux thèmes. Polices : piles système, aucune ressource externe (pas de CDN).
  */
 :root {
   color-scheme: light;
-  --couleur-fond: light-dark(#ffffff, #14161b);
-  --couleur-surface: light-dark(#f3f4f7, #1e2129);
-  --couleur-texte: light-dark(#1b1d23, #eceef3);
-  --couleur-texte-attenue: light-dark(#4b5161, #b4b9c6);
-  --couleur-bordure: light-dark(#b9bfcc, #4a5061);
-  --couleur-lien: light-dark(#1546c0, #9ab8ff);
-  --couleur-principale: light-dark(#1f4fd1, #8fb0ff);
-  --couleur-principale-survol: light-dark(#183fa8, #b3caff);
-  --couleur-sur-principale: light-dark(#ffffff, #0d1220);
+  --couleur-fond: light-dark(#faf7fc, #0f0b16);
+  --couleur-surface: light-dark(#ffffff, #1a1424);
+  --couleur-surface-2: light-dark(#f2ecf7, #241c31);
+  --couleur-texte: light-dark(#1b1426, #f4eff9);
+  --couleur-texte-attenue: light-dark(#5a5068, #bbb0c8);
+  --couleur-bordure: light-dark(#8d819b, #7a6c8c);
+  --couleur-bordure-douce: light-dark(#e3dbea, #352a45);
+  --couleur-lien: light-dark(#a8106f, #ff8fd3);
+  --couleur-principale: light-dark(#b0127a, #ff6ec7);
+  --couleur-principale-survol: light-dark(#8c0d61, #ff9bd8);
+  --couleur-sur-principale: light-dark(#ffffff, #2a0420);
+  --couleur-principale-douce: light-dark(#fbe3f2, #3a1530);
+  --couleur-accent: light-dark(#6a2bd1, #b99cff);
   --couleur-danger: light-dark(#b3261e, #ff9b93);
   --couleur-danger-survol: light-dark(#8f1e18, #ffbdb8);
   --couleur-sur-danger: light-dark(#ffffff, #2a0805);
   --couleur-erreur: light-dark(#b3261e, #ff9b93);
+  --couleur-erreur-douce: light-dark(#fdecea, #3a1714);
   --couleur-succes: light-dark(#1d6b33, #7fd99a);
-  --couleur-info: light-dark(#1546c0, #9ab8ff);
+  --couleur-succes-douce: light-dark(#e6f4ea, #12301c);
+  --couleur-info: light-dark(#4b2bb8, #b99cff);
+  --couleur-info-douce: light-dark(#efeafc, #241b3d);
+  --couleur-avertissement: light-dark(#8a5300, #ffc46b);
   --couleur-focus: light-dark(#c2410c, #fdba74);
-  --couleur-voile: light-dark(rgb(15 18 25 / 55%), rgb(0 0 0 / 65%));
+  --couleur-voile: light-dark(rgb(15 10 25 / 55%), rgb(0 0 0 / 70%));
+
+  /* Scène : toujours sombre (hero, bannières, billets), texte clair quel que soit le thème. */
+  --scene-fond: #120a1c;
+  --scene-texte: #ffffff;
+  --scene-texte-attenue: #d9cde6;
+  --degrade-marque: linear-gradient(120deg, #d4147f 0%, #8f2bd9 55%, #5b2ee0 100%);
+  --degrade-scene:
+    radial-gradient(60rem 30rem at 15% 0%, rgb(212 20 127 / 45%), transparent 60%),
+    radial-gradient(50rem 30rem at 90% 20%, rgb(91 46 224 / 45%), transparent 60%),
+    linear-gradient(180deg, #1a0f29 0%, #120a1c 100%);
 
   --police: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Titres : une linéale étroite façon affiche (Bahnschrift sous Windows, Avenir Next
+     Condensed sous macOS, Roboto Condensed sous Android), repli sur la police de texte. */
+  --police-titre:
+    "Bahnschrift", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", system-ui,
+    sans-serif;
   --espace-1: 0.25rem;
   --espace-2: 0.5rem;
   --espace-3: 0.75rem;
   --espace-4: 1rem;
   --espace-6: 1.5rem;
   --espace-8: 2rem;
-  --rayon: 0.375rem;
-  --largeur-contenu: 72rem;
+  --espace-12: 3rem;
+  --rayon: 0.5rem;
+  --rayon-l: 1rem;
+  --rayon-pilule: 999px;
+  --largeur-contenu: 74rem;
   --epaisseur-focus: 3px;
+  --ombre-1: 0 1px 2px rgb(27 20 38 / 8%), 0 2px 6px rgb(27 20 38 / 6%);
+  --ombre-2: 0 6px 16px rgb(27 20 38 / 12%), 0 2px 4px rgb(27 20 38 / 8%);
+  --ombre-3: 0 18px 40px rgb(27 20 38 / 22%);
+  --transition: 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Couleurs des catégories de places (plan de salle et légende), lisibles sur les deux fonds. */
+  --categorie-0: light-dark(#b0127a, #ff6ec7);
+  --categorie-1: light-dark(#6a2bd1, #b99cff);
+  --categorie-2: light-dark(#0f766e, #5eead4);
+  --categorie-3: light-dark(#b45309, #fcd34d);
+  --categorie-4: light-dark(#1d4ed8, #93c5fd);
+  --categorie-5: light-dark(#4d7c0f, #bef264);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,16 +94,60 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   font-family: var(--police);
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--couleur-texte);
   background-color: var(--couleur-fond);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--police-titre);
+  font-stretch: condensed;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(1.9rem, 1.4rem + 2vw, 2.75rem);
+  font-weight: 700;
+}
+
+h2 {
+  font-size: clamp(1.35rem, 1.2rem + 0.6vw, 1.65rem);
+  font-weight: 700;
 }
 
 a {
   color: var(--couleur-lien);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 0.08em;
+}
+
+a:hover {
+  text-decoration-thickness: 0.14em;
+}
+
+::selection {
+  color: #ffffff;
+  background-color: #b0127a;
+}
+
+time,
+.chiffres {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Focus visible sur tout élément interactif atteint au clavier (WCAG 2.4.7). */
@@ -73,6 +159,16 @@ a {
 /* Cibles de focus programmatique (main, titres) : pas d'élément interactif, pas de contour. */
 [tabindex="-1"]:focus {
   outline: none;
+}
+
+@keyframes reflet-squelette {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

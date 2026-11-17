@@ -2,6 +2,8 @@
 # Chaque ticket US recopie ses routes dans services/commandes/openapi.yaml avec le code ;
 # ce fichier-ci est seulement validé (openapi-spec-validator), pas comparé au code.
 # L'expiration d'une commande non payée n'a pas de route : elle publie ticketing.order.expired.
+# BIL-015 : en-tête X-Admission-Token dans creerCommande (jeton d'admission de file-attente,
+# exigé d'un client pour une séance sous file), 403 ADMISSION_REQUIRED et ADMISSION_INVALID.
 openapi: 3.1.0
 info:
   title: Service commandes
@@ -30,16 +32,21 @@ paths:
     post:
       tags:
       - commandes
-      summary: Commander des places d'une séance et payer (scope orders:write ; client et
-        revendeur)
+      summary: Commander des places d'une séance, et payer si une carte est fournie (scope
+        orders:write ; client et revendeur)
       description: >-
         Crée d'abord la commande EN_ATTENTE, puis verrouille chaque place auprès de Billets
         en durée de réservation (prix de chaque ligne lu dans la catégorie de la place) ; un
         échec de verrou passe la commande EXPIREE et publie ticketing.order.expired, qui libère
-        les places déjà verrouillées. Juste avant Paiements, les places sont reverrouillées en
-        durée de confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande
-        passe EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et
-        ticketing.order.confirmed est publié. La commande appartient à l'appelant du jeton.
+        les places déjà verrouillées. Sans carte_test, la commande s'arrête là : 201 EN_ATTENTE,
+        places verrouillées jusqu'à expire_le, aucun appel à Paiements ; elle se paie ensuite
+        par payerCommande. Avec carte_test, juste avant Paiements, les places sont
+        reverrouillées en durée de confirmation ; une place perdue donne 409
+        SEAT_ALREADY_TAKEN, la commande passe EXPIREE, sans aucun débit. Paiement accepté, la
+        commande est confirmée et ticketing.order.confirmed est publié. La commande appartient
+        à l'appelant du jeton. Séance sous file d'attente (BIL-015) : un client doit présenter
+        dans X-Admission-Token le jeton d'admission que file-attente lui a remis pour cette
+        séance, vérifié avant tout verrou ; un revendeur n'y est pas soumis.
       operationId: creerCommande
       parameters:
       - name: Idempotency-Key
@@ -54,6 +61,19 @@ paths:
         description: Facultatif ; une requête terminée, rejouée avec la même clé par le même
           appelant, répond 200 avec la commande déjà créée ; rejouée pendant que la première
           est en cours, elle répond 409 REQUEST_IN_PROGRESS.
+      - name: X-Admission-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 512
+          - type: 'null'
+          title: X-Admission-Token
+        description: Jeton d'admission signé par file-attente (jeton_admission de
+          lirePositionFile). Exigé d'un client pour une séance sous file d'attente, ignoré
+          sinon et pour un revendeur ; il doit être émis pour cette séance et pour l'appelant
+          du jeton, et ne pas être expiré.
       requestBody:
         content:
           application/json:
@@ -69,7 +89,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Commande'
         '201':
-          description: Commande créée et payée (statut CONFIRMEE).
+          description: Commande créée. Avec carte_test, payée (statut CONFIRMEE) ; sans
+            carte_test, statut EN_ATTENTE, places verrouillées jusqu'à expire_le, à payer par
+            payerCommande.
           content:
             application/json:
               schema:
@@ -81,14 +103,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '402':
-          description: Paiement refusé ; la commande expire et ses places sont libérées
-            (PAYMENT_REFUSED).
+          description: Avec carte_test seulement, paiement refusé ; la commande expire et ses
+            places sont libérées (PAYMENT_REFUSED).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '403':
-          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT), ou, pour un client
+            et une séance sous file d'attente, X-Admission-Token absent (ADMISSION_REQUIRED) ou
+            jeton d'admission mal signé, expiré, d'une autre séance ou d'un autre appelant
+            (ADMISSION_INVALID) ; aucune commande n'est créée.
           content:
             application/problem+json:
               schema:
@@ -116,7 +141,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '503':
-          description: Billets, Catalogue ou Paiements indisponible (SERVICE_INDISPONIBLE). Si
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets, Catalogue ou Paiements
+            (appelé avec carte_test seulement) indisponible (SERVICE_INDISPONIBLE). Si
             Paiements ne répond pas, la commande reste EN_ATTENTE, ses places verrouillées
             jusqu'à expire_le ; elle se retrouve par listerCommandes et se paie par payerCommande.
           content:
@@ -177,6 +203,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/orders/{commande_id}:
     get:
       tags:
@@ -224,15 +256,20 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
   /api/v1/orders/{commande_id}/payment:
     post:
       tags:
       - commandes
-      summary: Réessayer le paiement d'une de mes commandes en attente (scope orders:write ;
-        client et revendeur)
+      summary: Payer une de mes commandes en attente (scope orders:write ; client et revendeur)
       description: >-
-        Nouvel essai après un 503 de Paiements, tant que la commande est EN_ATTENTE (avant
-        expire_le). Juste avant Paiements, les places sont reverrouillées en durée de
+        Premier paiement d'une commande créée sans carte_test, ou nouvel essai après un 503 de
+        Paiements, tant que la commande est EN_ATTENTE (avant expire_le). Juste avant Paiements, les places sont reverrouillées en durée de
         confirmation ; une place perdue donne 409 SEAT_ALREADY_TAKEN, la commande passe
         EXPIREE, sans aucun débit. Paiement accepté, la commande est confirmée et
         ticketing.order.confirmed est publié.
@@ -280,15 +317,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '404':
-          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND).
+          description: Aucune commande de l'appelant avec cet identifiant (ORDER_NOT_FOUND), ou
+            séance de la commande inconnue de Catalogue (SHOW_NOT_FOUND).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '409':
-          description: La commande n'est pas EN_ATTENTE (ORDER_NOT_PENDING), une place est perdue
-            (SEAT_ALREADY_TAKEN ; la commande passe EXPIREE, sans débit), ou sa séance est annulée
-            (SHOW_CANCELLED) ou déjà commencée (SHOW_ALREADY_STARTED).
+          description: La commande n'est pas EN_ATTENTE (ORDER_NOT_PENDING), sa réservation est
+            encore en cours (REQUEST_IN_PROGRESS), une place est perdue (SEAT_ALREADY_TAKEN ; la
+            commande passe EXPIREE), ou sa séance est annulée (SHOW_CANCELLED) ou déjà commencée
+            (SHOW_ALREADY_STARTED ; la commande passe EXPIREE). Un paiement déjà accepté est
+            signalé à rembourser (ticketing.order.expired, remboursement_du).
           content:
             application/problem+json:
               schema:
@@ -300,8 +340,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Probleme'
         '503':
-          description: Catalogue (lecture de la séance) ou Paiements indisponible ; la commande
-            reste EN_ATTENTE jusqu'à expire_le (SERVICE_INDISPONIBLE).
+          description: Base injoignable (BASE_INDISPONIBLE), ou Billets (reverrouillage), Catalogue (lecture de la séance)
+            ou Paiements indisponible, la commande restant EN_ATTENTE jusqu'à expire_le
+            (SERVICE_INDISPONIBLE).
           content:
             application/problem+json:
               schema:
@@ -324,17 +365,20 @@ components:
           uniqueItems: true
           title: Place Ids
         carte_test:
-          type: string
-          pattern: ^[0-9]{16}$
+          anyOf:
+          - type: string
+            pattern: ^[0-9]{16}$
+          - type: 'null'
           title: Carte Test
-          description: 'Numéro de carte du paiement simulé, transmis à Paiements et jamais
-            journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout autre
-            numéro de 16 chiffres accepté (par exemple 4242424242424242).'
+          description: 'Facultatif. Absent : la commande est créée EN_ATTENTE, places
+            verrouillées jusqu''à expire_le, sans appel à Paiements, et se paie ensuite par
+            payerCommande. Présent : numéro de carte du paiement simulé, transmis à Paiements et
+            jamais journalisé. Numéros de test : 4000000000000002 refusé (PAYMENT_REFUSED), tout
+            autre numéro de 16 chiffres accepté (par exemple 4242424242424242).'
       type: object
       required:
       - seance_id
       - place_ids
-      - carte_test
       title: CommandeCreation
     PaiementCommande:
       properties:

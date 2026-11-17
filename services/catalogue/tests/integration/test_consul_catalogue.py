@@ -37,6 +37,10 @@ TAGS_ATTENDUS = {
     "traefik.http.routers.catalogue-sante.entrypoints=web",
     "traefik.http.routers.catalogue-sante.middlewares=standard@file,catalogue-sante",
     "traefik.http.middlewares.catalogue-sante.replacepath.path=/health",
+    # BIL-012 : routeur de l'hôte des revendeurs (HOTE_PARTENAIRES, défaut partenaires.localhost).
+    f"traefik.http.routers.catalogue-partenaires.rule=Host(`partenaires.localhost`) && ({REGLE})",
+    "traefik.http.routers.catalogue-partenaires.entrypoints=web",
+    "traefik.http.routers.catalogue-partenaires.middlewares=partenaires@file",
 }
 DELAI_PREMIER_CHECK = 60.0
 
@@ -82,6 +86,7 @@ async def test_catalogue_s_inscrit_dans_consul_avec_ses_trois_prefixes(
 ) -> None:
     monkeypatch.setenv("CONSUL_URL", consul_url)
     monkeypatch.delenv("TRAEFIK_POINT_ENTREE", raising=False)
+    monkeypatch.delenv("HOTE_PARTENAIRES", raising=False)
     app = creer_app(
         Parametres(database_url=database_url, instance=INSTANCE, consul_actif=True),
         verificateur_jetons=EmetteurDeTest().verificateur(),

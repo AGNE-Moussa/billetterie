@@ -1,0 +1,692 @@
+/* E03 à E08 et E16 : en-têtes, plan et panier collant, compte à rebours, alertes, lignes de la
+   commande, paiement (carte stylisée), salle d'attente, billet. */
+
+.entete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+  min-width: 0;
+}
+
+.entete h1 {
+  margin: 0;
+}
+
+.entete p {
+  margin: 0;
+}
+
+.sousTitre {
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+/* En-tête avec vignette (E03) : petit visuel de l'événement à gauche du titre. */
+.enteteVisuel {
+  display: flex;
+  gap: var(--espace-4);
+  align-items: center;
+}
+
+.vignette {
+  flex-shrink: 0;
+  width: 7.5rem;
+  overflow: hidden;
+  border-radius: var(--rayon);
+  box-shadow: var(--ombre-2);
+}
+
+/* E03 : plan à gauche, panier collant à droite ; une colonne et panier en bas sur mobile. */
+.disposition {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--espace-6);
+  align-items: start;
+}
+
+.colonnePlan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  min-width: 0;
+}
+
+.cartePlan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  padding: var(--espace-6) var(--espace-4);
+  background:
+    radial-gradient(
+      40rem 14rem at 50% 0%,
+      color-mix(in srgb, var(--couleur-accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
+}
+
+.panier {
+  position: sticky;
+  inset-block-start: 5.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: var(--espace-6);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-2);
+}
+
+.panier p {
+  margin: 0;
+}
+
+.titrePanier {
+  font-family: var(--police-titre);
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-stretch: condensed;
+}
+
+.puces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.puces li {
+  --couleur-categorie: var(--categorie-0);
+  padding: 0.1rem var(--espace-2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  background-color: color-mix(in srgb, var(--couleur-categorie) 16%, var(--couleur-surface));
+  border: 1px solid var(--couleur-categorie);
+  border-radius: var(--rayon-pilule);
+}
+
+.puces li[data-categorie="1"] {
+  --couleur-categorie: var(--categorie-1);
+}
+
+.puces li[data-categorie="2"] {
+  --couleur-categorie: var(--categorie-2);
+}
+
+.puces li[data-categorie="3"] {
+  --couleur-categorie: var(--categorie-3);
+}
+
+.puces li[data-categorie="4"] {
+  --couleur-categorie: var(--categorie-4);
+}
+
+.puces li[data-categorie="5"] {
+  --couleur-categorie: var(--categorie-5);
+}
+
+.resume {
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block-start: var(--espace-3);
+  border-block-start: 1px dashed var(--couleur-bordure);
+}
+
+.total strong {
+  font-family: var(--police-titre);
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionsPanier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.actionsPanier > button {
+  width: 100%;
+}
+
+/* Expiration de l'admission (file d'attente) : pastille bien visible. */
+.pastilleAdmission {
+  padding: var(--espace-2) var(--espace-3);
+  font-size: 0.875rem;
+  color: var(--couleur-texte);
+  background-color: var(--couleur-info-douce);
+  border: 1px solid var(--couleur-info);
+  border-radius: var(--rayon);
+}
+
+.pastilleAdmission strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Récapitulatif générique (E05 : paiement accepté, commande en attente). */
+.recapitulatif {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--espace-4) var(--espace-6);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
+}
+
+.recapitulatif p {
+  margin: 0;
+}
+
+.succes {
+  background-color: var(--couleur-succes-douce);
+  border-color: color-mix(in srgb, var(--couleur-succes) 50%, transparent);
+  border-inline-start: 4px solid var(--couleur-succes);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: center;
+}
+
+/* Liens d'action présentés en boutons (« Payer », « Mes billets », etc.). */
+.lienBouton,
+.actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--espace-2) var(--espace-6);
+  font-weight: 700;
+  color: var(--couleur-texte);
+  text-decoration: none;
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-pilule);
+  transition: background-color var(--transition);
+}
+
+.lienBouton:hover,
+.actions > a:hover {
+  background-color: var(--couleur-surface-2);
+}
+
+.lienPrincipal {
+  color: var(--couleur-sur-principale);
+  background-color: var(--couleur-principale);
+  border-color: transparent;
+}
+
+.lienPrincipal:hover {
+  background-color: var(--couleur-principale-survol);
+}
+
+.alerte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding: var(--espace-4);
+  background-color: var(--couleur-erreur-douce);
+  border: 1px solid color-mix(in srgb, var(--couleur-erreur) 40%, transparent);
+  border-inline-start: 4px solid var(--couleur-erreur);
+  border-radius: var(--rayon);
+}
+
+.alerte p {
+  margin: 0;
+}
+
+/* Compte à rebours (E04, E05) : grande pastille. */
+.compteARebours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2) var(--espace-3);
+  align-items: center;
+  width: fit-content;
+  padding: var(--espace-3) var(--espace-4);
+  margin: 0;
+  font-size: 1rem;
+  background-color: var(--couleur-principale-douce);
+  border: 1px solid color-mix(in srgb, var(--couleur-principale) 45%, transparent);
+  border-radius: var(--rayon-pilule);
+}
+
+.compteARebours strong {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
+  padding: var(--espace-1) var(--espace-3);
+  font-family: var(--police-titre);
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--couleur-sur-principale);
+  background-color: var(--couleur-principale);
+  border-radius: var(--rayon-pilule);
+}
+
+.compteARebours strong::before {
+  width: 0.55rem;
+  height: 0.55rem;
+  content: "";
+  background-color: currentcolor;
+  border-radius: 50%;
+  animation: battement 1s ease-in-out infinite;
+}
+
+@keyframes battement {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Lignes de la commande (E04, E05, E14). */
+.lignes {
+  width: 100%;
+  max-width: 40rem;
+  overflow: hidden;
+  border-collapse: collapse;
+  background-color: var(--couleur-surface);
+  border-radius: var(--rayon-l);
+  box-shadow: 0 0 0 1px var(--couleur-bordure-douce);
+}
+
+.lignes th,
+.lignes td {
+  padding: var(--espace-3) var(--espace-4);
+  text-align: left;
+  border-bottom: 1px solid var(--couleur-bordure-douce);
+}
+
+.lignes thead th {
+  font-size: 0.8125rem;
+  color: var(--couleur-texte-attenue);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: var(--couleur-surface-2);
+}
+
+.lignes tfoot th,
+.lignes tfoot td {
+  font-size: 1.125rem;
+  font-weight: 800;
+  border-bottom: none;
+}
+
+.lignes .montant {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* E04 : récapitulatif et paiement côte à côte. */
+.paiement {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+  gap: var(--espace-8);
+  align-items: start;
+}
+
+.colonne {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  min-width: 0;
+}
+
+.titreColonne {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  max-width: 32rem;
+}
+
+/* Carte bancaire stylisée (décorative) : reflète la saisie de la carte de test. */
+.carteBancaire {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 24rem;
+  aspect-ratio: 1.586;
+  padding: var(--espace-6);
+  overflow: hidden;
+  color: #ffffff;
+  background:
+    radial-gradient(18rem 12rem at 100% 0%, rgb(255 255 255 / 22%), transparent 60%),
+    linear-gradient(135deg, #b0127a 0%, #6a2bd1 60%, #2a1640 100%);
+  border-radius: 1.1rem;
+  box-shadow: 0 20px 40px -12px rgb(106 43 209 / 55%);
+}
+
+.carteBancaire::after {
+  position: absolute;
+  inset-block-end: -40%;
+  inset-inline-end: -20%;
+  width: 70%;
+  aspect-ratio: 1;
+  content: "";
+  border: 2.5rem solid rgb(255 255 255 / 8%);
+  border-radius: 50%;
+}
+
+.puceCarte {
+  width: 2.75rem;
+  height: 2rem;
+  background: linear-gradient(135deg, #f6d38a, #c9a24b);
+  border-radius: 0.4rem;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 15%);
+}
+
+.numeroCarte {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: clamp(1.05rem, 0.9rem + 1vw, 1.4rem);
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.piedCarte {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.marqueCarte {
+  font-family: var(--police-titre);
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-stretch: condensed;
+  letter-spacing: 0.04em;
+}
+
+/* E16 : salle d'attente, anneaux animés et position mise en avant. */
+.attente {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-6);
+  align-items: center;
+  padding: var(--espace-8) var(--espace-6);
+  text-align: center;
+  background:
+    radial-gradient(
+      30rem 16rem at 50% 0%,
+      color-mix(in srgb, var(--couleur-accent) 16%, transparent),
+      transparent 70%
+    ),
+    var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-2);
+}
+
+.attente h2 {
+  margin: 0;
+}
+
+.attente p {
+  max-width: 36rem;
+  margin: 0;
+}
+
+.attente progress {
+  width: min(100%, 28rem);
+  height: 0.75rem;
+  overflow: hidden;
+  appearance: none;
+  background-color: var(--couleur-surface-2);
+  border: none;
+  border-radius: var(--rayon-pilule);
+  accent-color: var(--couleur-principale);
+}
+
+.attente progress::-webkit-progress-bar {
+  background-color: var(--couleur-surface-2);
+  border-radius: var(--rayon-pilule);
+}
+
+.attente progress::-webkit-progress-value {
+  background: var(--degrade-marque);
+  border-radius: var(--rayon-pilule);
+  transition: width 600ms ease;
+}
+
+.attente progress::-moz-progress-bar {
+  background: var(--degrade-marque);
+  border-radius: var(--rayon-pilule);
+}
+
+.anneaux {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 8rem;
+  height: 8rem;
+}
+
+.anneaux span {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--couleur-principale);
+  border-radius: 50%;
+  opacity: 0;
+  animation: onde 3s ease-out infinite;
+}
+
+.anneaux span:nth-child(2) {
+  animation-delay: 1s;
+}
+
+.anneaux span:nth-child(3) {
+  animation-delay: 2s;
+}
+
+.anneaux svg {
+  position: relative;
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--couleur-principale);
+}
+
+@keyframes onde {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.45);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anneaux span {
+    opacity: 0.35;
+  }
+
+  .anneaux span:nth-child(2) {
+    transform: scale(0.75);
+  }
+
+  .anneaux span:nth-child(3) {
+    transform: scale(0.5);
+  }
+}
+
+.statutAttente {
+  font-size: 1.125rem;
+}
+
+/* Billet (E08) : partie principale, perforation, talon détachable avec le QR code. */
+.billet {
+  --encoche: 1.1rem;
+  --largeur-talon: 17rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: 52rem;
+  overflow: hidden;
+  color: var(--couleur-texte);
+  background-color: var(--couleur-surface);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-3);
+  /* Encoches rondes au droit de la perforation. */
+  mask:
+    radial-gradient(circle var(--encoche) at calc(100% - var(--largeur-talon)) 0, #0000 98%, #000)
+      top / 100% 51% no-repeat,
+    radial-gradient(
+        circle var(--encoche) at calc(100% - var(--largeur-talon)) 100%,
+        #0000 98%,
+        #000
+      )
+      bottom / 100% 51% no-repeat;
+}
+
+.billetPrincipal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  min-width: 0;
+}
+
+.billetBandeau {
+  overflow: hidden;
+}
+
+.billetBandeau > div {
+  height: 7.5rem;
+  aspect-ratio: auto;
+}
+
+.billetEntete {
+  padding-inline: var(--espace-6);
+}
+
+.billetInfos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--espace-4);
+  padding: 0 var(--espace-6) var(--espace-6);
+  margin: 0;
+}
+
+.billetInfos div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.billetInfos dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--couleur-texte-attenue);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.billetInfos dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.talon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  align-items: center;
+  justify-content: center;
+  width: var(--largeur-talon);
+  padding: var(--espace-6) var(--espace-4);
+  text-align: center;
+  background-color: var(--couleur-surface-2);
+  /* Perforation : pointillés verticaux. */
+  border-inline-start: 3px dashed var(--couleur-bordure);
+}
+
+.talon figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  align-items: center;
+  margin: 0;
+}
+
+.talon figure svg {
+  width: 100%;
+  max-width: 13rem;
+  height: auto;
+  border-radius: var(--rayon);
+}
+
+.talon figcaption {
+  font-size: 0.8125rem;
+  color: var(--couleur-texte-attenue);
+}
+
+@media (max-width: 56rem) {
+  .disposition {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Panier collé en bas de l'écran pendant le choix des places. */
+  .panier {
+    inset-block: auto 0;
+    z-index: 5;
+    padding: var(--espace-4);
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+    box-shadow: 0 -10px 30px rgb(15 10 25 / 20%);
+  }
+
+  .paiement {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--espace-6);
+  }
+}
+
+@media (max-width: 40rem) {
+  .vignette {
+    width: 5rem;
+  }
+
+  .billet {
+    grid-template-columns: minmax(0, 1fr);
+    mask: none;
+  }
+
+  .talon {
+    width: auto;
+    border-inline-start: none;
+    border-block-start: 3px dashed var(--couleur-bordure);
+  }
+
+  /* Le résumé (aria-live) reste affiché : le masquer couperait son annonce. */
+  .titrePanier {
+    display: none;
+  }
+}

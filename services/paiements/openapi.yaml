@@ -1,5 +1,9 @@
 # Contrat OpenAPI 3.1 du service paiements : la référence que le code doit respecter.
 # Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
+# Route recopiée du contrat cible docs/contrats/paiements.yaml (BIL-002) au ticket BIL-008 :
+# paiement simulé d'une commande (scope payments:write ; client services seulement).
+# Le remboursement n'a pas de route : il vit dans les consommateurs de ticketing.show.cancelled
+# et de ticketing.ticket.rejected et publie ticketing.payment.refunded.
 openapi: 3.1.0
 info:
   title: Service paiements
@@ -24,8 +28,209 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+  /api/v1/payments:
+    post:
+      tags:
+      - paiements
+      summary: Payer une commande en mode test (scope payments:write ; client services seulement)
+      description: Paiement simulé, aucune donnée de carte réelle ; le numéro de carte n'est ni
+        journalisé ni conservé. Un seul paiement par commande. Idempotent par Idempotency-Key
+        (égal à commande_id) ; une requête rejouée à l'identique renvoie le résultat enregistré
+        (201 ou 402), sans nouveau paiement.
+      operationId: creerPaiement
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Idempotency-Key
+        description: Identifiant de la commande payée (même valeur que commande_id).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaiementCreation'
+      responses:
+        '201':
+          description: Paiement accepté (statut ACCEPTE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paiement'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '402':
+          description: Paiement refusé, enregistré avec le statut REFUSE (PAYMENT_REFUSED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '409':
+          description: Un paiement différent existe déjà pour cette commande
+            (PAYMENT_ALREADY_EXISTS), ou la séance est annulée d'après la projection des séances
+            annulées (SHOW_CANCELLED).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: En-tête ou corps invalide, ou Idempotency-Key différent de commande_id
+            (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/payments/{commande_id}:
+    get:
+      tags:
+      - paiements
+      summary: Lire le paiement d'une commande (scope payments:write ; client services seulement)
+      description: Lecture sans effet, utilisée par Commandes avant d'expirer une commande déjà
+        envoyée à Paiements, pour savoir si un remboursement est dû ; ne crée jamais de paiement.
+      operationId: lirePaiement
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: commande_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Commande Id
+      responses:
+        '200':
+          description: Paiement de la commande.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paiement'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucun paiement pour cette commande (PAYMENT_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Paramètre de chemin invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
 components:
   schemas:
+    PaiementCreation:
+      properties:
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+          description: Séance de la commande ; Paiements consomme ticketing.show.cancelled et
+            rembourse les paiements ACCEPTE de la séance.
+        montant:
+          type: integer
+          exclusiveMinimum: 0
+          title: Montant
+          description: Montant en centimes.
+        carte_test:
+          type: string
+          pattern: ^[0-9]{16}$
+          title: Carte Test
+          description: 'Numéro de carte du paiement simulé, jamais journalisé. Numéros de test :
+            4000000000000002 refusé (PAYMENT_REFUSED), tout autre numéro de 16 chiffres accepté
+            (par exemple 4242424242424242).'
+      type: object
+      required:
+      - commande_id
+      - seance_id
+      - montant
+      - carte_test
+      title: PaiementCreation
+    StatutPaiement:
+      type: string
+      enum:
+      - ACCEPTE
+      - REFUSE
+      - REMBOURSE
+      title: StatutPaiement
+    Paiement:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+          description: Séance de la commande ; Paiements consomme ticketing.show.cancelled et
+            rembourse les paiements ACCEPTE de la séance.
+        montant:
+          type: integer
+          title: Montant
+          description: Montant en centimes.
+        statut:
+          $ref: '#/components/schemas/StatutPaiement'
+        cree_le:
+          type: string
+          format: date-time
+          title: Cree Le
+      type: object
+      required:
+      - id
+      - commande_id
+      - seance_id
+      - montant
+      - statut
+      - cree_le
+      title: Paiement
     Probleme:
       properties:
         type:
@@ -78,3 +283,8 @@ components:
       required:
       - statut
       title: Sante
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: Jeton d'accès Keycloak du realm billetterie.
+      scheme: bearer

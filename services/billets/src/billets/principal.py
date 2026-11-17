@@ -1,5 +1,5 @@
 """Assemblage : configuration, journaux, erreurs, authentification, base, Consul, verrous Redis,
-consommateurs RabbitMQ, routes.
+consommateurs RabbitMQ, relais de l'outbox, routes.
 
 Lancement : uvicorn --factory billets.principal:creer_app
 """
@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from billets.api.routes import routeur_places, routeur_sante
+from billets.api.routes import routeur_billets, routeur_places, routeur_sante
 from billets.config import Parametres, parametres
 from billets.consommateurs import abonner_consommateurs
 from billets.infra.base import creer_moteur
@@ -22,10 +22,28 @@ from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
 from commun.observabilite import installer_observabilite, instrumenter_moteur
-from commun.registre import inscription, tags_sante_traefik, tags_traefik
+from commun.outbox import RelaisOutbox
+from commun.registre import (
+    inscription,
+    tags_partenaires_traefik,
+    tags_sante_traefik,
+    tags_traefik,
+)
 
 NOM_SERVICE = "billets"
-RESSOURCES = ("seats",)
+# tickets : billets de l'appelant (listerBillets, lireBillet ; BIL-021), sur les deux routeurs.
+RESSOURCES = ("seats", "tickets")
+
+
+def tags_consul() -> list[str]:
+    """Tags Consul de l'instance : routeur standard, routeur des revendeurs sur l'hôte
+    partenaires (BIL-012, décision Q1) et routeur de santé."""
+    return [
+        *tags_traefik(NOM_SERVICE, *RESSOURCES),
+        *tags_partenaires_traefik(NOM_SERVICE, *RESSOURCES),
+        # GET /api/v1/<ressource>/health réécrit en /health.
+        *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
+    ]
 
 
 def creer_app(
@@ -50,10 +68,19 @@ def creer_app(
                 pile.push_async_callback(verrous.fermer)
                 app.state.verrous = verrous
                 if config.rabbitmq_url:
-                    # Consommateur ticketing.show.scheduled (décision Q5) ; sans URL, aucun.
+                    # Consommateurs ticketing.show.scheduled (décision Q5) et
+                    # ticketing.order.confirmed (BIL-009) ; sans URL, aucun.
                     broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
-                    abonner_consommateurs(broker, app.state.sessions)
+                    abonner_consommateurs(
+                        broker,
+                        app.state.sessions,
+                        verrous,
+                        config.qr_cle_signature.get_secret_value(),
+                    )
                     await pile.enter_async_context(messagerie(broker))
+                    # Relais de l'outbox : ticketing.ticket.issued et ticketing.ticket.rejected.
+                    relais = RelaisOutbox(app.state.sessions, broker)
+                    await pile.enter_async_context(relais.en_fond())
                 if config.consul_actif:
                     # Inscription une fois prêt, retrait avant la fermeture des ressources.
                     await pile.enter_async_context(
@@ -61,11 +88,7 @@ def creer_app(
                             NOM_SERVICE,
                             config.instance,
                             config.port,
-                            [
-                                *tags_traefik(NOM_SERVICE, *RESSOURCES),
-                                # GET /api/v1/<ressource>/health réécrit en /health.
-                                *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
-                            ],
+                            tags_consul(),
                         )
                     )
                 yield
@@ -82,4 +105,5 @@ def creer_app(
     installer_observabilite(app, NOM_SERVICE)
     app.include_router(routeur_sante)
     app.include_router(routeur_places)
+    app.include_router(routeur_billets)
     return app

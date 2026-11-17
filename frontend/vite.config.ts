@@ -12,6 +12,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // 5 s par défaut : trop court quand la plateforme Docker occupe le poste (rendus complets
+    // de main.test.tsx, minuteries de FournisseurAuthentification) ; un test lent reste signalé.
+    testTimeout: 15000,
     setupFiles: ["./src/setupTests.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
   },

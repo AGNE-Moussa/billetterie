@@ -5,7 +5,7 @@
 .liste {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--espace-4);
+  gap: var(--espace-1);
   padding: 0;
   margin: 0;
   list-style: none;
@@ -13,11 +13,26 @@
 
 .lien {
   display: inline-block;
-  padding: var(--espace-1) var(--espace-2);
-  border-radius: var(--rayon);
+  padding: var(--espace-2) var(--espace-3);
+  font-weight: 600;
+  color: var(--couleur-texte);
+  text-decoration: none;
+  border-radius: var(--rayon-pilule);
+  transition:
+    background-color var(--transition),
+    color var(--transition);
 }
 
+.lien:hover {
+  background-color: var(--couleur-surface-2);
+}
+
+/* Page courante : pastille teintée et soulignement, pas la couleur seule. */
 .lien[aria-current="page"] {
   font-weight: 700;
+  color: var(--couleur-lien);
+  text-decoration: underline;
   text-decoration-thickness: 0.15em;
+  text-underline-offset: 0.35em;
+  background-color: var(--couleur-principale-douce);
 }

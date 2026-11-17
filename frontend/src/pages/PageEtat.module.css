@@ -1,0 +1,40 @@
+/* Pages « Page introuvable » et « Accès refusé » : illustration, titre, retour à l'accueil. */
+.etat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  align-items: center;
+  padding: var(--espace-12) var(--espace-4);
+  text-align: center;
+}
+
+.etat h1 {
+  margin: 0;
+}
+
+.etat p {
+  max-width: 32rem;
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+.illustration {
+  width: min(16rem, 70vw);
+  height: auto;
+}
+
+.lien {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--espace-2) var(--espace-6);
+  font-weight: 700;
+  color: var(--couleur-sur-principale);
+  text-decoration: none;
+  background-color: var(--couleur-principale);
+  border-radius: var(--rayon-pilule);
+}
+
+.lien:hover {
+  background-color: var(--couleur-principale-survol);
+}

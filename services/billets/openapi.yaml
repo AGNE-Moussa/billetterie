@@ -1,7 +1,9 @@
 # Contrat OpenAPI 3.1 du service billets : la référence que le code doit respecter.
 # Vérifié en CI par tests/contract/test_contrats_services.py (pytest -m contract).
 # Routes recopiées du contrat cible docs/contrats/billets.yaml (BIL-002) au ticket BIL-006 :
-# disponibilité des places (publique) et verrou d'une place (scope seats:lock).
+# disponibilité des places (publique) et verrou d'une place (scope seats:lock) ; au ticket
+# BIL-021 : lecture des billets de l'appelant (listerBillets, lireBillet, scope tickets:read),
+# avec le filtre commande_id et les champs rang et numero de Billet.
 # GET /api/v1/seats est public : à déclarer dans ROUTES_PUBLIQUES du vérificateur.
 openapi: 3.1.0
 info:
@@ -157,6 +159,133 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Probleme'
+  /api/v1/tickets:
+    get:
+      tags:
+      - billets
+      summary: Lister mes billets, page par page (scope tickets:read ; client et revendeur)
+      description: Filtré par l'appelant du jeton, jamais par un paramètre ; commande_id, s'il est
+        fourni, restreint en plus aux billets de cette commande (une commande inconnue ou d'un
+        autre appelant répond 200 avec elements vide). Ordre stable par date d'émission
+        décroissante, puis identifiant.
+      operationId: listerBillets
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: commande_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Commande Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          title: Page
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Size
+          default: 20
+      responses:
+        '200':
+          description: Page des billets de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BilletPage'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant de commande ou paramètres de pagination invalides
+            (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+  /api/v1/tickets/{billet_id}:
+    get:
+      tags:
+      - billets
+      summary: Lire un de mes billets, avec son QR code (scope tickets:read ; client et
+        revendeur)
+      description: Un billet d'un autre appelant répond 404 TICKET_NOT_FOUND, comme un billet
+        inexistant, jamais 403.
+      operationId: lireBillet
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: billet_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Billet Id
+      responses:
+        '200':
+          description: Billet de l'appelant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Billet'
+        '401':
+          description: Jeton absent, invalide ou expiré (JETON_*).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '403':
+          description: Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '404':
+          description: Aucun billet de l'appelant avec cet identifiant (TICKET_NOT_FOUND).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '422':
+          description: Identifiant invalide (REQUETE_INVALIDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
+        '503':
+          description: Base injoignable (BASE_INDISPONIBLE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Probleme'
 components:
   schemas:
     Place:
@@ -274,6 +403,86 @@ components:
       - commande_id
       - expire_le
       title: Verrou
+    StatutBillet:
+      type: string
+      enum:
+      - EMIS
+      - ANNULE
+      title: StatutBillet
+      description: ANNULE quand la séance est annulée (consommateur de ticketing.show.cancelled).
+    Billet:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        commande_id:
+          type: string
+          format: uuid
+          title: Commande Id
+        seance_id:
+          type: string
+          format: uuid
+          title: Seance Id
+        place_id:
+          type: string
+          format: uuid
+          title: Place Id
+        rang:
+          type: string
+          title: Rang
+          description: Rang de la place (table places).
+        numero:
+          type: integer
+          title: Numero
+          description: Numéro de la place dans son rang (table places).
+        statut:
+          $ref: '#/components/schemas/StatutBillet'
+        qr_code:
+          type: string
+          title: Qr Code
+          description: Identifiant du billet signé (HMAC), jamais de donnée lisible.
+        emis_le:
+          type: string
+          format: date-time
+          title: Emis Le
+      type: object
+      required:
+      - id
+      - commande_id
+      - seance_id
+      - place_id
+      - rang
+      - numero
+      - statut
+      - qr_code
+      - emis_le
+      title: Billet
+    BilletPage:
+      properties:
+        elements:
+          items:
+            $ref: '#/components/schemas/Billet'
+          type: array
+          title: Elements
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+        total:
+          type: integer
+          title: Total
+          description: Nombre total de billets de l'appelant (de la commande si commande_id est
+            fourni).
+      type: object
+      required:
+      - elements
+      - page
+      - size
+      - total
+      title: BilletPage
     Probleme:
       properties:
         type:

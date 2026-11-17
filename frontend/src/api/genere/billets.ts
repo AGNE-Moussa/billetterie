@@ -59,6 +59,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/tickets": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Lister mes billets, page par page (scope tickets:read ; client et revendeur)
+     * @description Filtré par l'appelant du jeton, jamais par un paramètre ; commande_id, s'il est fourni, restreint en plus aux billets de cette commande (une commande inconnue ou d'un autre appelant répond 200 avec elements vide). Ordre stable par date d'émission décroissante, puis identifiant.
+     */
+    get: operations["listerBillets"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tickets/{billet_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Lire un de mes billets, avec son QR code (scope tickets:read ; client et revendeur)
+     * @description Un billet d'un autre appelant répond 404 TICKET_NOT_FOUND, comme un billet inexistant, jamais 403.
+     */
+    get: operations["lireBillet"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -156,6 +196,70 @@ export interface components {
        */
       expire_le: string;
     };
+    /**
+     * StatutBillet
+     * @description ANNULE quand la séance est annulée (consommateur de ticketing.show.cancelled).
+     * @enum {string}
+     */
+    StatutBillet: "EMIS" | "ANNULE";
+    /** Billet */
+    Billet: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Commande Id
+       * Format: uuid
+       */
+      commande_id: string;
+      /**
+       * Seance Id
+       * Format: uuid
+       */
+      seance_id: string;
+      /**
+       * Place Id
+       * Format: uuid
+       */
+      place_id: string;
+      /**
+       * Rang
+       * @description Rang de la place (table places).
+       */
+      rang: string;
+      /**
+       * Numero
+       * @description Numéro de la place dans son rang (table places).
+       */
+      numero: number;
+      statut: components["schemas"]["StatutBillet"];
+      /**
+       * Qr Code
+       * @description Identifiant du billet signé (HMAC), jamais de donnée lisible.
+       */
+      qr_code: string;
+      /**
+       * Emis Le
+       * Format: date-time
+       */
+      emis_le: string;
+    };
+    /** BilletPage */
+    BilletPage: {
+      /** Elements */
+      elements: components["schemas"]["Billet"][];
+      /** Page */
+      page: number;
+      /** Size */
+      size: number;
+      /**
+       * Total
+       * @description Nombre total de billets de l'appelant (de la commande si commande_id est fourni).
+       */
+      total: number;
+    };
     /** Probleme */
     Probleme: {
       /**
@@ -208,6 +312,9 @@ export type Place = components["schemas"]["Place"];
 export type PlacePage = components["schemas"]["PlacePage"];
 export type VerrouCreation = components["schemas"]["VerrouCreation"];
 export type Verrou = components["schemas"]["Verrou"];
+export type StatutBillet = components["schemas"]["StatutBillet"];
+export type Billet = components["schemas"]["Billet"];
+export type BilletPage = components["schemas"]["BilletPage"];
 export type Probleme = components["schemas"]["Probleme"];
 export type Sante = components["schemas"]["Sante"];
 export type $defs = Record<string, never>;
@@ -353,6 +460,133 @@ export interface operations {
         };
       };
       /** @description Base injoignable (BASE_INDISPONIBLE), ou Redis injoignable ou trop lent, verrou ni posé ni lu (VERROU_INDISPONIBLE). */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+    };
+  };
+  listerBillets: {
+    parameters: {
+      query?: {
+        commande_id?: string | null;
+        page?: number;
+        size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page des billets de l'appelant. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BilletPage"];
+        };
+      };
+      /** @description Jeton absent, invalide ou expiré (JETON_*). */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT). */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Identifiant de commande ou paramètres de pagination invalides (REQUETE_INVALIDE). */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Base injoignable (BASE_INDISPONIBLE). */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+    };
+  };
+  lireBillet: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        billet_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Billet de l'appelant. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Billet"];
+        };
+      };
+      /** @description Jeton absent, invalide ou expiré (JETON_*). */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Rôle ou scope manquant (ROLE_MANQUANT, SCOPE_MANQUANT). */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Aucun billet de l'appelant avec cet identifiant (TICKET_NOT_FOUND). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Identifiant invalide (REQUETE_INVALIDE). */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Probleme"];
+        };
+      };
+      /** @description Base injoignable (BASE_INDISPONIBLE). */
       503: {
         headers: {
           [name: string]: unknown;

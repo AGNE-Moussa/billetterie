@@ -118,10 +118,14 @@ async def _exposer(service: str, instances: list[str]) -> list[str]:
 async def _attendre_route(
     client: httpx.AsyncClient, route: str, entetes: dict[str, str], delai: float = 45.0
 ) -> None:
-    """Attend que Traefik ait découvert la route (404 tant qu'elle n'existe pas)."""
+    """Attend que Traefik ait découvert la route.
+
+    404, ou repli 503 marqué X-Gateway-Repli, tant qu'elle n'existe pas.
+    """
     limite = time.monotonic() + delai
     while time.monotonic() < limite:
-        if (await client.get(route, headers=entetes)).status_code != 404:
+        reponse = await client.get(route, headers=entetes)
+        if reponse.status_code != 404 and "x-gateway-repli" not in reponse.headers:
             return
         await anyio.sleep(1)
     raise AssertionError(f"Route {route} jamais découverte par Traefik")
@@ -209,3 +213,17 @@ async def test_le_preflight_cors_passe_sans_jeton(
 
     for identifiant in identifiants:
         await desenregistrer(identifiant)
+
+
+async def test_une_route_api_sans_service_inscrit_renvoie_503_service_indisponible(
+    gateway_url: str,
+) -> None:
+    """Routeur de repli : aucun service inscrit pour ce préfixe, 503 au lieu du 404 de Traefik."""
+    async with httpx.AsyncClient(base_url=gateway_url) as client:
+        reponse = await client.get("/api/v1/aucun-service-inscrit")
+
+    assert reponse.status_code == 503, reponse.text
+    assert reponse.headers["content-type"] == "application/problem+json"
+    assert reponse.headers["x-gateway-repli"] == "true"
+    assert reponse.headers["retry-after"] == "5"
+    assert reponse.json()["code"] == "SERVICE_INDISPONIBLE"

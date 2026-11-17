@@ -1,4 +1,5 @@
-"""Assemblage : configuration, journaux, erreurs, authentification, base, Consul, routes.
+"""Assemblage : configuration, journaux, erreurs, authentification, base, consommateurs
+RabbitMQ (envoi SMTP), Consul, routes.
 
 Lancement : uvicorn --factory notifications.principal:creer_app
 """
@@ -7,9 +8,11 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from commun.auth import installer_auth
+from commun.consommateurs import messagerie
 from commun.correlation import MiddlewareCorrelation, configurer_journaux
 from commun.erreurs import installer_erreurs
 from commun.jetons import VerificateurJetons
@@ -17,10 +20,22 @@ from commun.observabilite import installer_observabilite, instrumenter_moteur
 from commun.registre import inscription, tags_sante_traefik, tags_traefik
 from notifications.api.routes import routeur_sante
 from notifications.config import Parametres, parametres
+from notifications.consommateurs import abonner_consommateurs
 from notifications.infra.base import creer_moteur
+from notifications.infra.smtp import EnvoyeurSmtp
 
 NOM_SERVICE = "notifications"
 RESSOURCES = ("notifications",)
+
+
+def tags_consul() -> list[str]:
+    """Tags Consul de l'instance : routeur standard et routeur de santé ; aucun routeur des
+    revendeurs (BIL-012, H1)."""
+    return [
+        *tags_traefik(NOM_SERVICE, *RESSOURCES),
+        # GET /api/v1/<ressource>/health réécrit en /health.
+        *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
+    ]
 
 
 def creer_app(
@@ -40,6 +55,15 @@ def creer_app(
         app.state.sessions = async_sessionmaker(moteur, expire_on_commit=False)
         try:
             async with AsyncExitStack() as pile:
+                if config.rabbitmq_url:
+                    # Consommateurs ticketing.order.confirmed et ticketing.ticket.issued
+                    # (BIL-009) ; sans URL, aucun. Le service ne publie rien : pas de relais.
+                    broker = RabbitBroker(config.rabbitmq_url, fail_fast=False)
+                    envoyeur = EnvoyeurSmtp(config.smtp_hote, config.smtp_port, config.smtp_delai)
+                    abonner_consommateurs(
+                        broker, app.state.sessions, envoyeur, config.smtp_expediteur
+                    )
+                    await pile.enter_async_context(messagerie(broker))
                 if config.consul_actif:
                     # Inscription après l'ouverture de la base, retrait avant sa fermeture.
                     await pile.enter_async_context(
@@ -47,11 +71,7 @@ def creer_app(
                             NOM_SERVICE,
                             config.instance,
                             config.port,
-                            [
-                                *tags_traefik(NOM_SERVICE, *RESSOURCES),
-                                # GET /api/v1/<ressource>/health réécrit en /health.
-                                *tags_sante_traefik(NOM_SERVICE, RESSOURCES[0]),
-                            ],
+                            tags_consul(),
                         )
                     )
                 yield

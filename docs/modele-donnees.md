@@ -120,13 +120,21 @@ erDiagram
   `GET` puis `PEXPIRE`. Seul le propriétaire le libère : script Lua qui compare puis supprime, à
   la réception de `ticketing.order.expired`, une fois les billets émis ou après un rejet.
 - Émission (`ticketing.order.confirmed`) : tous les billets de la commande dans une transaction
-  (savepoint autour des insertions), puis suppression des verrous. Une séance présente dans
-  `seances_annulees` ou un conflit sur `uq_billets_place` : retour au savepoint, aucun billet
-  pour la commande, `ticketing.ticket.rejected` publié dans la même transaction (outbox), puis
-  suppression des verrous de la commande. `place_ids` : places en conflit, ou toutes les places
-  de la commande pour `SEANCE_ANNULEE`.
+  (`INSERT ... ON CONFLICT ON CONSTRAINT uq_billets_place DO NOTHING`, places triées), puis
+  suppression des verrous après le commit. Une séance présente dans `seances_annulees` ou un
+  conflit sur `uq_billets_place` : les billets de la commande insérés par cette transaction
+  sont supprimés (pas de savepoint, qui changerait la transaction des lignes suivantes), aucun
+  billet pour la commande, `ticketing.ticket.rejected` publié dans la même transaction
+  (outbox), puis suppression des verrous de la commande. `place_ids` : places en conflit, ou
+  toutes les places de la commande pour `SEANCE_ANNULEE`. Une commande dont toutes les places
+  portent déjà ses billets (republication) n'émet rien et ne publie rien, même si la séance a
+  été annulée depuis : ce cas est testé avant la séance annulée.
 - `seances_annulees` : remplie par `ticketing.show.cancelled` (billets de la séance passés
   `ANNULE`) ; consultée à l'émission, car l'ordre des messages n'est pas garanti.
+- Verrou consultatif de séance (BIL-011, `commun.verrou_seance`) : l'émission prend
+  `pg_advisory_xact_lock_shared` sur la séance avant de lire `seances_annulees`, le traitement de
+  `ticketing.show.cancelled` prend `pg_advisory_xact_lock` (exclusif) ; tenus jusqu'à la fin de
+  la transaction. Aucun billet `EMIS` ne reste sur une séance annulée, quel que soit l'ordre.
 - `disponible` (contrat) : ni verrou Redis, ni billet sur la place.
 
 ## Commandes
@@ -148,6 +156,7 @@ erDiagram
     integer montant_total "centimes"
     timestamptz cree_le
     timestamptz expire_le
+    varchar canal "DIRECT, PARTENAIRE ; déduit du rôle du jeton"
   }
   lignes_commande {
     uuid commande_id PK, FK
@@ -156,7 +165,20 @@ erDiagram
   }
 ```
 
-- Toute lecture filtre par `client` = appelant (règle métier 6).
+- Toute lecture faite pour un appelant filtre par `client` = appelant (règle métier 6). Seule
+  exception : la tâche d'expiration (système, sans appelant) lit les commandes de tous les
+  clients.
+- Canal de vente (BIL-012, migration 0005) : `canal` = `PARTENAIRE` dès que le jeton porte le
+  rôle `partner`, `DIRECT` sinon ; fixé à la création, `NOT NULL` sans valeur par défaut,
+  contrainte `ck_commandes_canal`. En base seulement : ni dans l'API ni dans les événements.
+  Commandes antérieures : `PARTENAIRE` si `email` est NULL, `DIRECT` sinon.
+- Expiration (BIL-010) : tâche périodique (`EXPIRATION_PERIODE`), une seule instance par cycle
+  grâce au verrou Redis `commandes:tache:expiration` (`SET NX PX`, durée d'une période, jamais
+  relâché). Sélection des commandes `EN_ATTENTE` dont `expire_le <= maintenant` (index
+  `ix_commandes_statut_expire_le` sur `(statut, expire_le)`), par lots, puis relecture du statut
+  et de `expire_le` sous `FOR UPDATE` avant de passer `EXPIREE` et de publier
+  `ticketing.order.expired` (outbox). Un reverrouillage de paiement qui tombe sur une commande
+  déjà `EXPIREE` republie `ticketing.order.expired` pour libérer les verrous qu'il a reposés.
 - Limite de billets par séance (règle métier 3) : dans la transaction de création,
   `pg_advisory_xact_lock` sur `(client, seance_id)`, puis comptage des lignes des commandes
   `EN_ATTENTE` et `CONFIRMEE` (index `(client, seance_id)`) ; jamais de comptage sans ce verrou.
@@ -168,6 +190,10 @@ erDiagram
 - `ticketing.show.cancelled` : une commande `EN_ATTENTE` de la séance passe `EXPIREE` (et
   `ticketing.order.expired`) ; une commande `CONFIRMEE` attend `ticketing.payment.refunded`
   pour passer `REMBOURSEE`.
+- `ticketing.payment.refunded` (commande relue sous `FOR UPDATE`) : `CONFIRMEE` vers
+  `REMBOURSEE` ; une commande encore `EN_ATTENTE` (paiement remboursé avant la confirmation)
+  passe `EXPIREE` avec `ticketing.order.expired` ; `EXPIREE`, `REMBOURSEE` ou commande inconnue :
+  ignoré.
 - `Idempotency-Key` facultatif de `POST /orders` : colonne `cle_idempotence`,
   `UNIQUE (client, cle_idempotence)`.
 - La carte de test n'est jamais enregistrée.
@@ -197,7 +223,10 @@ erDiagram
   paiement enregistré.
 - `seances_annulees` : remplie par `ticketing.show.cancelled`, qui rembourse les paiements
   `ACCEPTE` de la séance ; un paiement demandé pour une séance annulée répond
-  `409 SHOW_CANCELLED` (l'ordre des messages n'est pas garanti).
+  `409 SHOW_CANCELLED` (l'ordre des messages n'est pas garanti). Même verrou consultatif de
+  séance que Billets : partagé pour payer (jusqu'au commit du paiement), exclusif pour
+  `ticketing.show.cancelled` ; un paiement simultané à l'annulation est soit refusé (409), soit
+  écrit avant et remboursé.
 - `ticketing.ticket.rejected` : remboursement du paiement de la commande.
 - Un remboursement ne concerne qu'un paiement `ACCEPTE` (passage à `REMBOURSE` conditionnel au
   statut) : `show.cancelled` puis `ticket.rejected` sur la même commande ne publient qu'un seul
@@ -212,7 +241,7 @@ rien.
 
 ```mermaid
 erDiagram
-  infos_seances ||--o{ destinataires_commande : "concerne"
+  infos_seances |o..o{ destinataires_commande : "concerne (sans clé étrangère)"
   destinataires_commande ||--o{ envois : "reçoit"
 
   infos_seances {
@@ -225,7 +254,7 @@ erDiagram
   destinataires_commande {
     uuid commande_id PK "réf. Commandes"
     varchar email "NULL pour un revendeur"
-    uuid seance_id FK
+    uuid seance_id "réf. Catalogue, sans clé étrangère"
   }
   envois {
     uuid id PK
@@ -242,4 +271,25 @@ erDiagram
 - `destinataires_commande` est une projection remplie par `ticketing.order.confirmed`, toutes
   commandes comprises : `email` NULL (revendeur) veut dire « rien à envoyer » ; une ligne
   absente veut dire « pas encore reçu » (exception, nouvel essai).
+- `destinataires_commande.seance_id` n'a pas de clé étrangère vers `infos_seances` (BIL-009) :
+  la projection n'est pas encore remplie, et une clé étrangère enverrait tout
+  `order.confirmed` en DLQ.
 - `envois` est l'historique d'envoi ; `UNIQUE (evenement_id, commande_id)`.
+
+## File-attente
+
+Aucune table ni base PostgreSQL : l'état de la salle d'attente (BIL-015) est éphémère, dans
+Redis.
+
+- `file-attente:{<seance>}:attente` : sorted set, `sub` du client vers son numéro d'arrivée
+  (tiré de la séquence) ; l'entrée est idempotente (un client déjà présent garde son numéro),
+  la position est le rang.
+- `file-attente:{<seance>}:sequence` : compteur `INCR` des arrivées de la séance, incrémenté
+  dans le même script atomique que l'ajout ; scores strictement croissants, sans ex aequo. Supprimé
+  par la vague qui vide la file (la numérotation repart de 1) : aucune clé orpheline.
+- `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission, posée avec `PX` =
+  `DUREE_ADMISSION` ; à l'échéance la clé disparaît et le client sort de la file.
+- `file-attente:tache-vagues` : verrou `SET NX PX` de la tâche d'admission par vagues (une
+  instance par cycle).
+- Jeton d'admission non stocké : HMAC de la séance, du `sub` et de l'échéance
+  (`commun.admission`), recalculé à chaque lecture et vérifié par Commandes.

@@ -1,19 +1,79 @@
 // Table des routes, sans routeur : main.tsx l'enveloppe dans BrowserRouter, les tests dans
 // MemoryRouter. La mise en page commune (en-tête, navigation, pied de page) entoure toutes les
-// pages, rendues dans son unique <main>.
-import { Route, Routes } from "react-router";
+// pages, rendues dans son unique <main>. Plan complet : docs/front/routes.md.
+import { Outlet, Route, Routes } from "react-router";
 
 import { CHEMIN_RAPPEL } from "./auth/configurationOidc";
+import { GardeRoles } from "./auth/GardeRoles";
 import { MiseEnPage } from "./composants/MiseEnPage";
-import { PageAccueil } from "./pages/PageAccueil";
+import { PageCatalogue } from "./pages/catalogue/PageCatalogue";
+import { PageEvenement } from "./pages/catalogue/PageEvenement";
+import { PageBillet } from "./pages/client/PageBillet";
+import { PageBillets } from "./pages/client/PageBillets";
+import { PageCommande } from "./pages/client/PageCommande";
+import { PageCommandes } from "./pages/client/PageCommandes";
+import { PageGererEvenement } from "./pages/organisateur/PageGererEvenement";
+import { PageLieux } from "./pages/organisateur/PageLieux";
+import { PageNouvelEvenement } from "./pages/organisateur/PageNouvelEvenement";
+import { PageNouvelleSeance } from "./pages/organisateur/PageNouvelleSeance";
+import { PageOrganisateur } from "./pages/organisateur/PageOrganisateur";
+import { PageSeanceOrganisateur } from "./pages/organisateur/PageSeanceOrganisateur";
 import { PageIntrouvable } from "./pages/PageIntrouvable";
 import { PageRappelConnexion } from "./pages/PageRappelConnexion";
+import { PagePaiement } from "./pages/reservation/PagePaiement";
+import { PagePlanSalle } from "./pages/reservation/PagePlanSalle";
+import { PageSalleAttente } from "./pages/reservation/PageSalleAttente";
+
+/** Routes réservées aux clients : une seule garde `customer` pour toutes (routes.md). */
+function RoutesClient() {
+  return (
+    <GardeRoles roles={["customer"]}>
+      <Outlet />
+    </GardeRoles>
+  );
+}
+
+/**
+ * Espace organisateur : une seule garde `admin` pour toutes ses routes (routes.md). Un client,
+ * un revendeur ou un visiteur n'y voit jamais rien (CA1 de BIL-022).
+ */
+function RoutesOrganisateur() {
+  return (
+    <GardeRoles roles={["admin"]}>
+      <Outlet />
+    </GardeRoles>
+  );
+}
 
 export function RoutesApplication() {
   return (
     <MiseEnPage>
       <Routes>
-        <Route path="/" element={<PageAccueil />} />
+        {/* R1 : le catalogue (E01) est la page d'accueil. */}
+        <Route path="/" element={<PageCatalogue />} />
+        <Route path="/evenements/:evenementId" element={<PageEvenement />} />
+        {/* E03 public : seul « Réserver » demande la connexion. */}
+        <Route path="/seances/:seanceId" element={<PagePlanSalle />} />
+        <Route element={<RoutesClient />}>
+          {/* E16 : salle d'attente d'une séance sous file (BIL-023). */}
+          <Route path="/seances/:seanceId/attente" element={<PageSalleAttente />} />
+          <Route path="/commandes" element={<PageCommandes />} />
+          <Route path="/commandes/:commandeId" element={<PageCommande />} />
+          <Route path="/commandes/:commandeId/paiement" element={<PagePaiement />} />
+          <Route path="/billets" element={<PageBillets />} />
+          <Route path="/billets/:billetId" element={<PageBillet />} />
+        </Route>
+        <Route element={<RoutesOrganisateur />}>
+          <Route path="/organisateur" element={<PageOrganisateur />} />
+          <Route path="/organisateur/evenements/nouveau" element={<PageNouvelEvenement />} />
+          <Route path="/organisateur/evenements/:evenementId" element={<PageGererEvenement />} />
+          <Route
+            path="/organisateur/evenements/:evenementId/seances/nouvelle"
+            element={<PageNouvelleSeance />}
+          />
+          <Route path="/organisateur/seances/:seanceId" element={<PageSeanceOrganisateur />} />
+          <Route path="/organisateur/lieux" element={<PageLieux />} />
+        </Route>
         <Route path={CHEMIN_RAPPEL} element={<PageRappelConnexion />} />
         <Route path="*" element={<PageIntrouvable />} />
       </Routes>

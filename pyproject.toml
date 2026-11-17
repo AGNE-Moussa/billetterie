@@ -11,6 +11,7 @@ dependencies = [
     "billetterie-commandes",
     "billetterie-commun",
     "billetterie-echo",
+    "billetterie-file-attente",
     "billetterie-notifications",
     "billetterie-paiements",
     "billetterie-verificateur",
@@ -34,6 +35,7 @@ members = [
     "services/commandes",
     "services/paiements",
     "services/notifications",
+    "services/file-attente",
     "infra/verificateur",
 ]
 
@@ -43,6 +45,7 @@ billetterie-catalogue = { workspace = true }
 billetterie-commandes = { workspace = true }
 billetterie-commun = { workspace = true }
 billetterie-echo = { workspace = true }
+billetterie-file-attente = { workspace = true }
 billetterie-notifications = { workspace = true }
 billetterie-paiements = { workspace = true }
 billetterie-verificateur = { workspace = true }
@@ -61,6 +64,7 @@ known-first-party = [
     "commandes",
     "commun",
     "echo",
+    "file_attente",
     "notifications",
     "paiements",
     "verificateur",
@@ -79,6 +83,8 @@ files = [
     "services/commandes/src",
     "services/paiements/src",
     "services/notifications/src",
+    # Dossier file-attente, paquet Python file_attente (tiret interdit dans un nom de module).
+    "services/file-attente/src/file_attente",
     "infra/verificateur/src",
 ]
 

@@ -34,6 +34,9 @@ TENTATIVES = 3
 EXCHANGE_ERREURS = RabbitExchange("ticketing.dlx", type=ExchangeType.DIRECT, durable=True)
 
 Traitement = Callable[[AsyncSession, Evenement], Awaitable[None]]
+# Action lancée après le commit de la transaction (ou si le message était déjà traité), hors de
+# toute transaction : par exemple supprimer des verrous Redis (BIL-009).
+ApresCommit = Callable[[Evenement], Awaitable[None]]
 
 # Files d'erreur à déclarer avant le démarrage des consommateurs, par broker.
 _files_erreur: dict[int, list[RabbitQueue]] = {}
@@ -43,6 +46,52 @@ def file_erreur(nom: str) -> str:
     return f"{nom}.dlq"
 
 
+async def traiter_une_fois(
+    sessions: async_sessionmaker[AsyncSession],
+    nom: str,
+    traitement: Traitement,
+    evenement: Evenement,
+    apres_commit: ApresCommit | None = None,
+) -> bool:
+    """Une livraison : inscrit le message dans `messages_traites` et lance le traitement dans la
+    même transaction ; un message déjà traité n'a aucun effet. Après le commit, lance
+    `apres_commit` (aussi pour un message déjà traité : l'action doit être idempotente).
+
+    Renvoie vrai si le traitement a tourné. Une exception du traitement annule la transaction
+    et remonte ; `apres_commit` n'est alors pas lancé.
+
+    `apres_commit` est au mieux (best effort) : son exception est journalisée (`WARNING`) et
+    n'est pas propagée. La propager remettrait en file un message déjà commité : le rejeu
+    serait sans effet métier (messages_traites), mais chaque échec compterait une livraison et
+    finirait par envoyer en DLQ un message traité avec succès. L'action doit donc tolérer de
+    ne pas être faite (verrous Redis : ils expirent d'eux-mêmes).
+    """
+    with correlation(evenement.correlation_id):
+        async with sessions() as session, session.begin():
+            nouveau = await session.execute(
+                insert(MESSAGES_TRAITES)
+                .values(consommateur=nom, message_id=evenement.id)
+                .on_conflict_do_nothing()
+                .returning(MESSAGES_TRAITES.c.message_id)
+            )
+            traite = nouveau.first() is not None
+            if traite:
+                await traitement(session, evenement)
+            else:
+                journal.info("Message %s déjà traité par %s, ignoré", evenement.id, nom)
+        if apres_commit is not None:
+            try:
+                await apres_commit(evenement)
+            except Exception:
+                journal.warning(
+                    "Action après commit en échec pour le message %s (%s), ignorée",
+                    evenement.id,
+                    nom,
+                    exc_info=True,
+                )
+    return traite
+
+
 def consommateur_idempotent(
     broker: RabbitBroker,
     sessions: async_sessionmaker[AsyncSession],
@@ -50,8 +99,12 @@ def consommateur_idempotent(
     nom: str,
     type_evenement: str,
     tentatives: int = TENTATIVES,
+    apres_commit: ApresCommit | None = None,
 ) -> Callable[[Traitement], Traitement]:
-    """Abonne le traitement à `type_evenement` sur la file durable `nom`."""
+    """Abonne le traitement à `type_evenement` sur la file durable `nom`.
+
+    `apres_commit` (facultatif) : action lancée après le commit (voir `traiter_une_fois`).
+    """
     file = RabbitQueue(
         nom,
         queue_type=QueueType.QUORUM,
@@ -78,18 +131,7 @@ def consommateur_idempotent(
         # livraison de plus pour la quorum queue.
         @broker.subscriber(file, EXCHANGE_TICKETING, ack_policy=AckPolicy.NACK_ON_ERROR)
         async def recevoir(evenement: Evenement) -> None:
-            with correlation(evenement.correlation_id):
-                async with sessions() as session, session.begin():
-                    nouveau = await session.execute(
-                        insert(MESSAGES_TRAITES)
-                        .values(consommateur=nom, message_id=evenement.id)
-                        .on_conflict_do_nothing()
-                        .returning(MESSAGES_TRAITES.c.message_id)
-                    )
-                    if nouveau.first() is None:
-                        journal.info("Message %s déjà traité par %s, ignoré", evenement.id, nom)
-                        return
-                    await traitement(session, evenement)
+            await traiter_une_fois(sessions, nom, traitement, evenement, apres_commit)
 
         return traitement
 

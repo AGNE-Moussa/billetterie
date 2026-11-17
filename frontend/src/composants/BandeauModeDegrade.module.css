@@ -1,0 +1,9 @@
+.bandeau {
+  margin: 0 0 var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  color: var(--couleur-texte);
+  background-color: var(--couleur-info-douce);
+  border: 1px solid color-mix(in srgb, var(--couleur-info) 40%, transparent);
+  border-inline-start: 4px solid var(--couleur-info);
+  border-radius: var(--rayon);
+}

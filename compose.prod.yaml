@@ -129,6 +129,8 @@ services:
       KEYCLOAK_URL_FRONT: https://${DOMAINE:?à définir dans .env.prod}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Thème de la page de connexion (loginTheme du realm).
+      - ./infra/keycloak/themes/ovation:/opt/keycloak/themes/ovation:ro
     healthcheck:
       # L'image n'a ni curl ni wget : requête HTTP faite par bash sur le port de gestion.
       test:

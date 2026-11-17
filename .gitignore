@@ -391,3 +391,6 @@ frontend/playwright-report/
 
 
 !.env.prod.example
+
+# Jetons de charge k6 (infra/charge/comptes.py)
+infra/charge/jetons.txt

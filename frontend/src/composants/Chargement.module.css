@@ -1,0 +1,104 @@
+.chargement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.libelle {
+  display: inline-flex;
+  gap: var(--espace-2);
+  align-items: center;
+  margin: 0;
+  color: var(--couleur-texte-attenue);
+}
+
+.indicateur {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--couleur-principale);
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: rotation 0.9s linear infinite;
+}
+
+@keyframes rotation {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.squelette {
+  display: block;
+  background: linear-gradient(
+    100deg,
+    var(--couleur-surface-2) 30%,
+    color-mix(in srgb, var(--couleur-surface-2) 55%, var(--couleur-fond)) 50%,
+    var(--couleur-surface-2) 70%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--rayon);
+  animation: reflet-squelette 1.4s ease-in-out infinite;
+}
+
+.cartes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--espace-6);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding-block-end: var(--espace-4);
+  overflow: hidden;
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+}
+
+.carte > .squelette:not(.affiche) {
+  margin-inline: var(--espace-4);
+}
+
+.affiche {
+  aspect-ratio: 5 / 3;
+  border-radius: 0;
+}
+
+.titre {
+  width: 65%;
+  height: 1.4rem;
+}
+
+.ligne {
+  height: 0.9rem;
+}
+
+.ligneCourte {
+  width: 45%;
+  height: 0.9rem;
+}
+
+.lignes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.rangee {
+  height: 4.5rem;
+  border-radius: var(--rayon-l);
+}
+
+.bloc {
+  height: 16rem;
+  border-radius: var(--rayon-l);
+}

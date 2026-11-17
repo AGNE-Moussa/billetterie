@@ -1,0 +1,154 @@
+/* E10 à E15 : espace organisateur (BIL-022), présentation « back-office » sobre. */
+
+/* Barre de titre du tableau de bord : titre à gauche, actions à droite. */
+.barre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-4);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: var(--espace-6);
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--couleur-accent) 14%, transparent),
+      transparent 60%
+    ),
+    var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-inline-start: 4px solid var(--couleur-accent);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
+}
+
+.barre h1 {
+  margin: 0;
+}
+
+.surtitre {
+  margin: 0 0 var(--espace-1);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--couleur-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.panneau {
+  padding: var(--espace-4) var(--espace-6) var(--espace-2);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+/* Liens d'action présentés en boutons ; le premier est l'action principale. */
+.actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--espace-2) var(--espace-6);
+  font-weight: 700;
+  color: var(--couleur-texte);
+  text-decoration: none;
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-pilule);
+  transition: background-color var(--transition);
+}
+
+.actions > a:hover {
+  background-color: var(--couleur-surface-2);
+}
+
+.actions > a:first-child {
+  color: var(--couleur-sur-principale);
+  background-color: var(--couleur-principale);
+  border-color: transparent;
+}
+
+.actions > a:first-child:hover {
+  background-color: var(--couleur-principale-survol);
+}
+
+.recherche {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--espace-2) var(--espace-3);
+  max-width: 40rem;
+}
+
+.recherche > :first-child {
+  flex: 1;
+}
+
+.recherche > button {
+  margin-block-end: var(--espace-4);
+}
+
+.formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  max-width: 44rem;
+  padding: var(--espace-6);
+  background-color: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon-l);
+  box-shadow: var(--ombre-1);
+}
+
+.groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin: 0;
+  padding: var(--espace-4);
+  background-color: var(--couleur-surface-2);
+  border: 1px solid var(--couleur-bordure-douce);
+  border-radius: var(--rayon);
+}
+
+.groupe legend {
+  padding: 0 var(--espace-2);
+  font-family: var(--police-titre);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-stretch: condensed;
+}
+
+/* Deux champs côte à côte (nom et prix, rang et places), un seul sur mobile. */
+.ligne {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  align-items: end;
+  column-gap: var(--espace-3);
+}
+
+.erreurGroupe {
+  margin: 0;
+  font-weight: 600;
+  color: var(--couleur-erreur);
+}
+
+.chiffres {
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--couleur-texte-attenue);
+}
+
+.liste {
+  margin: 0;
+  padding-left: var(--espace-4);
+}

@@ -4,6 +4,8 @@ Lectures publiques ; créations réservées au scope events:write. Les règles v
 domaine/catalogue.py : les routes traduisent les corps et les réponses.
 """
 
+from dataclasses import asdict
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -17,6 +19,7 @@ from catalogue.api.cache_lectures import (
     EN_TETE_CACHE_PERIME,
     FAMILLE_EVENEMENTS,
     FAMILLE_LIEUX,
+    famille_seance,
     famille_seances,
 )
 from catalogue.api.dependances import DepotDep, LecturesDep, MaintenantDep, SessionDep
@@ -25,6 +28,7 @@ from catalogue.api.schemas import (
     Evenement,
     EvenementCreation,
     EvenementPage,
+    EvenementResume,
     Lieu,
     LieuCreation,
     LieuPage,
@@ -37,7 +41,7 @@ from catalogue.api.schemas import (
 )
 from catalogue.domaine import catalogue as domaine
 from catalogue.infra.base import BaseIndisponible
-from commun.auth import REPONSES_AUTH, Appelant, exige_scopes
+from commun.auth import REPONSES_AUTH, Appelant, exige_role, exige_scopes
 from commun.erreurs import reponse_probleme
 from commun.pagination import (
     PAGE_MINIMALE,
@@ -54,6 +58,17 @@ routeur_lieux = APIRouter(prefix="/api/v1/venues", tags=["lieux"])
 
 # Écritures réservées au scope events:write seul (décision Q5 du plan BIL-004).
 EcrivainDep = Annotated[Appelant, Depends(exige_scopes("events:write"))]
+_exige_admin = exige_role("admin")
+_exige_ecriture = exige_scopes("events:write")
+
+
+async def _administrateur(appelant: Annotated[Appelant, Depends(_exige_admin)]) -> Appelant:
+    """Rôle `admin` contrôlé avant le scope `events:write` (contrainte de BIL-011, H2) : un
+    client ou un revendeur reçoit ROLE_MANQUANT, un admin sans le scope SCOPE_MANQUANT."""
+    return await _exige_ecriture(appelant)
+
+
+AdministrateurDep = Annotated[Appelant, Depends(_administrateur)]
 PageDep = Annotated[int, Query(ge=PAGE_MINIMALE)]
 TailleDep = Annotated[int, Query(ge=TAILLE_MINIMALE, le=TAILLE_MAXIMALE)]
 
@@ -182,8 +197,15 @@ async def lister_evenements(
 
     async def lire() -> EvenementPage:
         resultat = await domaine.lister_evenements(depot, filtres, page, size)
+        apercus = await domaine.apercus_evenements(depot, resultat.elements, datetime.now(UTC))
         return EvenementPage(
-            elements=[_evenement(evenement) for evenement in resultat.elements],
+            elements=[
+                EvenementResume(
+                    **_evenement(evenement).model_dump(),
+                    **asdict(apercus[evenement.id]),
+                )
+                for evenement in resultat.elements
+            ],
             page=page,
             size=size,
             total=resultat.total,
@@ -356,8 +378,51 @@ async def lire_seance(
         return _seance(await domaine.lire_seance(depot, evenement_id, seance_id))
 
     return await lectures.servir(
-        "lireSeance", {"evenement_id": evenement_id, "seance_id": seance_id}, lire
+        "lireSeance",
+        {"evenement_id": evenement_id, "seance_id": seance_id},
+        lire,
+        famille=famille_seance(seance_id),
     )
+
+
+@routeur_seances.post(
+    "/api/v1/events/{evenement_id}/shows/{seance_id}/cancellation",
+    operation_id="annulerSeance",
+    response_model=Seance,
+    response_description="Séance annulée.",
+    responses={
+        **REPONSES_AUTH,
+        404: reponse_probleme("Événement ou séance inconnu (EVENT_NOT_FOUND, SHOW_NOT_FOUND)."),
+        409: reponse_probleme(
+            "La séance est déjà annulée (SHOW_ALREADY_CANCELLED) ou déjà commencée"
+            " (SHOW_ALREADY_STARTED)."
+        ),
+        422: IDENTIFIANT_INVALIDE,
+        503: BASE_INDISPONIBLE_ECRITURE,
+    },
+    summary="Annuler une séance (scope events:write ; admin)",
+    description=(
+        "Publie ticketing.show.cancelled ; toutes les commandes de la séance sont remboursées"
+        " automatiquement (règle métier 5) et ses billets annulés."
+    ),
+)
+async def annuler_seance(
+    evenement_id: UUID,
+    seance_id: UUID,
+    depot: DepotDep,
+    maintenant: MaintenantDep,
+    lectures: LecturesDep,
+    _appelant: AdministrateurDep,
+) -> Seance:
+    annulee = await domaine.annuler_seance(depot, evenement_id, seance_id, maintenant)
+    # Après le commit seulement (H3) : nouvelle génération des deux lectures de détail de la
+    # séance et des listes de séances de l'événement. Une lecture commencée avant le commit
+    # écrit sous l'ancienne génération, que plus aucune lecture ne consulte.
+    # La recherche montre la prochaine séance et le prix d'appel : elle change aussi.
+    await lectures.invalider(
+        famille_seance(seance_id), famille_seances(evenement_id), FAMILLE_EVENEMENTS
+    )
+    return _seance(annulee)
 
 
 @routeur_seances.get(
@@ -380,7 +445,9 @@ async def lire_seance_par_id(seance_id: UUID, depot: DepotDep, lectures: Lecture
     async def lire() -> Seance:
         return _seance(await domaine.lire_seance_par_id(depot, seance_id))
 
-    return await lectures.servir("lireSeanceParId", {"seance_id": seance_id}, lire)
+    return await lectures.servir(
+        "lireSeanceParId", {"seance_id": seance_id}, lire, famille=famille_seance(seance_id)
+    )
 
 
 @routeur_lieux.get(

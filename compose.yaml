@@ -175,7 +175,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks: [billetterie]
+    networks:
+      billetterie:
+        # Hôte des revendeurs (BIL-012) : un conteneur du réseau (Newman) joint la chaîne
+        # partenaires@file par ce nom, sans surcharger l'en-tête Host.
+        aliases: ["${HOTE_PARTENAIRES:-partenaires.localhost}"]
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.1
@@ -203,6 +207,8 @@ services:
       KEYCLOAK_URL_FRONT: ${KEYCLOAK_URL_FRONT:-http://localhost}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Thème de la page de connexion (loginTheme du realm).
+      - ./infra/keycloak/themes/ovation:/opt/keycloak/themes/ovation:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -220,7 +226,8 @@ services:
       start_period: 30s
     networks: [billetterie]
 
-  # Vérificateur de jetons appelé par Traefik (middleware verification-jeton de dynamique.yml).
+  # Vérificateur de jetons appelé par Traefik (middlewares verification-jeton, chaîne standard,
+  # et verification-jeton-partenaires, chaîne partenaires, de dynamique.yml).
   verificateur:
     image: billetterie/verificateur:dev
     build:
@@ -303,6 +310,8 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       # Cache des lectures (BIL-005) ; Redis local sans mot de passe, donc aucun secret ici.
       REDIS_URL: redis://redis:6379/0
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -342,6 +351,10 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       # Verrous des places (BIL-006, obligatoire) ; Redis local sans mot de passe, aucun secret.
       REDIS_URL: redis://redis:6379/0
+      # Clé HMAC des QR codes (décision Q6 de BIL-009), au moins 32 caractères, dans .env.
+      QR_CLE_SIGNATURE: ${QR_CLE_SIGNATURE:?à définir dans .env}
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -382,6 +395,22 @@ services:
     environment: &commandes-env
       DATABASE_URL: postgresql+asyncpg://commandes:${COMMANDES_DB_PASSWORD:?à définir dans .env}@postgres:5432/commandes
       CONSUL_URL: http://consul:8500
+      # Relais de l'outbox : ticketing.order.confirmed et ticketing.order.expired (BIL-008).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # Appels à Billets, Catalogue et Paiements par la gateway, avec le jeton du client
+      # Keycloak services (Client Credentials, décision Q23 de BIL-008).
+      URL_GATEWAY: http://traefik
+      URL_JETON: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/token
+      SERVICES_CLIENT_SECRET: ${KEYCLOAK_SERVICES_SECRET:?à définir dans .env}
+      # Verrou de la tâche d'expiration (BIL-010) ; Redis local sans mot de passe, aucun secret.
+      # EXPIRATION_PERIODE (30 s) et EXPIRATION_LOT (100) gardent leur valeur par défaut.
+      REDIS_URL: redis://redis:6379/0
+      # Hôte du routeur des revendeurs annoncé dans Consul (BIL-012, chaîne partenaires@file).
+      HOTE_PARTENAIRES: ${HOTE_PARTENAIRES:-partenaires.localhost}
+      # File d'attente (BIL-015) : mêmes valeurs que file-attente. Liste vide : aucune séance
+      # sous file, aucun jeton d'admission exigé ; clé exigée dès qu'une séance y figure.
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -400,6 +429,10 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [billetterie]
 
   commandes-2:
@@ -407,6 +440,51 @@ services:
     environment:
       <<: *commandes-env
       INSTANCE: commandes-2
+
+  # File d'attente : /api/v1/queues, deux instances (BIL-015). Ni base ni migrations : positions,
+  # admissions et verrou de la tâche des vagues dans Redis.
+  file-attente-1:
+    image: billetterie/file-attente:dev
+    build:
+      context: .
+      dockerfile: services/file-attente/Dockerfile
+    environment: &file-attente-env
+      INSTANCE: file-attente-1
+      CONSUL_URL: http://consul:8500
+      # Redis local sans mot de passe, aucun secret.
+      REDIS_URL: redis://redis:6379/0
+      # Séances sous file (identifiants séparés par des virgules), mêmes valeurs que Commandes.
+      SEANCES_SOUS_FILE: ${SEANCES_SOUS_FILE:-}
+      # Clé HMAC des jetons d'admission partagée avec Commandes (au moins 32 caractères).
+      ADMISSION_CLE_SIGNATURE: ${ADMISSION_CLE_SIGNATURE:-}
+      # Vagues : clients admis par vague, intervalle en secondes ; validité d'une admission.
+      TAILLE_VAGUE: ${TAILLE_VAGUE:-50}
+      INTERVALLE_VAGUES: ${INTERVALLE_VAGUES:-10}
+      DUREE_ADMISSION: ${DUREE_ADMISSION:-600}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
+      JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
+    depends_on:
+      consul:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [billetterie]
+
+  # Même image, construite une seule fois par file-attente-1.
+  file-attente-2:
+    image: billetterie/file-attente:dev
+    environment:
+      <<: *file-attente-env
+      INSTANCE: file-attente-2
+    depends_on:
+      file-attente-1:
+        condition: service_started
+      consul:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [billetterie]
 
   # Paiements : /api/v1/payments.
   paiements-migrations:
@@ -418,6 +496,9 @@ services:
     environment: &paiements-env
       DATABASE_URL: postgresql+asyncpg://paiements:${PAIEMENTS_DB_PASSWORD:?à définir dans .env}@postgres:5432/paiements
       CONSUL_URL: http://consul:8500
+      # Consommateurs ticketing.show.cancelled et ticketing.ticket.rejected, relais de l'outbox
+      # ticketing.payment.refunded (BIL-011).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -436,6 +517,8 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks: [billetterie]
 
   # Notifications : /api/v1/notifications.
@@ -448,6 +531,11 @@ services:
     environment: &notifications-env
       DATABASE_URL: postgresql+asyncpg://notifications:${NOTIFICATIONS_DB_PASSWORD:?à définir dans .env}@postgres:5432/notifications
       CONSUL_URL: http://consul:8500
+      # Consommateurs ticketing.order.confirmed et ticketing.ticket.issued (BIL-009).
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?à définir dans .env}:${RABBITMQ_DEFAULT_PASS:?à définir dans .env}@rabbitmq:5672/
+      # E-mails des billets : Mailpit (SMTP de test, boîte sur http://127.0.0.1:8025).
+      SMTP_HOTE: mailpit
+      SMTP_PORT: "1025"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       JWT_EMETTEUR: http://localhost/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}
       JWKS_URL: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:?à définir dans .env}/protocol/openid-connect/certs
@@ -465,6 +553,10 @@ services:
       notifications-migrations:
         condition: service_completed_successfully
       consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     networks: [billetterie]
 
