@@ -106,9 +106,12 @@ Durées réglables : `DUREE_PANNE` (Billets, 20 s), `RAFALE` (6 achats, 7 au plu
 
 - **Catalogue arrêté** : le cache Redis est lu par le service Catalogue lui-même, quand *sa base*
   ne répond pas (BIL-005, en-tête `X-Cache-Stale: true`). Quand l'instance est arrêtée, plus rien
-  ne le sert : Consul la retire, Traefik n'a plus de route et répond 404 (texte brut) aux lectures
-  du catalogue, ni 200 ni 503. Le script le signale en `ÉCART`. L'achat, lui, répond bien 503
-  SERVICE_INDISPONIBLE (Commandes ne peut pas lire la séance).
+  ne le sert : Consul la retire et son routeur disparaît de Traefik. Le routeur de repli
+  (`repli-api`, `infra/traefik/dynamique.yml`) répond alors **503 SERVICE_INDISPONIBLE** en
+  Problem Details, avec `Retry-After: 5` et l'en-tête `X-Gateway-Repli: true` (avant ce repli :
+  404 en texte brut). Pas de 200 depuis le cache dans ce cas : seule une base coupée le permet
+  (ci-dessous). L'achat répond aussi 503 SERVICE_INDISPONIBLE (Commandes ne peut pas lire la
+  séance).
 - **Base du Catalogue coupée** (`bash scripts/demo.sh catalogue-base`, hors enchaînement) : montre
   le vrai chemin du cache. Le rôle `catalogue` est passé `NOLOGIN` et ses connexions coupées, puis
   rétabli (même sur Ctrl+C). Une liste déjà lue répond 200 avec `X-Cache-Stale: true`, une
@@ -117,3 +120,10 @@ Durées réglables : `DUREE_PANNE` (Billets, 20 s), `RAFALE` (6 achats, 7 au plu
   joignable (404) ; le script le contrôle à 12 s.
 
 Résultats à reporter ici après la première exécution contre `make up` (date, durées, écarts).
+
+## Newman en CI
+
+`.github/workflows/parcours.yml` rejoue `make parcours` contre la plateforme entière démarrée dans
+le runner, avec un `.env` jetable (secrets tirés au hasard et masqués) : à la main depuis l'onglet
+Actions, et chaque nuit sur `main`. Pas à chaque pull request (une douzaine de conteneurs,
+Keycloak : trop long). Journaux de Newman en artefact `newman-parcours`.

@@ -202,12 +202,13 @@ Légende :
 2. **Exécution de la démo** (BIL-014)
    - `make parcours` : les 44 requêtes de `postman/billetterie.json` vertes avec Newman (CA1),
      dont le parcours partenaire (CA2 de BIL-012).
-   - `make demo-pannes` : chaque panne produit la réponse prévue, à l'écart Catalogue près
-     (CA2), en moins de 15 minutes (CA3) ; résultats à reporter dans `docs/demo.md`.
+   - `make demo-pannes` : chaque panne produit la réponse prévue (Catalogue arrêté : 503 du
+     routeur de repli), en moins de 15 minutes (CA3) ; résultats à reporter dans `docs/demo.md`.
 3. **Vitrine** (BIL-016)
    - Lancement en suivant le README sur une machine vierge (CA1).
    - Vidéo de 3 minutes en ligne, lien dans le README, le portfolio et la base Projets (CA3).
-4. **Décisions en attente** : routeur de repli 503 pour le Catalogue, Newman en CI (workflow
-   manuel ou nocturne), remboursement sur `remboursement_du`.
+4. **Décisions** : routeur de repli 503 (fait, `repli-api`), Newman en CI manuel et nocturne
+   (fait, `.github/workflows/parcours.yml`) ; reste en attente : remboursement sur
+   `remboursement_du`.
 5. **Fusion** : les pull requests #42 à #53, puis celle de ce ticket, une fois le compte GitHub
    débloqué.

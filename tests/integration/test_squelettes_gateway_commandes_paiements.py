@@ -201,10 +201,11 @@ async def test_les_squelettes_demarrent_avec_la_nouvelle_configuration(
     reponse = httpx.Response(404)
     debut = time.monotonic()
     async with httpx.AsyncClient(base_url=gateway_url, timeout=DELAI_APPEL) as client:
-        # Traefik découvre la route après Consul : 404 tant qu'elle n'existe pas.
+        # Traefik découvre la route après Consul : 404 (ou repli marqué
+        # X-Gateway-Repli) tant qu'elle n'existe pas.
         while time.monotonic() < debut + DELAI_ETAPE:
             reponse = await client.post("/api/v1/orders", json={})
-            if reponse.status_code != 404:
+            if reponse.status_code != 404 and "x-gateway-repli" not in reponse.headers:
                 break
             await anyio.sleep(1)
 

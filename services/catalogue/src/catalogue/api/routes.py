@@ -4,6 +4,8 @@ Lectures publiques ; créations réservées au scope events:write. Les règles v
 domaine/catalogue.py : les routes traduisent les corps et les réponses.
 """
 
+from dataclasses import asdict
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -26,6 +28,7 @@ from catalogue.api.schemas import (
     Evenement,
     EvenementCreation,
     EvenementPage,
+    EvenementResume,
     Lieu,
     LieuCreation,
     LieuPage,
@@ -194,8 +197,15 @@ async def lister_evenements(
 
     async def lire() -> EvenementPage:
         resultat = await domaine.lister_evenements(depot, filtres, page, size)
+        apercus = await domaine.apercus_evenements(depot, resultat.elements, datetime.now(UTC))
         return EvenementPage(
-            elements=[_evenement(evenement) for evenement in resultat.elements],
+            elements=[
+                EvenementResume(
+                    **_evenement(evenement).model_dump(),
+                    **asdict(apercus[evenement.id]),
+                )
+                for evenement in resultat.elements
+            ],
             page=page,
             size=size,
             total=resultat.total,
@@ -408,7 +418,10 @@ async def annuler_seance(
     # Après le commit seulement (H3) : nouvelle génération des deux lectures de détail de la
     # séance et des listes de séances de l'événement. Une lecture commencée avant le commit
     # écrit sous l'ancienne génération, que plus aucune lecture ne consulte.
-    await lectures.invalider(famille_seance(seance_id), famille_seances(evenement_id))
+    # La recherche montre la prochaine séance et le prix d'appel : elle change aussi.
+    await lectures.invalider(
+        famille_seance(seance_id), famille_seances(evenement_id), FAMILLE_EVENEMENTS
+    )
     return _seance(annulee)
 
 

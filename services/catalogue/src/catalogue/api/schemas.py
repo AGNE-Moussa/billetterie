@@ -28,7 +28,24 @@ class Evenement(BaseModel):
     cree_le: datetime
 
 
-class EvenementPage(Page[Evenement]):
+class EvenementResume(Evenement):
+    """Élément de la recherche : l'événement et son aperçu (cartes du catalogue)."""
+
+    prochaine_seance: AwareDatetime | None = Field(
+        description="Début de la prochaine séance à venir, non annulée ; null s'il n'y en a pas."
+    )
+    ville: str | None = Field(
+        description="Ville de la prochaine séance ; null sans séance à venir."
+    )
+    prix_min: int | None = Field(
+        description=(
+            "Prix le plus bas, en centimes, parmi les catégories des séances à venir non annulées"
+            " ; null sans séance à venir."
+        )
+    )
+
+
+class EvenementPage(Page[EvenementResume]):
     total: int = Field(description="Nombre total d'événements qui répondent aux filtres.")
 
 

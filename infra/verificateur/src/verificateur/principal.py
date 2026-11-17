@@ -134,4 +134,18 @@ def creer_app(
     async def verifier_partenaires(requete: Request) -> Response:
         return await verifier_pour(requete, Chaine.PARTENAIRES)
 
+    # Routeur de repli de Traefik (`repli-api`, infra/traefik/dynamique.yml) : une requête
+    # /api dont le service n'a plus aucune instance saine dans Consul reçoit 503 au lieu du 404
+    # de Traefik (« cache, sinon 503 » de la conception).
+    @app.api_route("/indisponible", methods=METHODES)
+    async def indisponible() -> Response:
+        reponse = _probleme(
+            503,
+            "Service indisponible",
+            "Le service demandé est momentanément indisponible. Réessayez dans quelques instants.",
+            "SERVICE_INDISPONIBLE",
+        )
+        reponse.headers["Retry-After"] = "5"
+        return reponse
+
     return app

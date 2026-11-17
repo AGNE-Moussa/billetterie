@@ -209,7 +209,10 @@ def _erreurs_schema(corps: Any, schema: str, composants: dict[str, Any]) -> list
 async def _attendre_route(
     client: httpx.AsyncClient, service: dict[str, str], billets: Billets, journal: Any
 ) -> None:
-    """Attend que Traefik ait découvert la santé de billets (404 tant qu'elle n'existe pas)."""
+    """Attend que Traefik ait découvert la santé de billets.
+
+    404, ou repli 503 marqué X-Gateway-Repli, tant qu'elle n'existe pas.
+    """
     limite = time.monotonic() + DELAI_ETAPE
     dernier = "aucune réponse"
     while time.monotonic() < limite:
@@ -218,7 +221,7 @@ async def _attendre_route(
         except httpx.HTTPError as erreur:
             dernier = repr(erreur)
         else:
-            if reponse.status_code == 200:
+            if reponse.status_code == 200 and "x-gateway-repli" not in reponse.headers:
                 return
             dernier = f"{reponse.status_code} {reponse.text[:200]!r}"
         await anyio.sleep(1)

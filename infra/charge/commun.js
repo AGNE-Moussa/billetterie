@@ -7,9 +7,15 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 
 export const BASE_URL = __ENV.BASE_URL || 'http://localhost';
 export const SEANCE_ID = __ENV.SEANCE_ID;
-// Jetons d'accès clients (rôle customer), séparés par des virgules : l'utilisateur virtuel n
-// prend le jeton n modulo leur nombre. Jamais écrits dans ce dépôt.
-export const JETONS = (__ENV.JETONS || '').split(',').map((j) => j.trim()).filter((j) => j);
+// Jetons d'accès clients (rôle customer) : l'utilisateur virtuel n prend le jeton n modulo leur
+// nombre. Soit JETONS (séparés par des virgules), soit JETONS_FICHIER (un par ligne, chemin
+// relatif à ce dossier), écrit par `uv run python infra/charge/comptes.py` : un compte distinct
+// par utilisateur virtuel. Jamais écrits dans ce dépôt (jetons.txt est ignoré par git).
+const SOURCE_JETONS = __ENV.JETONS_FICHIER ? open(__ENV.JETONS_FICHIER) : __ENV.JETONS || '';
+export const JETONS = SOURCE_JETONS.split(/[,
+]/)
+  .map((j) => j.trim())
+  .filter((j) => j);
 
 // Pic simulé : montée rapide, plateau, descente (valeurs surchargées par l'environnement).
 export const PIC = {
@@ -35,7 +41,7 @@ export function verifierConfiguration() {
     throw new Error('SEANCE_ID manquant (séance en vente, voir README).');
   }
   if (JETONS.length === 0) {
-    throw new Error('JETONS manquant (au moins un jeton client, voir README).');
+    throw new Error('JETONS ou JETONS_FICHIER manquant (voir README).');
   }
 }
 

@@ -229,7 +229,8 @@ make observabilite  # idem, avec Prometheus et Grafana (tableau de bord de la d�
 
 `cp .env.example .env` est l'étape 2 ci-dessus : ne la rejouez pas sur un `.env` déjà rempli.
 Le premier `make up` construit les images et attend que tous les conteneurs soient sains :
-comptez plusieurs minutes (Keycloak est le plus long). Chargez ensuite le jeu de démonstration
+comptez plusieurs minutes (Keycloak est le plus long). Les suivants ne reconstruisent que les
+images dont le code a changé (`--build`, cache Docker). Chargez ensuite le jeu de démonstration
 du catalogue (lieux, événements et séances, dont la « Soirée jazz » de la démo) :
 
 ```sh

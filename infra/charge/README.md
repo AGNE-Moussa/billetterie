@@ -18,17 +18,26 @@ plateforme lancée par `make up` sur le poste.
 - k6 installé (`winget install k6` sous Windows) ;
 - plateforme démarrée (`make up`) et jeu de démonstration chargé (`make demo`) ;
 - l'identifiant d'une séance en vente (`SEANCE_ID`), avec des places libres ;
-- un ou plusieurs jetons d'accès clients (`JETONS`, rôle `customer`, séparés par des virgules).
-  Le realm n'autorise pas le mot de passe direct : copier le jeton depuis le front connecté
-  (outils de développement, en-tête `Authorization`). Un jeton expire vite : le récupérer juste
-  avant le tir. Ne jamais l'écrire dans le dépôt.
+- des jetons d'accès clients, **un compte par utilisateur virtuel** (sinon la file d'attente ne
+  voit qu'un client) :
+
+  ```powershell
+  uv run python infra/charge/comptes.py --nombre 200    # crée charge-001 à charge-200, écrit jetons.txt
+  ```
+
+  Le script crée les comptes dans le Keycloak **local** seulement (API d'administration, realm
+  versionné inchangé), avec un mot de passe aléatoire jamais affiché, puis les connecte comme le
+  front (PKCE). Les jetons vivent 5 minutes : lancer k6 juste après, avec
+  `-e JETONS_FICHIER=jetons.txt`. Nettoyage : `uv run python infra/charge/comptes.py --supprimer`.
+  À défaut, `JETONS` accepte des jetons copiés depuis le front connecté (en-tête
+  `Authorization`), séparés par des virgules. Ne jamais écrire un jeton dans le dépôt.
 
 ## Mesure de référence (sans file)
 
 La séance ne doit **pas** figurer dans `SEANCES_SOUS_FILE` (`.env`), puis :
 
 ```powershell
-k6 run -e SEANCE_ID=<séance> -e JETONS=<jeton> --summary-export charge-sans-file.json infra/charge/pic-sans-file.js
+k6 run -e SEANCE_ID=<séance> -e JETONS_FICHIER=jetons.txt --summary-export charge-sans-file.json infra/charge/pic-sans-file.js
 ```
 
 ## Mesure avec file
@@ -40,7 +49,7 @@ configuration (`docker compose up -d commandes-1 commandes-2 file-attente-1 file
 puis :
 
 ```powershell
-k6 run -e SEANCE_ID=<séance> -e JETONS=<jeton1>,<jeton2> --summary-export charge-avec-file.json infra/charge/pic-avec-file.js
+k6 run -e SEANCE_ID=<séance> -e JETONS_FICHIER=jetons.txt --summary-export charge-avec-file.json infra/charge/pic-avec-file.js
 ```
 
 ## Réglages (variables `-e`)

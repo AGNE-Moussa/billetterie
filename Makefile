@@ -30,11 +30,13 @@ help:
 init:
 	git config core.hooksPath .githooks
 
+# --build : reconstruit les images dont le code a changé (cache Docker, rapide sinon) ; sans lui,
+# compose réutilise des images périmées après un changement de code.
 up:
-	docker compose up -d --wait
+	docker compose up -d --wait --build
 
 observabilite:
-	docker compose --profile observabilite up -d --wait
+	docker compose --profile observabilite up -d --wait --build
 
 pannes:
 	bash scripts/pannes.sh tous

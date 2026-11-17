@@ -5,7 +5,9 @@ Clés d'une séance (étiquette `{<seance>}` : toutes dans le même slot si Redi
 - `file-attente:{<seance>}:attente` : sorted set, membre `sub`, score le numéro d'arrivée tiré
   de la séquence (strictement croissant : l'ordre d'entrée, sans ex aequo) ;
 - `file-attente:{<seance>}:sequence` : compteur `INCR` des arrivées de la séance, incrémenté
-  dans le script d'entrée, seulement pour un client absent de la file ;
+  dans le script d'entrée, seulement pour un client absent de la file ; supprimé par la vague
+  qui vide la file (plus personne à départager : la numérotation repart de 1, sans clé
+  orpheline) ;
 - `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission (millisecondes Unix), avec
   expiration `PX` de la durée d'admission ; à l'échéance, la clé disparaît et le client n'est
   plus dans la file.
@@ -61,7 +63,9 @@ end
 return {'EN_ATTENTE', rang}
 """
 
-# KEYS[1] attente ; ARGV[1] taille, ARGV[2] durée en ms, ARGV[3] préfixe des clés d'admission.
+# KEYS[1] attente, KEYS[2] séquence ; ARGV[1] taille, ARGV[2] durée en ms, ARGV[3] préfixe des
+# clés d'admission. La file vidée, la séquence est supprimée dans le même script : aucune entrée
+# ne peut s'intercaler (Redis exécute un script à la fois).
 _VAGUE = """
 local t = redis.call('TIME')
 local duree = tonumber(ARGV[2])
@@ -69,6 +73,9 @@ local echeance = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000) + dur
 local membres = redis.call('ZPOPMIN', KEYS[1], tonumber(ARGV[1]))
 for i = 1, #membres, 2 do
   redis.call('SET', ARGV[3] .. membres[i], echeance, 'PX', duree)
+end
+if redis.call('ZCARD', KEYS[1]) == 0 then
+  redis.call('DEL', KEYS[2])
 end
 return #membres / 2
 """
@@ -136,7 +143,7 @@ class FileRedis:
         """Admet au plus `taille` clients, les premiers entrés ; renvoie le nombre d'admis."""
         resultat = await self._appel(
             self._vague,
-            [cle_attente(seance_id)],
+            [cle_attente(seance_id), cle_sequence(seance_id)],
             [taille, duree_admission * 1000, prefixe_admission(seance_id)],
         )
         return int(resultat)

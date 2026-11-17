@@ -22,6 +22,16 @@ class Evenement:
 
 
 @dataclass(frozen=True)
+class ApercuEvenement:
+    """Aperçu d'un événement sur une carte : sa prochaine séance à venir non annulée (début et
+    ville) et le prix le plus bas de ses séances à venir non annulées, en centimes."""
+
+    prochaine_seance: datetime | None = None
+    ville: str | None = None
+    prix_min: int | None = None
+
+
+@dataclass(frozen=True)
 class Lieu:
     id: UUID
     nom: str
@@ -181,6 +191,13 @@ class DepotCatalogue(Protocol):
 
     async def compter_evenements(self, filtres: FiltresEvenements) -> int: ...
 
+    async def apercus_evenements(
+        self, evenement_ids: list[UUID], maintenant: datetime
+    ) -> dict[UUID, ApercuEvenement]:
+        """Aperçu des événements qui ont au moins une séance non annulée débutant à partir de
+        `maintenant` ; les autres sont absents du dictionnaire."""
+        ...
+
     async def ajouter_lieu(self, nom: str, adresse: str, ville: str) -> Lieu: ...
 
     async def trouver_lieu(self, lieu_id: UUID) -> Lieu | None: ...
@@ -235,6 +252,16 @@ async def lister_evenements(
     """Une page au-delà de la fin est vide ; le total compte tous les événements filtrés."""
     elements = await depot.lister_evenements(filtres, _decalage(page, size), size)
     return PageResultat(elements=elements, total=await depot.compter_evenements(filtres))
+
+
+async def apercus_evenements(
+    depot: DepotCatalogue, evenements: list[Evenement], maintenant: datetime
+) -> dict[UUID, ApercuEvenement]:
+    """Aperçu de chaque événement de la page ; vide (champs à None) sans séance à venir."""
+    if not evenements:
+        return {}
+    trouves = await depot.apercus_evenements([e.id for e in evenements], maintenant)
+    return {e.id: trouves.get(e.id, ApercuEvenement()) for e in evenements}
 
 
 async def creer_lieu(depot: DepotCatalogue, nom: str, adresse: str, ville: str) -> Lieu:

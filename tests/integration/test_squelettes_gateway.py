@@ -286,7 +286,10 @@ def _journaux(plateforme: Plateforme, journal: Any) -> str:
 async def _attendre_route(
     client: httpx.AsyncClient, plateforme: Plateforme, journal: Any, delai: float = DELAI_ETAPE
 ) -> None:
-    """Attend que Traefik ait découvert la route de santé (404 tant qu'elle n'existe pas)."""
+    """Attend que Traefik ait découvert la route de santé.
+
+    404, ou repli 503 marqué X-Gateway-Repli, tant qu'elle n'existe pas.
+    """
     debut = time.monotonic()
     dernier = "aucune réponse"
     while time.monotonic() < debut + delai:
@@ -295,7 +298,7 @@ async def _attendre_route(
         except httpx.HTTPError as erreur:
             dernier = f"erreur {erreur!r}"
         else:
-            if reponse.status_code != 404:
+            if reponse.status_code != 404 and "x-gateway-repli" not in reponse.headers:
                 return
             dernier = f"{reponse.status_code} {reponse.text[:200]!r}"
         await anyio.sleep(1)

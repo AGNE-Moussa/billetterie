@@ -285,7 +285,8 @@ Redis.
   (tiré de la séquence) ; l'entrée est idempotente (un client déjà présent garde son numéro),
   la position est le rang.
 - `file-attente:{<seance>}:sequence` : compteur `INCR` des arrivées de la séance, incrémenté
-  dans le même script atomique que l'ajout ; scores strictement croissants, sans ex aequo.
+  dans le même script atomique que l'ajout ; scores strictement croissants, sans ex aequo. Supprimé
+  par la vague qui vide la file (la numérotation repart de 1) : aucune clé orpheline.
 - `file-attente:{<seance>}:admis:<sub>` : échéance de l'admission, posée avec `PX` =
   `DUREE_ADMISSION` ; à l'échéance la clé disparaît et le client sort de la file.
 - `file-attente:tache-vagues` : verrou `SET NX PX` de la tâche d'admission par vagues (une

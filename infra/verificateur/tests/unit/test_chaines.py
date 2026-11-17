@@ -144,3 +144,17 @@ async def test_sans_jeton_une_route_publique_passe_sur_les_deux_chaines(
     assert "X-User-Id" not in publique.headers
     assert protegee.status_code == 401, protegee.text
     assert protegee.json()["code"] == "JETON_ABSENT"
+
+
+@pytest.mark.parametrize("methode", ["GET", "POST", "DELETE"])
+async def test_le_repli_renvoie_503_service_indisponible_sans_jeton(
+    client: httpx.AsyncClient, methode: str
+) -> None:
+    reponse = await client.request(methode, "/indisponible")
+
+    assert reponse.status_code == 503, reponse.text
+    assert reponse.headers["content-type"] == "application/problem+json"
+    assert reponse.headers["retry-after"] == "5"
+    corps = reponse.json()
+    assert corps["code"] == "SERVICE_INDISPONIBLE"
+    assert corps["status"] == 503
